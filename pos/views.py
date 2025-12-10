@@ -821,8 +821,21 @@ def caja_view(request):
         # (no solo los del día actual) para incluir retiros registrados al cerrar
         gastos_caja = gastos_todos.order_by('-fecha')
         
-        # Crear lista unificada de movimientos (ventas, gastos, ingresos)
+        # Crear lista unificada de movimientos (apertura, ventas, gastos, ingresos)
         movimientos_unificados = []
+        
+        # Agregar apertura de caja como primer movimiento
+        monto_inicial = int(caja_mostrar.monto_inicial) if caja_mostrar.monto_inicial else 0
+        movimientos_unificados.append({
+            'tipo': 'apertura',
+            'fecha': caja_mostrar.fecha_apertura,
+            'monto': monto_inicial,
+            'descripcion': 'Apertura de Caja',
+            'usuario': caja_mostrar.usuario,
+            'metodo_pago': None,
+            'vendedor': None,
+            'venta_id': None,
+        })
         
         # Agregar ventas como movimientos
         for venta in ventas_caja.order_by('fecha'):
@@ -854,15 +867,17 @@ def caja_view(request):
         movimientos_unificados.sort(key=lambda x: x['fecha'])
         
         # Calcular saldo antes y después de cada movimiento
-        monto_inicial = int(caja_mostrar.monto_inicial) if caja_mostrar.monto_inicial else 0
-        saldo_actual = monto_inicial
+        saldo_actual = 0  # Iniciar en 0 antes de la apertura
         
         for movimiento in movimientos_unificados:
             saldo_antes = saldo_actual
             monto = int(movimiento['monto'])
             
             # Calcular saldo después según el tipo de movimiento
-            if movimiento['tipo'] == 'venta' or movimiento['tipo'] == 'ingreso':
+            if movimiento['tipo'] == 'apertura':
+                # La apertura agrega el monto inicial
+                saldo_despues = saldo_antes + monto
+            elif movimiento['tipo'] == 'venta' or movimiento['tipo'] == 'ingreso':
                 saldo_despues = saldo_antes + monto
             else:  # gasto
                 saldo_despues = saldo_antes - monto

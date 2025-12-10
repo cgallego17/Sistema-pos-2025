@@ -197,37 +197,15 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% if caja_mostrar %}
-                                <!-- Fila inicial con monto inicial -->
-                                <tr style="background: #f8fafc; border-left: 4px solid #0ea5e9;">
-                                    <td><strong>{{ caja_mostrar.fecha_apertura|date:"d/m/Y H:i" }}</strong></td>
+                                {% for movimiento in movimientos_unificados %}
+                                <tr {% if movimiento.tipo == 'apertura' %}style="background: #f8fafc; border-left: 4px solid #0ea5e9;"{% endif %}>
+                                    <td><strong>{{ movimiento.fecha|date:"d/m/Y H:i" }}</strong></td>
                                     <td>
+                                        {% if movimiento.tipo == 'apertura' %}
                                         <span class="badge badge-modern" style="background: #0ea5e9; color: white;">
                                             <i class="bi bi-box-arrow-in-down"></i> Apertura
                                         </span>
-                                    </td>
-                                    <td><strong>Apertura de Caja</strong></td>
-                                    <td>
-                                        <strong style="color: #10b981;">+${{ caja_mostrar.monto_inicial|intcomma }}</strong>
-                                    </td>
-                                    <td>
-                                        <strong style="color: #64748b; font-size: 0.9rem;">$0</strong>
-                                    </td>
-                                    <td>
-                                        <strong style="color: #0ea5e9; font-size: 1rem;">${{ caja_mostrar.monto_inicial|intcomma }}</strong>
-                                    </td>
-                                    <td><span class="text-muted">-</span></td>
-                                    <td>
-                                        <small style="color: #64748b;">{{ caja_mostrar.usuario.get_full_name|default:caja_mostrar.usuario.username }}</small>
-                                    </td>
-                                    <td><span class="text-muted">-</span></td>
-                                </tr>
-                                {% endif %}
-                                {% for movimiento in movimientos_unificados %}
-                                <tr>
-                                    <td>{{ movimiento.fecha|date:"d/m/Y H:i" }}</td>
-                                    <td>
-                                        {% if movimiento.tipo == 'venta' %}
+                                        {% elif movimiento.tipo == 'venta' %}
                                         <span class="badge badge-modern" style="background: #3b82f6; color: white;">
                                             <i class="bi bi-receipt"></i> Venta
                                         </span>
@@ -242,13 +220,17 @@
                                         {% endif %}
                                     </td>
                                     <td>
+                                        {% if movimiento.tipo == 'apertura' %}<strong>{% endif %}
                                         {{ movimiento.descripcion }}
+                                        {% if movimiento.tipo == 'apertura' %}</strong>{% endif %}
                                         {% if movimiento.vendedor %}
                                         <br><small style="color: #64748b;">Vendedor: {{ movimiento.vendedor.get_full_name|default:movimiento.vendedor.username }}</small>
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if movimiento.tipo == 'venta' %}
+                                        {% if movimiento.tipo == 'apertura' %}
+                                        <strong style="color: #10b981;">+${{ movimiento.monto|intcomma }}</strong>
+                                        {% elif movimiento.tipo == 'venta' %}
                                         <strong style="color: #3b82f6;">+${{ movimiento.monto|intcomma }}</strong>
                                         {% elif movimiento.tipo == 'gasto' %}
                                         <strong style="color: #ef4444;">-${{ movimiento.monto|intcomma }}</strong>
