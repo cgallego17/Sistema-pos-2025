@@ -1,0 +1,80 @@
+{% extends 'pos/base.html' %}
+
+{% block title %}Usuarios - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-person-fill"></i> Gestión de Usuarios</h1>
+        <a href="{% url 'pos:crear_usuario' %}" class="btn btn-primary-pos">
+            <i class="bi bi-plus-circle"></i> Nuevo Usuario
+        </a>
+    </div>
+
+    <div class="card-modern">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table-modern table">
+                    <thead>
+                    <tr>
+                        <th>Usuario</th>
+                        <th>Nombre</th>
+                        <th>Email</th>
+                        <th>Grupos</th>
+                        <th>Estado</th>
+                        <th>Tipo</th>
+                        <th>PIN</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for usuario in usuarios %}
+                    <tr>
+                        <td><strong>{{ usuario.username }}</strong></td>
+                        <td>{{ usuario.get_full_name|default:"-" }}</td>
+                        <td>{{ usuario.email|default:"-" }}</td>
+                        <td>
+                            {% for grupo in usuario.groups.all %}
+                            <span class="badge badge-modern badge-info-modern">{{ grupo.name }}</span>
+                            {% empty %}
+                            <span style="color: #94a3b8;">-</span>
+                            {% endfor %}
+                        </td>
+                        <td>
+                            {% if usuario.is_active %}
+                            <span class="badge badge-modern badge-success-modern">Activo</span>
+                            {% else %}
+                            <span class="badge badge-modern badge-danger-modern">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if usuario.is_superuser %}
+                            <span class="badge badge-modern badge-danger-modern">Superusuario</span>
+                            {% elif usuario.is_staff %}
+                            <span class="badge badge-modern badge-warning-modern">Staff</span>
+                            {% else %}
+                            <span class="badge badge-modern badge-info-modern">Usuario</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if usuario.perfil.pin_establecido %}
+                            <code>{{ usuario.perfil.pin }}</code>
+                            {% else %}
+                            <span class="text-muted">Sin PIN</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'pos:editar_usuario' usuario.id %}" class="btn btn-sm btn-warning" style="padding: 0.25rem 0.5rem;">
+                                <i class="bi bi-pencil"></i> Editar
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

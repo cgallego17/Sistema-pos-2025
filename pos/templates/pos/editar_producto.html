@@ -1,0 +1,87 @@
+{% extends 'pos/base.html' %}
+
+{% block title %}Editar Producto - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-pencil"></i> Editar Producto</h1>
+        <a href="{% url 'pos:productos' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Información del Producto</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">Código *</label>
+                            <input type="text" class="form-control form-control-modern" name="codigo" value="{{ producto.codigo }}" required>
+                        </div>
+                        
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">Código de Barras</label>
+                            <input type="text" class="form-control form-control-modern" name="codigo_barras" value="{{ producto.codigo_barras|default:'' }}">
+                        </div>
+                        
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">Nombre *</label>
+                            <input type="text" class="form-control form-control-modern" name="nombre" value="{{ producto.nombre }}" required>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group-modern">
+                                    <label class="form-label-modern">Precio *</label>
+                                    <input type="number" class="form-control form-control-modern" name="precio" step="1" min="0" value="{{ precio_float }}" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group-modern">
+                                    <label class="form-label-modern">Stock *</label>
+                                    <input type="number" class="form-control form-control-modern" name="stock" min="0" value="{{ producto.stock }}" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">Imagen</label>
+                            {% if producto.imagen %}
+                            <div class="mb-2">
+                                <img src="{{ producto.imagen.url }}" alt="{{ producto.nombre }}" style="max-width: 200px; max-height: 200px; border-radius: 8px;">
+                            </div>
+                            {% endif %}
+                            <input type="file" class="form-control form-control-modern" name="imagen" accept="image/*">
+                            <small style="color: #94a3b8;">Dejar vacío para mantener la imagen actual</small>
+                        </div>
+                        
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="activo" id="activo" {% if producto.activo %}checked{% endif %}>
+                            <label class="form-check-label" for="activo" style="color: #475569;">
+                                Producto activo
+                            </label>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary-pos">
+                                <i class="bi bi-check-circle"></i> Guardar Cambios
+                            </button>
+                            <a href="{% url 'pos:productos' %}" class="btn" style="background: #6c757d; color: white; border: none;">
+                                <i class="bi bi-x"></i> Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

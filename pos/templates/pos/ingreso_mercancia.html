@@ -1,0 +1,71 @@
+{% extends 'pos/base.html' %}
+{% load humanize %}
+
+{% block title %}Ingreso de Mercancía - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-arrow-down-circle-fill"></i> Ingreso de Mercancía</h1>
+        <a href="{% url 'pos:crear_ingreso' %}" class="btn btn-primary-pos">
+            <i class="bi bi-plus-circle"></i> Nuevo Ingreso
+        </a>
+    </div>
+
+    <div class="card-modern">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table-modern table">
+                    <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Fecha</th>
+                        <th>Proveedor</th>
+                        <th>Factura</th>
+                        <th>Total</th>
+                        <th>Estado</th>
+                        <th>Usuario</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ingreso in ingresos %}
+                    <tr>
+                        <td>{{ ingreso.id }}</td>
+                        <td>{{ ingreso.fecha|date:"d/m/Y H:i" }}</td>
+                        <td>{{ ingreso.proveedor }}</td>
+                        <td>{{ ingreso.numero_factura|default:"N/A" }}</td>
+                        <td><strong>${{ ingreso.total|intcomma }}</strong></td>
+                        <td>
+                            {% if ingreso.completado %}
+                            <span class="badge badge-modern badge-success-modern">Completado</span>
+                            {% else %}
+                            <span class="badge badge-modern badge-warning-modern">Pendiente</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if ingreso.usuario %}
+                                {{ ingreso.usuario.get_full_name|default:ingreso.usuario.username }}
+                            {% else %}
+                                Sistema
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'pos:detalle_ingreso' ingreso.id %}" class="btn btn-sm" style="background: #dbeafe; color: #2563eb; border: none;">
+                                <i class="bi bi-eye"></i> Ver
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted">No hay ingresos registrados</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

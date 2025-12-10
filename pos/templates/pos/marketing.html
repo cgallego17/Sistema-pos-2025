@@ -1,0 +1,181 @@
+{% extends 'pos/base.html' %}
+{% load humanize %}
+
+{% block title %}Ranking de Vendedores - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-trophy"></i> Ranking de Vendedores</h1>
+    </div>
+
+    <!-- Filtros de Fecha -->
+    <div class="card-modern mb-3">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-calendar-range"></i> Rango de Fechas</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label-modern">Fecha Desde:</label>
+                    <input type="date" class="form-control form-control-modern" name="fecha_desde" 
+                           value="{{ fecha_desde|date:'Y-m-d' }}" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label-modern">Fecha Hasta:</label>
+                    <input type="date" class="form-control form-control-modern" name="fecha_hasta" 
+                           value="{{ fecha_hasta|date:'Y-m-d' }}" required>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary-pos w-100">
+                        <i class="bi bi-search"></i> Filtrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Estadísticas Generales -->
+    <div class="cards-grid mb-4">
+        <div class="stat-card primary">
+            <div class="stat-card-label">
+                <i class="bi bi-currency-dollar"></i> Total General
+            </div>
+            <div class="stat-card-value">${{ total_general|intcomma }}</div>
+        </div>
+        <div class="stat-card success">
+            <div class="stat-card-label">
+                <i class="bi bi-receipt"></i> Total Ventas
+            </div>
+            <div class="stat-card-value">{{ cantidad_general|intcomma }}</div>
+        </div>
+        <div class="stat-card info">
+            <div class="stat-card-label">
+                <i class="bi bi-graph-up"></i> Promedio General
+            </div>
+            <div class="stat-card-value">${{ promedio_general|intcomma }}</div>
+        </div>
+        {% if top_vendedor %}
+        <div class="stat-card warning">
+            <div class="stat-card-label">
+                <i class="bi bi-trophy-fill"></i> Top Vendedor
+            </div>
+            <div class="stat-card-value" style="font-size: 1.2rem;">{{ top_vendedor.nombre_completo }}</div>
+            <div style="color: #64748b; font-size: 0.85rem; margin-top: 0.5rem;">
+                ${{ top_vendedor.total_ventas|intcomma }}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Ranking de Vendedores -->
+    <div class="card-modern">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-trophy-fill"></i> Ranking de Vendedores</h5>
+        </div>
+        <div class="card-body">
+            {% if ranking_vendedores %}
+            <div class="table-responsive">
+                <table class="table-modern table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">#</th>
+                            <th>Vendedor</th>
+                            <th class="text-end">Total Ventas</th>
+                            <th class="text-center">Cantidad</th>
+                            <th class="text-end">Promedio</th>
+                            <th class="text-center">% del Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in ranking_vendedores %}
+                        <tr>
+                            <td>
+                                {% if item.posicion == 1 %}
+                                <span class="badge badge-modern" style="background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: white; font-size: 1rem; padding: 0.5rem;">
+                                    🥇
+                                </span>
+                                {% elif item.posicion == 2 %}
+                                <span class="badge badge-modern" style="background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%); color: white; font-size: 1rem; padding: 0.5rem;">
+                                    🥈
+                                </span>
+                                {% elif item.posicion == 3 %}
+                                <span class="badge badge-modern" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: white; font-size: 1rem; padding: 0.5rem;">
+                                    🥉
+                                </span>
+                                {% else %}
+                                <span class="badge badge-modern badge-info-modern" style="font-size: 1rem; padding: 0.5rem;">
+                                    #{{ item.posicion }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div>
+                                    <strong style="font-size: 1rem;">{{ item.nombre_completo }}</strong><br>
+                                    <small style="color: #64748b;">@{{ item.username }}</small>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <strong style="font-size: 1.1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                                    ${{ item.total_ventas|intcomma }}
+                                </strong>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-modern badge-success-modern">
+                                    {{ item.cantidad_ventas|intcomma }} ventas
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <span style="color: #64748b; font-weight: 600;">
+                                    ${{ item.promedio_venta|intcomma }}
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                {% if total_general > 0 %}
+                                {% widthratio item.total_ventas total_general 100 as porcentaje %}
+                                <div class="progress" style="height: 20px; background: #f1f5f9; border-radius: 10px;">
+                                    <div class="progress-bar" 
+                                         role="progressbar" 
+                                         style="width: {{ porcentaje }}%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px;"
+                                         aria-valuenow="{{ porcentaje }}" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                        <span style="font-size: 0.75rem; font-weight: 600; color: white;">{{ porcentaje }}%</span>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <span style="color: #94a3b8;">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-inbox" style="font-size: 3rem; color: #cbd5e1; margin-bottom: 1rem;"></i>
+                <p style="color: #64748b; font-size: 1.1rem;">No hay ventas registradas con vendedor en este período</p>
+                <p style="color: #94a3b8; font-size: 0.9rem;">Las ventas deben tener un vendedor seleccionado en el POS para aparecer en el ranking</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.progress {
+    height: 20px;
+    background: #f1f5f9;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    transition: width 0.6s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+</style>
+{% endblock %}

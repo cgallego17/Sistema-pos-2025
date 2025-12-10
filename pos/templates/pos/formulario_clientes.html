@@ -1,0 +1,105 @@
+{% extends 'pos/base.html' %}
+
+{% block title %}Formulario de Clientes - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="bi bi-file-earmark-text-fill"></i> Registro de Cliente Potencial</h4>
+                </div>
+                <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Nombre Completo *</label>
+                        <input type="text" class="form-control form-control-modern" name="nombre" required>
+                    </div>
+                    
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Email *</label>
+                        <input type="email" class="form-control form-control-modern" name="email" required>
+                    </div>
+                    
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Teléfono</label>
+                        <input type="tel" class="form-control form-control-modern" name="telefono">
+                    </div>
+                    
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Tipo de Interés *</label>
+                        <input type="hidden" name="tipo_interes" id="tipo_interes" required>
+                        <div class="btn-group w-100" role="group" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
+                            <button type="button" class="btn btn-tipo-interes" data-value="mayorista" style="padding: 0.75rem; border: 2px solid #e2e8f0; background: #ffffff; color: #475569; transition: all 0.3s;">
+                                <i class="bi bi-building"></i><br>
+                                <small>Venta Mayorista</small>
+                            </button>
+                            <button type="button" class="btn btn-tipo-interes" data-value="web" style="padding: 0.75rem; border: 2px solid #e2e8f0; background: #ffffff; color: #475569; transition: all 0.3s;">
+                                <i class="bi bi-globe"></i><br>
+                                <small>Venta Web</small>
+                            </button>
+                            <button type="button" class="btn btn-tipo-interes" data-value="ambos" style="padding: 0.75rem; border: 2px solid #e2e8f0; background: #ffffff; color: #475569; transition: all 0.3s;">
+                                <i class="bi bi-arrow-left-right"></i><br>
+                                <small>Ambos</small>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Empresa</label>
+                        <input type="text" class="form-control form-control-modern" name="empresa">
+                    </div>
+                    
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Mensaje o Comentarios</label>
+                        <textarea class="form-control form-control-modern" name="mensaje" rows="4"></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary-pos btn-lg w-100">
+                        <i class="bi bi-check-circle"></i> Registrar Cliente
+                    </button>
+                </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Manejo de botones de tipo de interés
+document.querySelectorAll('.btn-tipo-interes').forEach(btn => {
+    btn.addEventListener('click', function() {
+        // Remover selección de todos los botones
+        document.querySelectorAll('.btn-tipo-interes').forEach(b => {
+            b.style.background = '#ffffff';
+            b.style.borderColor = '#e2e8f0';
+            b.style.color = '#475569';
+            b.style.transform = 'scale(1)';
+        });
+        
+        // Seleccionar el botón clickeado
+        this.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        this.style.borderColor = '#667eea';
+        this.style.color = '#ffffff';
+        this.style.transform = 'scale(1.02)';
+        
+        // Establecer el valor en el input hidden
+        document.getElementById('tipo_interes').value = this.dataset.value;
+    });
+});
+
+// Validar que se haya seleccionado un tipo antes de enviar
+document.querySelector('form').addEventListener('submit', function(e) {
+    const tipoInteres = document.getElementById('tipo_interes').value;
+    if (!tipoInteres) {
+        e.preventDefault();
+        alert('Por favor selecciona un tipo de interés');
+        return false;
+    }
+});
+</script>
+{% endblock %}
+

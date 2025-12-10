@@ -1,0 +1,2096 @@
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.db.models import Sum, Count, Q, Avg
+from django.utils import timezone
+from datetime import datetime
+from functools import wraps
+import json
+
+from .models import (
+    Producto, Venta, ItemVenta, Caja, CajaUsuario,
+    MovimientoStock, PerfilUsuario, GastoCaja,
+    IngresoMercancia, ItemIngresoMercancia,
+    SalidaMercancia, ItemSalidaMercancia,
+    CampanaMarketing, ClientePotencial
+)
+
+
+# ============================================
+# SISTEMA DE ROLES Y PERMISOS
+# ============================================
+
+def tiene_rol(user, *nombres_roles):
+    """Verifica si el usuario pertenece a alguno de los roles especificados"""
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    grupos_usuario = user.groups.values_list('name', flat=True)
+    return any(rol in grupos_usuario for rol in nombres_roles)
+
+
+def requiere_rol(*nombres_roles):
+    """Decorador para requerir que el usuario tenga uno de los roles especificados"""
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                messages.error(request, 'Debes iniciar sesión para acceder')
+                return redirect('pos:login')
+            
+            if request.user.is_superuser:
+                return view_func(request, *args, **kwargs)
+            
+            if not tiene_rol(request.user, *nombres_roles):
+                messages.error(request, 'No tienes permisos para acceder a esta sección')
+                return redirect('pos:home')
+            
+            return view_func(request, *args, **kwargs)
+        return wrapper
+    return decorator
+
+
+def puede_anular_ventas(user):
+    """Verifica si el usuario puede anular ventas (Administradores)"""
+    return tiene_rol(user, 'Administradores') or user.is_superuser or user.is_staff
+
+
+def puede_gestionar_productos(user):
+    """Verifica si el usuario puede gestionar productos (Administradores, Inventario)"""
+    return tiene_rol(user, 'Administradores', 'Inventario') or user.is_superuser
+
+
+def puede_gestionar_caja(user):
+    """Verifica si el usuario puede gestionar cajas (Administradores, Cajeros)"""
+    return tiene_rol(user, 'Administradores', 'Cajeros') or user.is_superuser
+
+
+def puede_ver_reportes(user):
+    """Verifica si el usuario puede ver reportes (Administradores, Staff)"""
+    return tiene_rol(user, 'Administradores') or user.is_superuser or user.is_staff
+
+
+def puede_realizar_ventas(user):
+    """Verifica si el usuario puede realizar ventas (todos los roles excepto algunos)"""
+    if user.is_superuser:
+        return True
+    grupos_usuario = user.groups.values_list('name', flat=True)
+    return len(grupos_usuario) > 0 or user.is_staff
+
+
+def login_view(request):
+    """Vista de login"""
+    if request.user.is_authenticated:
+        return redirect('pos:home')
+    
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
+        
+        if user is not None:
+            login(request, user)
+            return redirect('pos:home')
+        else:
+            messages.error(request, 'Usuario o contraseña incorrectos')
+    
+    return render(request, 'pos/login.html')
+
+
+def login_pin_view(request):
+    """Vista de login con PIN"""
+    if request.method == 'POST':
+        pin = request.POST.get('pin')
+        
+        try:
+            perfil = PerfilUsuario.objects.get(pin=pin, pin_establecido=True)
+            user = perfil.usuario
+            login(request, user)
+            return redirect('pos:home')
+        except PerfilUsuario.DoesNotExist:
+            messages.error(request, 'PIN incorrecto')
+            return redirect('pos:login')
+    
+    return redirect('pos:login')
+
+
+@login_required
+def logout_view(request):
+    """Vista de logout"""
+    logout(request)
+    return redirect('pos:login')
+
+
+@login_required
+def seleccionar_registradora_view(request):
+    """Vista para seleccionar la registradora"""
+    from .models import RegistradoraActiva
+    from datetime import date
+    
+    if request.method == 'POST':
+        # Verificar si hay caja abierta del día actual
+        hoy = date.today()
+        caja_abierta = CajaUsuario.objects.filter(
+            usuario=request.user,
+            fecha_cierre__isnull=True,
+            fecha_apertura__date=hoy
+        ).first()
+        
+        if not caja_abierta:
+            messages.error(
+                request, 
+                'Debes abrir una caja antes de seleccionar una registradora. Por favor, abre la caja desde el Dashboard.'
+            )
+            return redirect('pos:home')
+        
+        registradora_id = request.POST.get('registradora_id')
+        if registradora_id:
+            registradora_id_int = int(registradora_id)
+            registradoras = {
+                1: 'Registradora 1',
+                2: 'Registradora 2',
+                3: 'Registradora 3',
+            }
+            nombre_registradora = registradoras.get(registradora_id_int, 'Registradora Desconocida')
+            
+            # Verificar si la registradora ya está en uso por otro usuario
+            registradora_activa = RegistradoraActiva.objects.filter(
+                registradora_id=registradora_id_int
+            ).first()
+            
+            if registradora_activa and registradora_activa.usuario != request.user:
+                # La registradora está en uso por otro usuario
+                messages.error(
+                    request, 
+                    f'La {nombre_registradora} está actualmente en uso por el usuario "{registradora_activa.usuario.get_full_name() or registradora_activa.usuario.username}". '
+                    f'Por favor, espera a que la cierre o contacta con ese usuario.'
+                )
+                return redirect('pos:home')
+            
+            # Si el usuario ya tiene esta registradora, no hacer nada
+            if registradora_activa and registradora_activa.usuario == request.user:
+                messages.info(request, f'Ya tienes la {nombre_registradora} activa')
+                return redirect('pos:vender')
+            
+            # Cerrar cualquier otra registradora que el usuario tenga activa
+            RegistradoraActiva.objects.filter(usuario=request.user).delete()
+            
+            # Crear o actualizar la registradora activa
+            RegistradoraActiva.objects.update_or_create(
+                registradora_id=registradora_id_int,
+                defaults={
+                    'usuario': request.user,
+                    'fecha_apertura': timezone.now()
+                }
+            )
+            
+            # Guardar en sesión también
+            request.session['registradora_seleccionada'] = {
+                'id': registradora_id_int,
+                'nombre': nombre_registradora
+            }
+            request.session.modified = True
+            messages.success(request, f'Registradora {nombre_registradora} seleccionada')
+            # Redirigir al POS después de seleccionar
+            return redirect('pos:vender')
+        else:
+            messages.error(request, 'Debes seleccionar una registradora')
+    
+    return redirect('pos:home')
+
+
+@login_required
+def cerrar_registradora_view(request):
+    """Vista para cerrar/desactivar la registradora"""
+    from .models import RegistradoraActiva
+    
+    if request.method == 'POST':
+        registradora_actual = request.session.get('registradora_seleccionada', None)
+        if registradora_actual:
+            registradora_id = registradora_actual.get('id')
+            nombre_registradora = registradora_actual.get('nombre', 'Registradora')
+            
+            # Eliminar de la base de datos
+            RegistradoraActiva.objects.filter(
+                registradora_id=registradora_id,
+                usuario=request.user
+            ).delete()
+            
+            # Eliminar de la sesión
+            del request.session['registradora_seleccionada']
+            request.session.modified = True
+            messages.success(request, f'{nombre_registradora} cerrada exitosamente')
+        else:
+            messages.warning(request, 'No hay registradora activa para cerrar')
+    
+    return redirect('pos:home')
+
+
+@login_required
+def home_view(request):
+    """Vista principal del dashboard"""
+    hoy = timezone.now().date()
+    
+    # Ventas de hoy
+    ventas_hoy = Venta.objects.filter(
+        fecha__date=hoy,
+        completada=True,
+        anulada=False
+    ).aggregate(
+        total=Sum('total'),
+        cantidad=Count('id')
+    )
+    
+    # Productos
+    productos_count = Producto.objects.filter(activo=True).count()
+    productos_bajo_stock = Producto.objects.filter(activo=True, stock__lt=10).count()
+    
+    # Últimas ventas
+    ultimas_ventas = Venta.objects.filter(
+        completada=True
+    ).order_by('-fecha')[:10]
+    
+    # Productos con stock bajo
+    productos_stock_bajo = Producto.objects.filter(
+        activo=True,
+        stock__lt=10
+    ).order_by('stock')[:10]
+    
+    # Caja abierta del día actual
+    from datetime import date
+    hoy = date.today()
+    caja_abierta = CajaUsuario.objects.filter(
+        usuario=request.user,
+        fecha_cierre__isnull=True,
+        fecha_apertura__date=hoy
+    ).first()
+    
+    # Obtener registradora seleccionada de la sesión
+    registradora_seleccionada = request.session.get('registradora_seleccionada', None)
+    
+    # Verificar registradoras activas en la base de datos
+    from .models import RegistradoraActiva
+    registradoras_activas = RegistradoraActiva.objects.select_related('usuario').all()
+    registradoras_activas_dict = {
+        reg.registradora_id: reg.usuario 
+        for reg in registradoras_activas
+    }
+    
+    # Lista de registradoras disponibles con información de quién las tiene
+    registradoras = []
+    for reg_id in [1, 2, 3]:
+        usuario_activo = registradoras_activas_dict.get(reg_id)
+        registradoras.append({
+            'id': reg_id,
+            'nombre': f'Registradora {reg_id}',
+            'usuario_activo': usuario_activo,
+            'disponible': usuario_activo is None or usuario_activo == request.user
+        })
+    
+    # Calcular ventas totales del mes actual para la meta
+    from datetime import datetime
+    inicio_mes = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    ventas_mes = Venta.objects.filter(
+        fecha__gte=inicio_mes,
+        completada=True,
+        anulada=False
+    ).aggregate(total=Sum('total'))
+    
+    ventas_totales_mes = ventas_mes['total'] or 0
+    meta_ventas = 100000000  # 100 millones
+    porcentaje_meta = (ventas_totales_mes / meta_ventas * 100) if meta_ventas > 0 else 0
+    porcentaje_meta = min(porcentaje_meta, 100)  # Limitar al 100%
+    faltan_para_meta = max(0, meta_ventas - ventas_totales_mes)  # No mostrar negativo
+    
+    context = {
+        'ventas_hoy': ventas_hoy['total'] or 0,
+        'total_ventas_hoy': ventas_hoy['cantidad'] or 0,
+        'productos_count': productos_count,
+        'productos_bajo_stock': productos_bajo_stock,
+        'ultimas_ventas': ultimas_ventas,
+        'productos_stock_bajo': productos_stock_bajo,
+        'caja_abierta': caja_abierta,
+        'registradora_seleccionada': registradora_seleccionada,
+        'registradoras': registradoras,
+        'ventas_totales_mes': ventas_totales_mes,
+        'meta_ventas': meta_ventas,
+        'porcentaje_meta': porcentaje_meta,
+        'faltan_para_meta': faltan_para_meta,
+    }
+    
+    return render(request, 'pos/home.html', context)
+
+
+@login_required
+def vender_view(request):
+    """Vista del punto de venta"""
+    # Verificar si hay registradora seleccionada
+    registradora_seleccionada = request.session.get('registradora_seleccionada', None)
+    if not registradora_seleccionada:
+        messages.warning(request, 'Por favor, selecciona una registradora en el Dashboard antes de vender')
+        return redirect('pos:home')
+    
+    # Verificar si hay caja abierta del día actual
+    from datetime import date
+    hoy = date.today()
+    caja_abierta = CajaUsuario.objects.filter(
+        usuario=request.user,
+        fecha_cierre__isnull=True,
+        fecha_apertura__date=hoy
+    ).first()
+    
+    if not caja_abierta:
+        messages.warning(request, 'Debes abrir una caja antes de realizar ventas. Por favor, abre la caja desde el Dashboard.')
+        return redirect('pos:home')
+    
+    # Si es AJAX para cargar carrito
+    if request.GET.get('cargar_carrito'):
+        carrito = get_carrito(request)
+        return JsonResponse({'carrito': carrito})
+    
+    productos = Producto.objects.filter(activo=True, stock__gt=0).order_by('nombre')
+    
+    # Obtener productos más vendidos (últimos 30 días)
+    from datetime import timedelta
+    hace_30_dias = timezone.now() - timedelta(days=30)
+    mas_vendidos = ItemVenta.objects.filter(
+        venta__fecha__gte=hace_30_dias,
+        venta__completada=True,
+        venta__anulada=False
+    ).values('producto_id').annotate(
+        total=Sum('cantidad')
+    ).order_by('-total')[:10]
+    
+    mas_vendidos_ids = [item['producto_id'] for item in mas_vendidos]
+    
+    # Obtener vendedores activos
+    from django.contrib.auth.models import User
+    vendedores = User.objects.filter(is_active=True).order_by('username')
+    
+    context = {
+        'productos': productos,
+        'mas_vendidos_ids': mas_vendidos_ids,
+        'vendedores': vendedores,
+        'registradora_seleccionada': registradora_seleccionada,
+    }
+    
+    return render(request, 'pos/vender.html', context)
+
+
+@login_required
+def procesar_venta(request):
+    """Procesar una venta (AJAX)"""
+    if request.method == 'POST':
+        try:
+            # Verificar si hay caja abierta del día actual
+            from datetime import date
+            hoy = date.today()
+            caja_abierta = CajaUsuario.objects.filter(
+                usuario=request.user,
+                fecha_cierre__isnull=True,
+                fecha_apertura__date=hoy
+            ).first()
+            
+            if not caja_abierta:
+                return JsonResponse({
+                    'success': False, 
+                    'error': 'Debes abrir una caja antes de realizar ventas. Por favor, abre la caja desde el Dashboard.'
+                })
+            
+            data = json.loads(request.body)
+            items = data.get('items', [])
+            metodo_pago = data.get('metodo_pago', 'efectivo')
+            monto_recibido = data.get('monto_recibido')
+            email_cliente = data.get('email_cliente', '')
+            vendedor_id = data.get('vendedor_id')
+            
+            if not items:
+                return JsonResponse({'success': False, 'error': 'No hay items en la venta'})
+            
+            # Obtener vendedor
+            vendedor = None
+            if vendedor_id:
+                from django.contrib.auth.models import User
+                try:
+                    vendedor = User.objects.get(id=vendedor_id)
+                except User.DoesNotExist:
+                    pass
+            
+            # Crear la venta
+            venta = Venta.objects.create(
+                usuario=request.user,
+                vendedor=vendedor,
+                metodo_pago=metodo_pago,
+                monto_recibido=monto_recibido if monto_recibido else None,
+                email_cliente=email_cliente if email_cliente else None,
+                completada=True
+            )
+            
+            # Agregar items y calcular total
+            total = 0
+            for item_data in items:
+                producto = Producto.objects.get(id=item_data['id'])
+                cantidad = item_data['cantidad']
+                
+                # Verificar stock
+                if producto.stock < cantidad:
+                    venta.delete()
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Stock insuficiente para {producto.nombre}'
+                    })
+                
+                # Crear item de venta
+                subtotal = producto.precio * cantidad
+                ItemVenta.objects.create(
+                    venta=venta,
+                    producto=producto,
+                    cantidad=cantidad,
+                    precio_unitario=producto.precio,
+                    subtotal=subtotal
+                )
+                
+                # Actualizar stock
+                producto.stock -= cantidad
+                producto.save()
+                
+                # Registrar movimiento de stock
+                MovimientoStock.objects.create(
+                    producto=producto,
+                    tipo='salida',
+                    cantidad=cantidad,
+                    stock_anterior=producto.stock + cantidad,
+                    stock_nuevo=producto.stock,
+                    motivo=f'Venta #{venta.id}',
+                    usuario=request.user
+                )
+                
+                total += subtotal
+            
+            # Actualizar total de la venta
+            venta.total = total
+            
+            # Asignar siempre a la Caja Principal (todas las ventas van a la misma caja)
+            caja_principal = Caja.objects.filter(numero=1).first()
+            if caja_principal:
+                venta.caja = caja_principal
+            
+            venta.save()
+            
+            return JsonResponse({
+                'success': True,
+                'venta_id': venta.id,
+                'total': float(total)
+            })
+            
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+
+@login_required
+def productos_view(request):
+    """Vista de lista de productos"""
+    # Todos pueden ver productos, pero solo algunos pueden editarlos
+    productos = Producto.objects.all().order_by('nombre')
+    
+    # Verificar si puede editar productos
+    puede_editar = puede_gestionar_productos(request.user)
+    
+    context = {
+        'productos': productos,
+        'puede_editar': puede_editar,
+    }
+    
+    return render(request, 'pos/productos.html', context)
+
+
+@login_required
+def lista_ventas_view(request):
+    """Vista de lista de ventas"""
+    ventas = Venta.objects.filter(completada=True).order_by('-fecha')
+    
+    context = {
+        'ventas': ventas,
+    }
+    
+    return render(request, 'pos/lista_ventas.html', context)
+
+
+@login_required
+def detalle_venta_view(request, venta_id):
+    """Vista de detalle de una venta"""
+    venta = get_object_or_404(Venta, id=venta_id)
+    
+    context = {
+        'venta': venta,
+    }
+    
+    return render(request, 'pos/detalle_venta.html', context)
+
+
+@login_required
+def editar_venta_view(request, venta_id):
+    """Editar una venta"""
+    # Solo administradores y cajeros pueden editar ventas
+    if not puede_anular_ventas(request.user):
+        messages.error(request, 'No tienes permisos para editar ventas')
+        return redirect('pos:detalle_venta', venta_id=venta_id)
+    
+    venta = get_object_or_404(Venta, id=venta_id)
+    
+    if venta.anulada:
+        messages.error(request, 'No se puede editar una venta anulada')
+        return redirect('pos:detalle_venta', venta_id=venta_id)
+    
+    productos = Producto.objects.filter(activo=True).order_by('nombre')
+    
+    if request.method == 'POST':
+        # Actualizar método de pago
+        if 'metodo_pago' in request.POST:
+            venta.metodo_pago = request.POST.get('metodo_pago')
+        
+        # Actualizar monto recibido
+        if 'monto_recibido' in request.POST:
+            monto = request.POST.get('monto_recibido', '')
+            if monto:
+                import re
+                monto_limpio = re.sub(r'[^0-9]', '', monto)
+                venta.monto_recibido = int(float(monto_limpio)) if monto_limpio else None
+        
+        # Actualizar items
+        if 'items' in request.POST:
+            try:
+                items_data = json.loads(request.POST.get('items'))
+                # Obtener items actuales
+                items_actuales = {item.id: item for item in venta.items.all()}
+                items_procesados = set()
+                total = 0
+                
+                # Actualizar o crear items
+                for item_data in items_data:
+                    producto_id = int(item_data['producto_id'])
+                    cantidad = int(item_data['cantidad'])
+                    precio = int(float(item_data['precio']))
+                    item_id = item_data.get('item_id')
+                    
+                    if item_id and int(item_id) in items_actuales:
+                        # Actualizar item existente
+                        item = items_actuales[int(item_id)]
+                        # Devolver stock anterior
+                        item.producto.stock += item.cantidad
+                        item.producto.save()
+                        # Actualizar item
+                        item.producto = Producto.objects.get(id=producto_id)
+                        item.cantidad = cantidad
+                        item.precio_unitario = precio
+                        item.subtotal = precio * cantidad
+                        item.save()
+                        # Descontar nuevo stock
+                        item.producto.stock -= cantidad
+                        item.producto.save()
+                        items_procesados.add(item.id)
+                    else:
+                        # Crear nuevo item
+                        producto = Producto.objects.get(id=producto_id)
+                        if producto.stock < cantidad:
+                            messages.error(request, f'Stock insuficiente para {producto.nombre}')
+                            return redirect('pos:editar_venta', venta_id=venta_id)
+                        
+                        ItemVenta.objects.create(
+                            venta=venta,
+                            producto=producto,
+                            cantidad=cantidad,
+                            precio_unitario=precio,
+                            subtotal=precio * cantidad
+                        )
+                        # Descontar stock
+                        producto.stock -= cantidad
+                        producto.save()
+                    
+                    total += precio * cantidad
+                
+                # Eliminar items que no están en la lista
+                for item_id, item in items_actuales.items():
+                    if item_id not in items_procesados:
+                        # Devolver stock
+                        item.producto.stock += item.cantidad
+                        item.producto.save()
+                        item.delete()
+                
+                venta.total = total
+            except Exception as e:
+                messages.error(request, f'Error al actualizar items: {str(e)}')
+                return redirect('pos:editar_venta', venta_id=venta_id)
+        
+        venta.save()
+        messages.success(request, f'Venta #{venta.id} actualizada exitosamente')
+        return redirect('pos:detalle_venta', venta_id=venta_id)
+    
+    context = {
+        'venta': venta,
+        'productos': productos,
+    }
+    return render(request, 'pos/editar_venta.html', context)
+
+
+@login_required
+def imprimir_ticket_view(request, venta_id):
+    """Vista para imprimir ticket térmico 80mm"""
+    venta = get_object_or_404(Venta, id=venta_id)
+    
+    context = {
+        'venta': venta,
+    }
+    return render(request, 'pos/ticket_80mm.html', context)
+
+
+@login_required
+def anular_venta_view(request, venta_id):
+    """Anular una venta"""
+    if not puede_anular_ventas(request.user):
+        messages.error(request, 'No tienes permisos para anular ventas. Solo administradores pueden realizar esta acción.')
+        return redirect('pos:detalle_venta', venta_id=venta_id)
+    
+    venta = get_object_or_404(Venta, id=venta_id)
+    
+    if request.method == 'POST':
+        if not venta.anulada:
+            venta.anulada = True
+            venta.fecha_anulacion = timezone.now()
+            venta.usuario_anulacion = request.user
+            venta.motivo_anulacion = request.POST.get('motivo', 'Sin especificar')
+            venta.save()
+            
+            # Devolver stock
+            for item in venta.items.all():
+                producto = item.producto
+                producto.stock += item.cantidad
+                producto.save()
+                
+                # Registrar movimiento
+                MovimientoStock.objects.create(
+                    producto=producto,
+                    tipo='ingreso',
+                    cantidad=item.cantidad,
+                    stock_anterior=producto.stock - item.cantidad,
+                    stock_nuevo=producto.stock,
+                    motivo=f'Anulación venta #{venta.id}',
+                    usuario=request.user
+                )
+            
+            messages.success(request, 'Venta anulada exitosamente')
+        else:
+            messages.warning(request, 'Esta venta ya está anulada')
+    
+    return redirect('pos:detalle_venta', venta_id=venta_id)
+
+
+@login_required
+@requiere_rol('Administradores', 'Cajeros')
+def caja_view(request):
+    """Vista de gestión de caja - Siempre usa la Caja Principal - Sistema diario"""
+    from datetime import date
+    
+    # Obtener o crear la Caja Principal
+    caja_principal = Caja.objects.filter(numero=1).first()
+    if not caja_principal:
+        caja_principal = Caja.objects.create(
+            numero=1,
+            nombre='Caja Principal',
+            activa=True
+        )
+    
+    # Obtener fecha actual
+    hoy = date.today()
+    inicio_dia = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    fin_dia = timezone.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    # Buscar caja abierta del día actual
+    caja_abierta = CajaUsuario.objects.filter(
+        usuario=request.user,
+        fecha_cierre__isnull=True,
+        caja=caja_principal,
+        fecha_apertura__date=hoy
+    ).first()
+    
+    # Verificar si hay cajas abiertas de días anteriores
+    cajas_anteriores_abiertas = CajaUsuario.objects.filter(
+        usuario=request.user,
+        fecha_cierre__isnull=True,
+        caja=caja_principal
+    ).exclude(fecha_apertura__date=hoy)
+    
+    if cajas_anteriores_abiertas.exists():
+        # Cerrar automáticamente las cajas de días anteriores
+        for caja_anterior in cajas_anteriores_abiertas:
+            # Calcular monto final basado en el saldo calculado
+            ventas_anteriores = Venta.objects.filter(
+                caja=caja_principal,
+                fecha__gte=caja_anterior.fecha_apertura,
+                fecha__lt=inicio_dia,
+                completada=True,
+                anulada=False
+            )
+            total_ventas_anterior = ventas_anteriores.aggregate(total=Sum('total'))['total'] or 0
+            
+            from .models import GastoCaja
+            gastos_anteriores = GastoCaja.objects.filter(caja_usuario=caja_anterior)
+            total_gastos_anterior = gastos_anteriores.filter(tipo='gasto').aggregate(total=Sum('monto'))['total'] or 0
+            total_ingresos_anterior = gastos_anteriores.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0
+            
+            saldo_anterior = caja_anterior.monto_inicial + total_ventas_anterior + total_ingresos_anterior - total_gastos_anterior
+            
+            # Cerrar la caja anterior
+            from datetime import timedelta
+            caja_anterior.fecha_cierre = inicio_dia - timedelta(seconds=1)
+            caja_anterior.monto_final = saldo_anterior
+            caja_anterior.save()
+        
+        messages.info(request, f'Se cerraron automáticamente {cajas_anteriores_abiertas.count()} caja(s) de días anteriores.')
+    
+    historial_cajas = CajaUsuario.objects.filter(
+        usuario=request.user,
+        caja=caja_principal
+    ).order_by('-fecha_apertura')[:10]
+    
+    # Si no hay caja abierta, buscar la última caja cerrada del día actual
+    # Priorizar mostrar la caja cerrada más reciente si existe
+    caja_cerrada_hoy = CajaUsuario.objects.filter(
+        usuario=request.user,
+        fecha_cierre__isnull=False,
+        fecha_apertura__date=hoy
+    ).order_by('-fecha_cierre').first()
+    
+    # Si hay caja cerrada, mostrarla; si no, mostrar la abierta
+    caja_mostrar = caja_cerrada_hoy if caja_cerrada_hoy else caja_abierta
+    
+    # Inicializar variables con valores por defecto
+    total_ventas = 0
+    ventas_caja = []
+    gastos_caja = []
+    movimientos_unificados = []
+    total_gastos = 0
+    total_ingresos = 0
+    saldo_caja = 0
+    
+    if caja_mostrar:
+        # Filtrar ventas del período de la caja (desde apertura hasta cierre, o del día si está abierta)
+        if caja_mostrar.fecha_cierre:
+            # Si la caja está cerrada, filtrar ventas entre apertura y cierre
+            ventas_caja = Venta.objects.filter(
+                caja=caja_principal,
+                fecha__gte=caja_mostrar.fecha_apertura,
+                fecha__lte=caja_mostrar.fecha_cierre,
+                completada=True,
+                anulada=False
+            )
+        else:
+            # Si la caja está abierta, filtrar ventas del día actual
+            ventas_caja = Venta.objects.filter(
+                caja=caja_principal,
+                fecha__gte=inicio_dia,
+                fecha__lte=fin_dia,
+                completada=True,
+                anulada=False
+            )
+        total_ventas_raw = ventas_caja.aggregate(total=Sum('total'))['total']
+        total_ventas = int(total_ventas_raw) if total_ventas_raw else 0
+        
+        # Obtener gastos e ingresos de la caja (abierta o cerrada)
+        # Incluir TODOS los gastos asociados a esta caja (sin filtrar por fecha)
+        # para asegurar que se incluyan los retiros registrados al cerrar la caja
+        from .models import GastoCaja
+        gastos_todos = GastoCaja.objects.filter(
+            caja_usuario=caja_mostrar
+        )
+        
+        # Para el cálculo del saldo, usar TODOS los gastos de esta caja abierta
+        # (no solo los del día actual) para incluir retiros registrados al cerrar
+        total_gastos_raw = gastos_todos.filter(tipo='gasto').aggregate(total=Sum('monto'))['total']
+        total_ingresos_raw = gastos_todos.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total']
+        
+        total_gastos = int(total_gastos_raw) if total_gastos_raw else 0
+        total_ingresos = int(total_ingresos_raw) if total_ingresos_raw else 0
+        
+        # Para mostrar en la tabla, incluir TODOS los gastos de la caja
+        # (no solo los del día actual) para incluir retiros registrados al cerrar
+        gastos_caja = gastos_todos.order_by('-fecha')
+        
+        # Crear lista unificada de movimientos (ventas, gastos, ingresos)
+        movimientos_unificados = []
+        
+        # Agregar ventas como movimientos
+        for venta in ventas_caja.order_by('fecha'):
+            movimientos_unificados.append({
+                'tipo': 'venta',
+                'fecha': venta.fecha,
+                'monto': venta.total,
+                'descripcion': f'Venta #{venta.id}',
+                'usuario': venta.usuario,
+                'metodo_pago': venta.get_metodo_pago_display(),
+                'vendedor': venta.vendedor,
+                'venta_id': venta.id,
+            })
+        
+        # Agregar gastos e ingresos como movimientos
+        for movimiento in gastos_caja.order_by('fecha'):
+            movimientos_unificados.append({
+                'tipo': movimiento.tipo,
+                'fecha': movimiento.fecha,
+                'monto': movimiento.monto,
+                'descripcion': movimiento.descripcion,
+                'usuario': movimiento.usuario,
+                'metodo_pago': None,
+                'vendedor': None,
+                'venta_id': None,
+            })
+        
+        # Ordenar todos los movimientos por fecha ascendente para calcular saldos
+        movimientos_unificados.sort(key=lambda x: x['fecha'])
+        
+        # Calcular saldo antes y después de cada movimiento
+        monto_inicial = int(caja_mostrar.monto_inicial) if caja_mostrar.monto_inicial else 0
+        saldo_actual = monto_inicial
+        
+        for movimiento in movimientos_unificados:
+            saldo_antes = saldo_actual
+            monto = int(movimiento['monto'])
+            
+            # Calcular saldo después según el tipo de movimiento
+            if movimiento['tipo'] == 'venta' or movimiento['tipo'] == 'ingreso':
+                saldo_despues = saldo_antes + monto
+            else:  # gasto
+                saldo_despues = saldo_antes - monto
+            
+            # Agregar saldo antes y después al movimiento
+            movimiento['saldo_antes'] = saldo_antes
+            movimiento['saldo_despues'] = saldo_despues
+            
+            # Actualizar saldo actual para el siguiente movimiento
+            saldo_actual = saldo_despues
+        
+        # Ordenar por fecha descendente para mostrar (más recientes primero)
+        movimientos_unificados.sort(key=lambda x: x['fecha'], reverse=True)
+        
+        # Asegurar que todos los valores sean enteros
+        monto_inicial = int(caja_mostrar.monto_inicial) if caja_mostrar.monto_inicial else 0
+        
+        # Calcular saldo en caja: Monto Inicial + Ventas + Ingresos - Gastos
+        # Los gastos incluyen todos los retiros registrados
+        # Este es el dinero físico que debería haber en la caja
+        saldo_caja = monto_inicial + total_ventas + total_ingresos - total_gastos
+        
+        # Asegurar que el saldo sea un entero
+        saldo_caja = int(saldo_caja)
+    
+    context = {
+        'caja_abierta': caja_abierta,
+        'caja_mostrar': caja_mostrar,  # Puede ser abierta o cerrada del día
+        'caja_principal': caja_principal,
+        'historial_cajas': historial_cajas,
+        'total_ventas': total_ventas,
+        'ventas_caja': ventas_caja,
+        'gastos_caja': gastos_caja,
+        'movimientos_unificados': movimientos_unificados,
+        'total_gastos': total_gastos,
+        'total_ingresos': total_ingresos,
+        'saldo_caja': saldo_caja,
+        'hoy': hoy,
+    }
+    
+    return render(request, 'pos/caja.html', context)
+
+
+@login_required
+@requiere_rol('Administradores', 'Cajeros')
+def abrir_caja_view(request):
+    """Abrir una caja - Siempre abre la Caja Principal - Sistema diario"""
+    from datetime import date
+    
+    if request.method == 'POST':
+        try:
+            monto_inicial = int(float(request.POST.get('monto_inicial', 0)))
+        except (ValueError, TypeError):
+            monto_inicial = 0
+        
+        hoy = date.today()
+        
+        # Verificar si ya tiene una caja abierta del día actual
+        caja_existente_hoy = CajaUsuario.objects.filter(
+            usuario=request.user,
+            fecha_cierre__isnull=True,
+            fecha_apertura__date=hoy
+        ).exists()
+        
+        if caja_existente_hoy:
+            messages.warning(request, 'Ya tienes una caja abierta para hoy. Debes cerrarla antes de abrir una nueva.')
+        else:
+            # Siempre usar la Caja Principal (número 1)
+            caja_principal = Caja.objects.filter(numero=1).first()
+            if not caja_principal:
+                # Si no existe, crearla
+                caja_principal = Caja.objects.create(
+                    numero=1,
+                    nombre='Caja Principal',
+                    activa=True
+                )
+            
+            CajaUsuario.objects.create(
+                caja=caja_principal,
+                usuario=request.user,
+                monto_inicial=monto_inicial
+            )
+            
+            messages.success(request, f'Caja Principal abierta exitosamente para el día de hoy')
+    
+    return redirect('pos:caja')
+
+
+@login_required
+@requiere_rol('Administradores', 'Cajeros')
+def cerrar_caja_view(request):
+    """Cerrar una caja y todas las registradoras activas"""
+    if request.method == 'POST':
+        # Verificar si hay caja abierta del día actual
+        from datetime import date
+        hoy = date.today()
+        caja_abierta = CajaUsuario.objects.filter(
+            usuario=request.user,
+            fecha_cierre__isnull=True,
+            fecha_apertura__date=hoy
+        ).first()
+        
+        if caja_abierta:
+            monto_final = int(float(request.POST.get('monto_final', 0)))
+            dinero_retirar = int(float(request.POST.get('dinero_retirar', 0)))
+            
+            # Si hay dinero a retirar, registrarlo como un gasto antes de cerrar
+            if dinero_retirar > 0:
+                from .models import GastoCaja
+                GastoCaja.objects.create(
+                    tipo='gasto',
+                    monto=dinero_retirar,
+                    descripcion=f'Retiro de dinero al cerrar caja - Usuario: {request.user.get_full_name() or request.user.username}',
+                    usuario=request.user,
+                    caja_usuario=caja_abierta
+                )
+            
+            # Cerrar la caja
+            caja_abierta.fecha_cierre = timezone.now()
+            caja_abierta.monto_final = monto_final
+            caja_abierta.save()
+            
+            # Cerrar todas las registradoras activas del usuario
+            from .models import RegistradoraActiva
+            registradoras_cerradas = RegistradoraActiva.objects.filter(
+                usuario=request.user
+            ).count()
+            
+            # Eliminar todas las registradoras activas del usuario
+            RegistradoraActiva.objects.filter(usuario=request.user).delete()
+            
+            # Limpiar la sesión de registradora seleccionada
+            if 'registradora_seleccionada' in request.session:
+                del request.session['registradora_seleccionada']
+                request.session.modified = True
+            
+            # Mensaje de confirmación
+            mensaje = 'Caja cerrada exitosamente'
+            if dinero_retirar > 0:
+                mensaje += f'. Se registró un retiro de ${dinero_retirar:,} como salida.'
+            if registradoras_cerradas > 0:
+                mensaje += f' Se cerraron {registradoras_cerradas} registradora(s) activa(s).'
+            
+            messages.success(request, mensaje)
+        else:
+            messages.warning(request, 'No tienes una caja abierta para hoy')
+    
+    return redirect('pos:caja')
+
+
+@login_required
+@requiere_rol('Administradores', 'Cajeros')
+def registrar_gasto_view(request):
+    """Registrar un gasto en la caja"""
+    if request.method == 'POST':
+        # Verificar si hay caja abierta del día actual
+        from datetime import date
+        hoy = date.today()
+        caja_abierta = CajaUsuario.objects.filter(
+            usuario=request.user,
+            fecha_cierre__isnull=True,
+            fecha_apertura__date=hoy
+        ).first()
+        
+        if not caja_abierta:
+            messages.error(request, 'No tienes una caja abierta para hoy. Debes abrir una caja antes de registrar gastos.')
+            return redirect('pos:caja')
+        
+        try:
+            monto = int(float(request.POST.get('monto', 0)))
+            descripcion = request.POST.get('descripcion', '').strip()
+            
+            if monto <= 0:
+                messages.error(request, 'El monto debe ser mayor a 0')
+                return redirect('pos:caja')
+            
+            if not descripcion:
+                messages.error(request, 'La descripción es requerida')
+                return redirect('pos:caja')
+            
+            from .models import GastoCaja
+            GastoCaja.objects.create(
+                tipo='gasto',
+                monto=monto,
+                descripcion=descripcion,
+                usuario=request.user,
+                caja_usuario=caja_abierta
+            )
+            
+            messages.success(request, f'Gasto de ${monto:,} registrado exitosamente')
+        except ValueError:
+            messages.error(request, 'Monto inválido')
+        except Exception as e:
+            messages.error(request, f'Error al registrar gasto: {str(e)}')
+    
+    return redirect('pos:caja')
+
+
+@login_required
+@requiere_rol('Administradores', 'Cajeros')
+def registrar_ingreso_view(request):
+    """Registrar una entrada de dinero en la caja"""
+    if request.method == 'POST':
+        # Verificar si hay caja abierta del día actual
+        from datetime import date
+        hoy = date.today()
+        caja_abierta = CajaUsuario.objects.filter(
+            usuario=request.user,
+            fecha_cierre__isnull=True,
+            fecha_apertura__date=hoy
+        ).first()
+        
+        if not caja_abierta:
+            messages.error(request, 'No tienes una caja abierta para hoy. Debes abrir una caja antes de registrar ingresos.')
+            return redirect('pos:caja')
+        
+        try:
+            monto = int(float(request.POST.get('monto', 0)))
+            descripcion = request.POST.get('descripcion', '').strip()
+            
+            if monto <= 0:
+                messages.error(request, 'El monto debe ser mayor a 0')
+                return redirect('pos:caja')
+            
+            if not descripcion:
+                messages.error(request, 'La descripción es requerida')
+                return redirect('pos:caja')
+            
+            from .models import GastoCaja
+            GastoCaja.objects.create(
+                tipo='ingreso',
+                monto=monto,
+                descripcion=descripcion,
+                usuario=request.user,
+                caja_usuario=caja_abierta
+            )
+            
+            messages.success(request, f'Entrada de dinero de ${monto:,} registrada exitosamente')
+        except ValueError:
+            messages.error(request, 'Monto inválido')
+        except Exception as e:
+            messages.error(request, f'Error al registrar ingreso: {str(e)}')
+    
+    return redirect('pos:caja')
+
+
+@login_required
+@requiere_rol('Administradores')
+def reportes_view(request):
+    """Vista de reportes"""
+    if not puede_ver_reportes(request.user):
+        messages.error(request, 'No tienes permisos para ver reportes')
+        return redirect('pos:home')
+    
+    # Obtener fechas del filtro
+    fecha_desde = request.GET.get('fecha_desde')
+    fecha_hasta = request.GET.get('fecha_hasta')
+    
+    # Ventas del mes actual por defecto
+    if not fecha_desde:
+        fecha_desde = timezone.now().replace(day=1).date()
+    else:
+        fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+    
+    if not fecha_hasta:
+        fecha_hasta = timezone.now().date()
+    else:
+        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+    
+    ventas = Venta.objects.filter(
+        fecha__date__gte=fecha_desde,
+        fecha__date__lte=fecha_hasta,
+        completada=True,
+        anulada=False
+    )
+    
+    total_ventas_mes = ventas.aggregate(total=Sum('total'))['total'] or 0
+    cantidad_ventas_mes = ventas.count()
+    promedio_venta = total_ventas_mes / cantidad_ventas_mes if cantidad_ventas_mes > 0 else 0
+    
+    # Top productos
+    top_productos = ItemVenta.objects.filter(
+        venta__in=ventas
+    ).values('producto__nombre').annotate(
+        total_vendido=Sum('cantidad')
+    ).order_by('-total_vendido')[:10]
+    
+    # Ventas por método de pago
+    ventas_por_metodo = ventas.values('metodo_pago').annotate(
+        cantidad=Count('id'),
+        total=Sum('total')
+    )
+    
+    total_productos = Producto.objects.filter(activo=True).count()
+    
+    context = {
+        'total_ventas_mes': total_ventas_mes,
+        'cantidad_ventas_mes': cantidad_ventas_mes,
+        'promedio_venta': promedio_venta,
+        'total_productos': total_productos,
+        'top_productos': top_productos,
+        'ventas_por_metodo': ventas_por_metodo,
+        'fecha_desde': fecha_desde,
+        'fecha_hasta': fecha_hasta,
+    }
+    
+    return render(request, 'pos/reportes.html', context)
+
+
+@login_required
+@requiere_rol('Administradores', 'Inventario')
+def inventario_view(request):
+    """Vista unificada de inventario (Ingreso y Salida de mercancía)"""
+    ingresos = IngresoMercancia.objects.all().order_by('-fecha')
+    salidas = SalidaMercancia.objects.all().order_by('-fecha')
+    
+    # Obtener el tipo de pestaña activa desde la URL
+    tipo_activo = request.GET.get('tipo', 'ingreso')  # 'ingreso' o 'salida'
+    
+    context = {
+        'ingresos': ingresos,
+        'salidas': salidas,
+        'tipo_activo': tipo_activo,
+    }
+    
+    return render(request, 'pos/inventario.html', context)
+
+
+@login_required
+@requiere_rol('Administradores', 'Inventario')
+def ingreso_mercancia_view(request):
+    """Vista de ingreso de mercancía (redirige a inventario)"""
+    return redirect('pos:inventario?tipo=ingreso')
+
+
+@login_required
+@requiere_rol('Administradores', 'Inventario')
+def salida_mercancia_view(request):
+    """Vista de salida de mercancía (redirige a inventario)"""
+    return redirect('pos:inventario?tipo=salida')
+
+
+@login_required
+@requiere_rol('Administradores')
+def marketing_view(request):
+    """Vista de ranking de ventas por vendedor"""
+    from django.contrib.auth.models import User
+    from datetime import timedelta
+    
+    # Obtener rango de fechas (últimos 30 días por defecto)
+    fecha_desde = request.GET.get('fecha_desde')
+    fecha_hasta = request.GET.get('fecha_hasta')
+    
+    if not fecha_desde:
+        fecha_desde = (timezone.now() - timedelta(days=30)).date()
+    else:
+        fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+    
+    if not fecha_hasta:
+        fecha_hasta = timezone.now().date()
+    else:
+        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+    
+    # Obtener ventas en el rango de fechas
+    ventas = Venta.objects.filter(
+        fecha__date__gte=fecha_desde,
+        fecha__date__lte=fecha_hasta,
+        completada=True,
+        anulada=False,
+        vendedor__isnull=False
+    )
+    
+    # Calcular ranking por vendedor
+    ranking_vendedores = ventas.values('vendedor').annotate(
+        total_ventas=Sum('total'),
+        cantidad_ventas=Count('id'),
+        promedio_venta=Avg('total')
+    ).order_by('-total_ventas')
+    
+    # Enriquecer con información del usuario
+    ranking_completo = []
+    for i, item in enumerate(ranking_vendedores, 1):
+        try:
+            vendedor = User.objects.get(id=item['vendedor'])
+            ranking_completo.append({
+                'posicion': i,
+                'vendedor': vendedor,
+                'nombre_completo': vendedor.get_full_name() or vendedor.username,
+                'username': vendedor.username,
+                'total_ventas': item['total_ventas'] or 0,
+                'cantidad_ventas': item['cantidad_ventas'] or 0,
+                'promedio_venta': item['promedio_venta'] or 0,
+            })
+        except User.DoesNotExist:
+            continue
+    
+    # Estadísticas generales
+    total_general = ventas.aggregate(total=Sum('total'))['total'] or 0
+    cantidad_general = ventas.count()
+    promedio_general = total_general / cantidad_general if cantidad_general > 0 else 0
+    
+    # Top vendedor
+    top_vendedor = ranking_completo[0] if ranking_completo else None
+    
+    context = {
+        'ranking_vendedores': ranking_completo,
+        'total_general': total_general,
+        'cantidad_general': cantidad_general,
+        'promedio_general': promedio_general,
+        'top_vendedor': top_vendedor,
+        'fecha_desde': fecha_desde,
+        'fecha_hasta': fecha_hasta,
+    }
+    
+    return render(request, 'pos/marketing.html', context)
+
+
+@login_required
+def formulario_clientes_view(request):
+    """Vista de formulario de clientes"""
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre')
+        email = request.POST.get('email')
+        telefono = request.POST.get('telefono')
+        tipo_interes = request.POST.get('tipo_interes', 'mayorista')
+        empresa = request.POST.get('empresa')
+        mensaje = request.POST.get('mensaje')
+        
+        ClientePotencial.objects.create(
+            nombre=nombre,
+            email=email,
+            telefono=telefono,
+            tipo_interes=tipo_interes,
+            empresa=empresa,
+            mensaje=mensaje,
+            estado='nuevo'
+        )
+        
+        messages.success(request, 'Cliente registrado exitosamente')
+        return redirect('pos:formulario_clientes')
+    
+    return render(request, 'pos/formulario_clientes.html')
+
+
+@login_required
+def clientes_potenciales_view(request):
+    """Vista de clientes potenciales"""
+    clientes = ClientePotencial.objects.all().order_by('-fecha_registro')
+    
+    context = {
+        'clientes': clientes,
+    }
+    
+    return render(request, 'pos/clientes_potenciales.html', context)
+
+
+@login_required
+@requiere_rol('Administradores')
+def usuarios_view(request):
+    """Vista de gestión de usuarios"""
+    if not puede_ver_reportes(request.user):
+        messages.error(request, 'No tienes permisos para acceder')
+        return redirect('pos:home')
+    
+    from django.contrib.auth.models import User
+    usuarios = User.objects.all().order_by('username')
+    
+    context = {
+        'usuarios': usuarios,
+    }
+    
+    return render(request, 'pos/usuarios.html', context)
+
+
+# ============================================
+# SISTEMA DE CARRITO CON SESIÓN
+# ============================================
+
+def get_carrito(request):
+    """Obtener o crear el carrito en la sesión"""
+    if 'carrito' not in request.session:
+        request.session['carrito'] = {}
+    return request.session['carrito']
+
+
+@login_required
+def buscar_productos_view(request):
+    """Búsqueda de productos (AJAX) - Insensible a tildes"""
+    import unicodedata
+    
+    def normalizar_texto(texto):
+        """Normalizar texto removiendo tildes y acentos"""
+        if not texto:
+            return ''
+        # Normalizar a NFD (descomponer caracteres con acentos)
+        texto_normalizado = unicodedata.normalize('NFD', texto.lower())
+        # Remover marcas diacríticas (tildes, acentos)
+        texto_sin_acentos = ''.join(
+            char for char in texto_normalizado 
+            if unicodedata.category(char) != 'Mn'
+        )
+        return texto_sin_acentos
+    
+    query = request.GET.get('q', '').strip()
+    
+    if len(query) < 2:
+        return JsonResponse({'productos': []})
+    
+    query_normalizada = normalizar_texto(query)
+    
+    # Obtener todos los productos activos y filtrar en Python
+    # (más flexible para búsqueda insensible a tildes)
+    productos_activos = Producto.objects.filter(activo=True)
+    
+    resultados = []
+    for producto in productos_activos:
+        nombre_norm = normalizar_texto(producto.nombre)
+        codigo_norm = normalizar_texto(producto.codigo)
+        codigo_barras_norm = normalizar_texto(producto.codigo_barras or '')
+        
+        # Buscar en los campos normalizados
+        if (query_normalizada in nombre_norm or 
+            query_normalizada in codigo_norm or 
+            query_normalizada in codigo_barras_norm):
+            resultados.append({
+                'id': producto.id,
+                'nombre': producto.nombre,
+                'codigo': producto.codigo,
+                'codigo_barras': producto.codigo_barras or '',
+                'precio': int(producto.precio),
+                'stock': producto.stock,
+            })
+            
+            # Limitar a 10 resultados
+            if len(resultados) >= 10:
+                break
+    
+    return JsonResponse({'productos': resultados})
+
+
+@login_required
+def agregar_al_carrito_view(request):
+    """Agregar producto al carrito"""
+    if request.method == 'POST':
+        try:
+            producto_id = int(request.POST.get('producto_id'))
+            cantidad = int(request.POST.get('cantidad', 1))
+            
+            producto = get_object_or_404(Producto, id=producto_id, activo=True)
+            
+            if cantidad <= 0:
+                return JsonResponse({'success': False, 'error': 'La cantidad debe ser mayor a 0'})
+            
+            if producto.stock < cantidad:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Stock insuficiente. Disponible: {producto.stock}'
+                })
+            
+            carrito = get_carrito(request)
+            producto_key = str(producto_id)
+            
+            if producto_key in carrito:
+                nueva_cantidad = carrito[producto_key]['cantidad'] + cantidad
+                if nueva_cantidad > producto.stock:
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Stock insuficiente. Disponible: {producto.stock}'
+                    })
+                carrito[producto_key]['cantidad'] = nueva_cantidad
+            else:
+                carrito[producto_key] = {
+                    'producto_id': producto_id,
+                    'nombre': producto.nombre,
+                    'codigo': producto.codigo,
+                    'precio': int(producto.precio),
+                    'cantidad': cantidad,
+                    'stock': producto.stock,
+                }
+            
+            request.session.modified = True
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'{cantidad} unidad(es) de {producto.nombre} agregada(s)'
+            })
+            
+        except ValueError:
+            return JsonResponse({'success': False, 'error': 'Datos inválidos'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+
+@login_required
+def actualizar_cantidad_carrito_view(request, producto_id):
+    """Actualizar cantidad de un item en el carrito"""
+    if request.method == 'POST':
+        try:
+            cantidad = int(request.POST.get('cantidad', 1))
+            producto = get_object_or_404(Producto, id=producto_id)
+            carrito = get_carrito(request)
+            producto_key = str(producto_id)
+            
+            if producto_key not in carrito:
+                return JsonResponse({'success': False, 'error': 'Producto no está en el carrito'})
+            
+            if cantidad <= 0:
+                # Eliminar del carrito
+                del carrito[producto_key]
+            else:
+                if cantidad > producto.stock:
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Stock insuficiente. Disponible: {producto.stock}'
+                    })
+                carrito[producto_key]['cantidad'] = cantidad
+            
+            request.session.modified = True
+            return JsonResponse({'success': True})
+            
+        except ValueError:
+            return JsonResponse({'success': False, 'error': 'Cantidad inválida'})
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+
+@login_required
+def actualizar_precio_carrito_view(request, producto_id):
+    """Actualizar precio de un item en el carrito"""
+    if request.method == 'POST':
+        try:
+            nuevo_precio = int(float(request.POST.get('precio', 0)))
+            carrito = get_carrito(request)
+            producto_key = str(producto_id)
+            
+            if producto_key not in carrito:
+                return JsonResponse({'success': False, 'error': 'Producto no está en el carrito'})
+            
+            if nuevo_precio < 0:
+                return JsonResponse({'success': False, 'error': 'El precio no puede ser negativo'})
+            
+            carrito[producto_key]['precio'] = nuevo_precio
+            request.session.modified = True
+            
+            return JsonResponse({'success': True})
+            
+        except ValueError:
+            return JsonResponse({'success': False, 'error': 'Precio inválido'})
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+
+@login_required
+def eliminar_item_carrito_view(request, producto_id):
+    """Eliminar item del carrito"""
+    if request.method == 'GET':
+        carrito = get_carrito(request)
+        producto_key = str(producto_id)
+        
+        if producto_key in carrito:
+            del carrito[producto_key]
+            request.session.modified = True
+        
+        return JsonResponse({'success': True})
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+
+@login_required
+def limpiar_carrito_view(request):
+    """Limpiar todo el carrito"""
+    if request.method == 'GET':
+        request.session['carrito'] = {}
+        request.session.modified = True
+        return JsonResponse({'success': True})
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+
+@login_required
+def procesar_venta_completa_view(request):
+    """Procesar venta completa desde el carrito de sesión"""
+    if request.method == 'POST':
+        try:
+            # Verificar si hay caja abierta del día actual
+            from datetime import date
+            hoy = date.today()
+            caja_abierta = CajaUsuario.objects.filter(
+                usuario=request.user,
+                fecha_cierre__isnull=True,
+                fecha_apertura__date=hoy
+            ).first()
+            
+            if not caja_abierta:
+                return JsonResponse({
+                    'success': False, 
+                    'error': 'Debes abrir una caja antes de realizar ventas. Por favor, abre la caja desde el Dashboard.'
+                })
+            
+            carrito = get_carrito(request)
+            
+            if not carrito:
+                return JsonResponse({'success': False, 'error': 'El carrito está vacío'})
+            
+            metodo_pago = request.POST.get('metodo_pago', 'efectivo')
+            monto_recibido = request.POST.get('monto_recibido')
+            vendedor_id = request.POST.get('vendedor_id')
+            
+            # Calcular total
+            total = sum(
+                item['precio'] * item['cantidad']
+                for item in carrito.values()
+            )
+            
+            # Validar monto recibido si es efectivo
+            monto_recibido_float = None
+            if metodo_pago == 'efectivo' and monto_recibido:
+                # Limpiar el monto (quitar puntos y comas)
+                import re
+                monto_limpio = re.sub(r'[^0-9]', '', str(monto_recibido))
+                monto_recibido_float = int(float(monto_limpio)) if monto_limpio else 0
+                if monto_recibido_float < total:
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Monto insuficiente. Total: ${total:,.0f}, Recibido: ${monto_recibido_float:,.0f}'
+                    })
+            
+            # Obtener vendedor
+            vendedor = None
+            if vendedor_id:
+                from django.contrib.auth.models import User
+                try:
+                    vendedor = User.objects.get(id=vendedor_id)
+                except User.DoesNotExist:
+                    pass
+            
+            # Obtener registradora de la sesión
+            registradora_seleccionada = request.session.get('registradora_seleccionada', None)
+            
+            # Crear la venta
+            venta = Venta.objects.create(
+                usuario=request.user,
+                vendedor=vendedor,
+                metodo_pago=metodo_pago,
+                monto_recibido=monto_recibido_float if monto_recibido_float else None,
+                completada=True
+            )
+            
+            # Guardar registradora en el campo observaciones o crear un campo nuevo
+            # Por ahora lo guardamos en observaciones si existe, sino lo agregamos al motivo
+            if registradora_seleccionada:
+                # Guardar en un campo de texto si existe, sino usar el campo motivo_anulacion temporalmente
+                # Nota: En el futuro se puede agregar un campo registradora al modelo Venta
+                pass  # Por ahora solo lo mostramos en la sesión
+            
+            # Agregar items y actualizar stock
+            for item_data in carrito.values():
+                producto = Producto.objects.get(id=item_data['producto_id'])
+                cantidad = item_data['cantidad']
+                precio = item_data['precio']
+                
+                # Verificar stock nuevamente
+                if producto.stock < cantidad:
+                    venta.delete()
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Stock insuficiente para {producto.nombre}'
+                    })
+                
+                # Crear item de venta
+                ItemVenta.objects.create(
+                    venta=venta,
+                    producto=producto,
+                    cantidad=cantidad,
+                    precio_unitario=precio,
+                    subtotal=precio * cantidad
+                )
+                
+                # Actualizar stock
+                producto.stock -= cantidad
+                producto.save()
+                
+                # Registrar movimiento de stock
+                MovimientoStock.objects.create(
+                    producto=producto,
+                    tipo='salida',
+                    cantidad=cantidad,
+                    stock_anterior=producto.stock + cantidad,
+                    stock_nuevo=producto.stock,
+                    motivo=f'Venta #{venta.id}',
+                    usuario=request.user
+                )
+            
+            # Actualizar total de la venta
+            venta.total = total
+            
+            # Asignar siempre a la Caja Principal (todas las ventas van a la misma caja)
+            caja_principal = Caja.objects.filter(numero=1).first()
+            if caja_principal:
+                venta.caja = caja_principal
+            
+            venta.save()
+            
+            # Limpiar carrito
+            request.session['carrito'] = {}
+            request.session.modified = True
+            
+            return JsonResponse({
+                'success': True,
+                'venta_id': venta.id,
+                'total': int(total),
+                'message': f'Venta #{venta.id} procesada exitosamente'
+            })
+            
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+
+@login_required
+def api_usuarios_view(request):
+    """API para obtener lista de usuarios (para selector de vendedor)"""
+    from django.contrib.auth.models import User
+    usuarios = User.objects.filter(is_active=True).order_by('username')
+    
+    usuarios_data = []
+    for usuario in usuarios:
+        usuarios_data.append({
+            'id': usuario.id,
+            'username': usuario.username,
+            'nombre_completo': usuario.get_full_name() or usuario.username,
+            'email': usuario.email or '',
+        })
+    
+    return JsonResponse({'usuarios': usuarios_data})
+
+
+# ============================================
+# GESTIÓN DE PRODUCTOS
+# ============================================
+
+@login_required
+@requiere_rol('Administradores', 'Inventario')
+def crear_producto_view(request):
+    """Vista para crear un nuevo producto"""
+    if request.method == 'POST':
+        try:
+            codigo = request.POST.get('codigo')
+            codigo_barras = request.POST.get('codigo_barras') or None
+            nombre = request.POST.get('nombre')
+            precio = int(float(request.POST.get('precio', 0)))
+            stock = int(request.POST.get('stock', 0))
+            activo = request.POST.get('activo') == 'on'
+            
+            # Verificar si el código ya existe
+            if Producto.objects.filter(codigo=codigo).exists():
+                messages.error(request, f'El código {codigo} ya existe')
+                return redirect('pos:crear_producto')
+            
+            producto = Producto.objects.create(
+                codigo=codigo,
+                codigo_barras=codigo_barras,
+                nombre=nombre,
+                precio=precio,
+                stock=stock,
+                activo=activo
+            )
+            
+            # Manejar imagen si se sube
+            if 'imagen' in request.FILES:
+                producto.imagen = request.FILES['imagen']
+                producto.save()
+            
+            messages.success(request, f'Producto {producto.nombre} creado exitosamente')
+            return redirect('pos:productos')
+        except Exception as e:
+            messages.error(request, f'Error al crear producto: {str(e)}')
+    
+    return render(request, 'pos/crear_producto.html')
+
+
+@login_required
+@requiere_rol('Administradores', 'Inventario')
+def editar_producto_view(request, producto_id):
+    """Vista para editar un producto"""
+    producto = get_object_or_404(Producto, id=producto_id)
+    
+    if request.method == 'POST':
+        try:
+            producto.codigo = request.POST.get('codigo')
+            producto.codigo_barras = request.POST.get('codigo_barras') or None
+            producto.nombre = request.POST.get('nombre')
+            producto.precio = int(float(request.POST.get('precio', 0)))
+            producto.stock = int(request.POST.get('stock', 0))
+            producto.activo = request.POST.get('activo') == 'on'
+            
+            # Manejar imagen si se sube
+            if 'imagen' in request.FILES:
+                producto.imagen = request.FILES['imagen']
+            
+            producto.save()
+            messages.success(request, f'Producto {producto.nombre} actualizado exitosamente')
+            return redirect('pos:productos')
+        except Exception as e:
+            messages.error(request, f'Error al actualizar producto: {str(e)}')
+    
+    # Convertir precio a string numérico para que se muestre correctamente en el input
+    # Los DecimalField de Django pueden tener problemas con inputs type="number"
+    try:
+        precio_float = str(int(producto.precio)) if producto.precio else "0"
+    except (ValueError, TypeError):
+        precio_float = "0"
+    
+    context = {
+        'producto': producto,
+        'precio_float': precio_float,
+    }
+    return render(request, 'pos/editar_producto.html', context)
+
+
+# ============================================
+# GESTIÓN DE INGRESOS DE MERCADERÍA
+# ============================================
+
+@login_required
+@requiere_rol('Administradores', 'Inventario')
+def crear_ingreso_view(request):
+    """Vista para crear un nuevo ingreso de mercancía"""
+    if request.method == 'POST':
+        try:
+            proveedor = request.POST.get('proveedor')
+            numero_factura = request.POST.get('numero_factura') or None
+            observaciones = request.POST.get('observaciones') or None
+            
+            ingreso = IngresoMercancia.objects.create(
+                proveedor=proveedor,
+                numero_factura=numero_factura,
+                observaciones=observaciones,
+                usuario=request.user,
+                completado=False
+            )
+            
+            # Procesar items
+            items_data = json.loads(request.POST.get('items', '[]'))
+            total = 0
+            
+            for item_data in items_data:
+                producto_id = int(item_data['producto_id'])
+                cantidad = int(item_data['cantidad'])
+                precio_compra = int(float(item_data['precio_compra']))
+                
+                producto = Producto.objects.get(id=producto_id)
+                subtotal = cantidad * precio_compra
+                
+                ItemIngresoMercancia.objects.create(
+                    ingreso=ingreso,
+                    producto=producto,
+                    cantidad=cantidad,
+                    precio_compra=precio_compra,
+                    subtotal=subtotal
+                )
+                
+                total += subtotal
+            
+            ingreso.total = total
+            ingreso.save()
+            
+            messages.success(request, f'Ingreso #{ingreso.id} creado exitosamente')
+            return redirect('pos:detalle_ingreso', ingreso_id=ingreso.id)
+        except Exception as e:
+            messages.error(request, f'Error al crear ingreso: {str(e)}')
+    
+    productos = Producto.objects.filter(activo=True).order_by('nombre')
+    context = {'productos': productos}
+    return render(request, 'pos/crear_ingreso.html', context)
+
+
+@login_required
+@requiere_rol('Administradores', 'Inventario')
+def detalle_ingreso_view(request, ingreso_id):
+    """Vista de detalle de ingreso de mercancía"""
+    ingreso = get_object_or_404(IngresoMercancia, id=ingreso_id)
+    
+    if request.method == 'POST' and 'completar' in request.POST:
+        if not ingreso.completado:
+            # Actualizar stock de productos
+            for item in ingreso.items.all():
+                item.producto.stock += item.cantidad
+                item.producto.save()
+                
+                # Registrar movimiento de stock
+                MovimientoStock.objects.create(
+                    producto=item.producto,
+                    tipo='ingreso',
+                    cantidad=item.cantidad,
+                    stock_anterior=item.producto.stock - item.cantidad,
+                    stock_nuevo=item.producto.stock,
+                    motivo=f'Ingreso #{ingreso.id} - {ingreso.proveedor}',
+                    usuario=request.user
+                )
+            
+            ingreso.completado = True
+            ingreso.save()
+            messages.success(request, 'Ingreso completado y stock actualizado')
+        else:
+            messages.warning(request, 'Este ingreso ya está completado')
+    
+    context = {'ingreso': ingreso}
+    return render(request, 'pos/detalle_ingreso.html', context)
+
+
+# ============================================
+# GESTIÓN DE SALIDAS DE MERCADERÍA
+# ============================================
+
+@login_required
+@requiere_rol('Administradores', 'Inventario')
+def crear_salida_view(request):
+    """Vista para crear una nueva salida de mercancía"""
+    if request.method == 'POST':
+        try:
+            tipo = request.POST.get('tipo')
+            destino = request.POST.get('destino') or None
+            motivo = request.POST.get('motivo')
+            
+            salida = SalidaMercancia.objects.create(
+                tipo=tipo,
+                destino=destino,
+                motivo=motivo,
+                usuario=request.user,
+                completado=False
+            )
+            
+            # Procesar items
+            items_data = json.loads(request.POST.get('items', '[]'))
+            
+            for item_data in items_data:
+                producto_id = int(item_data['producto_id'])
+                cantidad = int(item_data['cantidad'])
+                
+                producto = Producto.objects.get(id=producto_id)
+                
+                if producto.stock < cantidad:
+                    salida.delete()
+                    messages.error(request, f'Stock insuficiente para {producto.nombre}')
+                    return redirect('pos:crear_salida')
+                
+                ItemSalidaMercancia.objects.create(
+                    salida=salida,
+                    producto=producto,
+                    cantidad=cantidad
+                )
+            
+            messages.success(request, f'Salida #{salida.id} creada exitosamente')
+            return redirect('pos:detalle_salida', salida_id=salida.id)
+        except Exception as e:
+            messages.error(request, f'Error al crear salida: {str(e)}')
+    
+    productos = Producto.objects.filter(activo=True, stock__gt=0).order_by('nombre')
+    context = {'productos': productos}
+    return render(request, 'pos/crear_salida.html', context)
+
+
+@login_required
+@requiere_rol('Administradores', 'Inventario')
+def detalle_salida_view(request, salida_id):
+    """Vista de detalle de salida de mercancía"""
+    salida = get_object_or_404(SalidaMercancia, id=salida_id)
+    
+    if request.method == 'POST' and 'completar' in request.POST:
+        if not salida.completado:
+            # Actualizar stock de productos
+            for item in salida.items.all():
+                if item.producto.stock < item.cantidad:
+                    messages.error(request, f'Stock insuficiente para {item.producto.nombre}')
+                    return redirect('pos:detalle_salida', salida_id=salida_id)
+                
+                item.producto.stock -= item.cantidad
+                item.producto.save()
+                
+                # Registrar movimiento de stock
+                MovimientoStock.objects.create(
+                    producto=item.producto,
+                    tipo='salida',
+                    cantidad=item.cantidad,
+                    stock_anterior=item.producto.stock + item.cantidad,
+                    stock_nuevo=item.producto.stock,
+                    motivo=f'Salida #{salida.id} - {salida.get_tipo_display()}',
+                    usuario=request.user
+                )
+            
+            salida.completado = True
+            salida.save()
+            messages.success(request, 'Salida completada y stock actualizado')
+        else:
+            messages.warning(request, 'Esta salida ya está completada')
+    
+    context = {'salida': salida}
+    return render(request, 'pos/detalle_salida.html', context)
+
+
+# ============================================
+# GESTIÓN DE USUARIOS
+# ============================================
+
+@login_required
+@requiere_rol('Administradores')
+def crear_usuario_view(request):
+    """Vista para crear un nuevo usuario"""
+    from django.contrib.auth.models import User, Group
+    from .models import PerfilUsuario
+    
+    if request.method == 'POST':
+        try:
+            username = request.POST.get('username')
+            email = request.POST.get('email')
+            first_name = request.POST.get('first_name')
+            last_name = request.POST.get('last_name')
+            password = request.POST.get('password')
+            is_staff = request.POST.get('is_staff') == 'on'
+            is_active = request.POST.get('is_active') == 'on'
+            grupo_id = request.POST.get('grupo')
+            
+            if User.objects.filter(username=username).exists():
+                messages.error(request, 'El nombre de usuario ya existe')
+                return redirect('pos:crear_usuario')
+            
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password,
+                first_name=first_name,
+                last_name=last_name,
+                is_staff=is_staff,
+                is_active=is_active
+            )
+            
+            # Asignar grupo
+            if grupo_id:
+                grupo = Group.objects.get(id=grupo_id)
+                user.groups.add(grupo)
+            
+            # Crear perfil
+            PerfilUsuario.objects.create(usuario=user)
+            
+            messages.success(request, f'Usuario {user.username} creado exitosamente')
+            return redirect('pos:usuarios')
+        except Exception as e:
+            messages.error(request, f'Error al crear usuario: {str(e)}')
+    
+    grupos = Group.objects.all()
+    context = {'grupos': grupos}
+    return render(request, 'pos/crear_usuario.html', context)
+
+
+@login_required
+@requiere_rol('Administradores')
+def editar_usuario_view(request, usuario_id):
+    """Vista para editar un usuario"""
+    from django.contrib.auth.models import User, Group
+    from .models import PerfilUsuario
+    
+    usuario = get_object_or_404(User, id=usuario_id)
+    
+    if request.method == 'POST':
+        try:
+            usuario.email = request.POST.get('email')
+            usuario.first_name = request.POST.get('first_name')
+            usuario.last_name = request.POST.get('last_name')
+            usuario.is_staff = request.POST.get('is_staff') == 'on'
+            usuario.is_active = request.POST.get('is_active') == 'on'
+            
+            # Cambiar contraseña si se proporciona
+            password = request.POST.get('password')
+            if password:
+                usuario.set_password(password)
+            
+            usuario.save()
+            
+            # Actualizar grupos
+            grupo_id = request.POST.get('grupo')
+            usuario.groups.clear()
+            if grupo_id:
+                grupo = Group.objects.get(id=grupo_id)
+                usuario.groups.add(grupo)
+            
+            messages.success(request, f'Usuario {usuario.username} actualizado exitosamente')
+            return redirect('pos:usuarios')
+        except Exception as e:
+            messages.error(request, f'Error al actualizar usuario: {str(e)}')
+    
+    grupos = Group.objects.all()
+    usuario_grupos = usuario.groups.all()
+    context = {
+        'usuario': usuario,
+        'grupos': grupos,
+        'usuario_grupos': usuario_grupos,
+    }
+    return render(request, 'pos/editar_usuario.html', context)
+
+
+# ============================================
+# GESTIÓN DE CLIENTES POTENCIALES
+# ============================================
+
+@login_required
+def gestionar_cliente_view(request, cliente_id):
+    """Vista para gestionar un cliente potencial"""
+    cliente = get_object_or_404(ClientePotencial, id=cliente_id)
+    
+    if request.method == 'POST':
+        try:
+            cliente.estado = request.POST.get('estado')
+            cliente.notas_internas = request.POST.get('notas_internas') or None
+            
+            if cliente.estado == 'contactado' and not cliente.fecha_contacto:
+                cliente.fecha_contacto = timezone.now()
+                cliente.usuario_contacto = request.user
+            
+            cliente.save()
+            messages.success(request, 'Cliente actualizado exitosamente')
+            return redirect('pos:clientes_potenciales')
+        except Exception as e:
+            messages.error(request, f'Error al actualizar cliente: {str(e)}')
+    
+    context = {'cliente': cliente}
+    return render(request, 'pos/gestionar_cliente.html', context)
+

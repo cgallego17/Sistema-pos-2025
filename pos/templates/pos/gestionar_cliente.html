@@ -1,0 +1,95 @@
+{% extends 'pos/base.html' %}
+
+{% block title %}Gestionar Cliente - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-person"></i> Gestionar Cliente</h1>
+        <a href="{% url 'pos:clientes_potenciales' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Información del Cliente</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <p><strong>Nombre:</strong><br>{{ cliente.nombre }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Email:</strong><br>{{ cliente.email }}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <p><strong>Teléfono:</strong><br>{{ cliente.telefono|default:"N/A" }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Empresa:</strong><br>{{ cliente.empresa|default:"N/A" }}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">Estado *</label>
+                            <select class="form-select form-control-modern" name="estado" required>
+                                <option value="nuevo" {% if cliente.estado == 'nuevo' %}selected{% endif %}>Nuevo</option>
+                                <option value="contactado" {% if cliente.estado == 'contactado' %}selected{% endif %}>Contactado</option>
+                                <option value="en_proceso" {% if cliente.estado == 'en_proceso' %}selected{% endif %}>En Proceso</option>
+                                <option value="convertido" {% if cliente.estado == 'convertido' %}selected{% endif %}>Convertido</option>
+                                <option value="descartado" {% if cliente.estado == 'descartado' %}selected{% endif %}>Descartado</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">Notas Internas</label>
+                            <textarea class="form-control form-control-modern" name="notas_internas" rows="5">{{ cliente.notas_internas|default:'' }}</textarea>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary-pos">
+                                <i class="bi bi-check-circle"></i> Guardar Cambios
+                            </button>
+                            <a href="{% url 'pos:clientes_potenciales' %}" class="btn" style="background: #6c757d; color: white; border: none;">
+                                <i class="bi bi-x"></i> Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Detalles</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Tipo de Interés:</strong><br><span class="badge badge-modern badge-info-modern">{{ cliente.get_tipo_interes_display }}</span></p>
+                    <p><strong>Fecha Registro:</strong><br>{{ cliente.fecha_registro|date:"d/m/Y H:i" }}</p>
+                    {% if cliente.fecha_contacto %}
+                    <p><strong>Fecha Contacto:</strong><br>{{ cliente.fecha_contacto|date:"d/m/Y H:i" }}</p>
+                    {% endif %}
+                    {% if cliente.usuario_contacto %}
+                    <p><strong>Contactado por:</strong><br>{{ cliente.usuario_contacto.get_full_name|default:cliente.usuario_contacto.username }}</p>
+                    {% endif %}
+                    {% if cliente.mensaje %}
+                    <hr>
+                    <p><strong>Mensaje:</strong><br>{{ cliente.mensaje }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

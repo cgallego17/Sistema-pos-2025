@@ -1,0 +1,220 @@
+{% extends 'pos/base.html' %}
+{% load humanize %}
+
+{% block title %}Ventas - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-receipt"></i> Historial de Ventas</h1>
+        <div>
+            <span class="badge badge-modern badge-info-modern" style="font-size: 0.9rem; padding: 0.5rem 1rem;">Total: {{ ventas|length|intcomma }} ventas</span>
+        </div>
+    </div>
+
+    <div class="card-modern">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h5>
+        </div>
+        <div class="card-body">
+        <!-- Filtros -->
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label-modern">Fecha Desde:</label>
+                <input type="date" class="form-control form-control-modern" id="fechaDesde">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label-modern">Fecha Hasta:</label>
+                <input type="date" class="form-control form-control-modern" id="fechaHasta">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label-modern">Estado:</label>
+                <select class="form-select form-control-modern" id="filtroEstado">
+                    <option value="">Todos los estados</option>
+                    <option value="completada">Completadas</option>
+                    <option value="anulada">Anuladas</option>
+                    <option value="pendiente">Pendientes</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label-modern">Método de Pago:</label>
+                <select class="form-select form-control-modern" id="filtroMetodo">
+                    <option value="">Todos los métodos</option>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="tarjeta">Tarjeta</option>
+                    <option value="transferencia">Transferencia</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <div class="card-modern mt-3">
+        <div class="card-body">
+            <!-- Tabla de Ventas -->
+            <div class="table-responsive">
+                <table class="table-modern table">
+                    <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Fecha</th>
+                        <th>Total</th>
+                        <th>Método</th>
+                        <th>Usuario</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for venta in ventas %}
+                    <tr>
+                        <td><strong>{{ venta.id }}</strong></td>
+                        <td>{{ venta.fecha|date:"d/m/Y H:i" }}</td>
+                        <td><strong>${{ venta.total|intcomma }}</strong></td>
+                        <td>
+                            <span class="badge badge-modern badge-info-modern">
+                                <i class="bi bi-{% if venta.metodo_pago == 'efectivo' %}cash{% elif venta.metodo_pago == 'tarjeta' %}credit-card{% else %}arrow-left-right{% endif %}"></i>
+                                {{ venta.get_metodo_pago_display }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if venta.usuario %}
+                                {{ venta.usuario.get_full_name|default:venta.usuario.username }}
+                            {% else %}
+                                Sistema
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if venta.anulada %}
+                            <span class="badge badge-modern badge-danger-modern">Anulada</span>
+                            {% elif venta.completada %}
+                            <span class="badge badge-modern badge-success-modern">Completada</span>
+                            {% else %}
+                            <span class="badge badge-modern badge-warning-modern">Pendiente</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="{% url 'pos:detalle_venta' venta.id %}" class="btn btn-sm" style="background: #dbeafe; color: #2563eb; border: none;" title="Ver detalle">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if not venta.anulada %}
+                                <button type="button" class="btn btn-sm btn-primary-pos" onclick="imprimirTicket({{ venta.id }})" title="Imprimir ticket 80mm" style="padding: 0.25rem 0.5rem;">
+                                    <i class="bi bi-printer"></i>
+                                </button>
+                                <a href="{% url 'pos:editar_venta' venta.id %}" class="btn btn-sm btn-warning" title="Editar venta" style="padding: 0.25rem 0.5rem;">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% if user.is_staff %}
+                                <button type="button" class="btn btn-sm btn-danger-pos" onclick="anularVenta({{ venta.id }})" title="Anular venta" style="padding: 0.25rem 0.5rem;">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted">No hay ventas registradas</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+            <!-- Paginación aquí si es necesario -->
+        </div>
+    </div>
+</div>
+
+<!-- Modal para anular venta -->
+<div class="modal fade" id="modalAnular" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Anular Venta</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" id="formAnular">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p>¿Estás seguro de anular esta venta?</p>
+                    <div class="mb-3">
+                        <label class="form-label">Motivo de anulación:</label>
+                        <textarea class="form-control" name="motivo" rows="3" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Anular Venta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function imprimirTicket(ventaId) {
+    const url = `/ventas/${ventaId}/imprimir/`;
+    const ventana = window.open(url, '_blank', 'width=300,height=600');
+    if (ventana) {
+        ventana.onload = function() {
+            setTimeout(() => {
+                ventana.print();
+            }, 500);
+        };
+    }
+}
+
+function anularVenta(ventaId) {
+    const modal = new bootstrap.Modal(document.getElementById('modalAnular'));
+    const form = document.getElementById('formAnular');
+    form.action = `/ventas/${ventaId}/anular/`;
+    modal.show();
+}
+
+// Filtros
+document.getElementById('fechaDesde')?.addEventListener('change', filtrarVentas);
+document.getElementById('fechaHasta')?.addEventListener('change', filtrarVentas);
+document.getElementById('filtroEstado')?.addEventListener('change', filtrarVentas);
+document.getElementById('filtroMetodo')?.addEventListener('change', filtrarVentas);
+
+function filtrarVentas() {
+    const fechaDesde = document.getElementById('fechaDesde')?.value;
+    const fechaHasta = document.getElementById('fechaHasta')?.value;
+    const estado = document.getElementById('filtroEstado')?.value;
+    const metodo = document.getElementById('filtroMetodo')?.value;
+    
+    const filas = document.querySelectorAll('tbody tr');
+    filas.forEach(fila => {
+        let mostrar = true;
+        
+        // Filtro por fecha
+        if (fechaDesde || fechaHasta) {
+            const fechaVenta = fila.querySelector('td:nth-child(2)')?.textContent.trim();
+            // Implementar lógica de filtro por fecha si es necesario
+        }
+        
+        // Filtro por estado
+        if (estado) {
+            const estadoVenta = fila.querySelector('td:nth-child(6)')?.textContent.trim().toLowerCase();
+            if (estado === 'completada' && !estadoVenta.includes('completada')) mostrar = false;
+            if (estado === 'anulada' && !estadoVenta.includes('anulada')) mostrar = false;
+            if (estado === 'pendiente' && !estadoVenta.includes('pendiente')) mostrar = false;
+        }
+        
+        // Filtro por método
+        if (metodo) {
+            const metodoVenta = fila.querySelector('td:nth-child(4)')?.textContent.trim().toLowerCase();
+            if (!metodoVenta.includes(metodo)) mostrar = false;
+        }
+        
+        fila.style.display = mostrar ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}
+

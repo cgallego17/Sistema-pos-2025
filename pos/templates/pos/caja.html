@@ -1,0 +1,633 @@
+{% extends 'pos/base.html' %}
+{% load humanize %}
+
+{% block title %}Gestión de Caja - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div>
+            <h1><i class="bi bi-cash-stack"></i> Gestión de Caja</h1>
+            <p style="color: #64748b; margin: 0.5rem 0 0 0;">
+                Administra los movimientos de efectivo de la caja
+                {% if hoy %}
+                <span class="badge badge-modern badge-info-modern" style="margin-left: 0.5rem;">
+                    <i class="bi bi-calendar"></i> {{ hoy|date:"d/m/Y" }}
+                </span>
+                {% endif %}
+            </p>
+        </div>
+        {% if caja_abierta %}
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-success-pos" data-bs-toggle="modal" data-bs-target="#registrarIngresoModal">
+                <i class="bi bi-plus-circle"></i> Registrar Ingreso
+            </button>
+            <button class="btn btn-danger-pos" data-bs-toggle="modal" data-bs-target="#registrarGastoModal">
+                <i class="bi bi-dash-circle"></i> Registrar Gasto
+            </button>
+            <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#cerrarCajaModal" style="background: #6b7280; border: none; color: white;">
+                <i class="bi bi-x-circle"></i> Cerrar Caja
+            </button>
+        </div>
+        {% else %}
+        <div>
+            <button class="btn btn-primary-pos" data-bs-toggle="modal" data-bs-target="#abrirCajaModal">
+                <i class="bi bi-box-arrow-in-down"></i> Abrir Caja
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if caja_abierta %}
+    <!-- Resumen Financiero -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card success">
+                <div class="stat-card-label">
+                    <i class="bi bi-currency-dollar"></i> Total Ventas
+                </div>
+                <div class="stat-card-value" id="totalVentasDisplay">${{ total_ventas|intcomma|default:"0" }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card danger">
+                <div class="stat-card-label">
+                    <i class="bi bi-arrow-down-circle"></i> Total Gastos
+                </div>
+                <div class="stat-card-value" id="totalGastosDisplay">${{ total_gastos|intcomma|default:"0" }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card success">
+                <div class="stat-card-label">
+                    <i class="bi bi-arrow-up-circle"></i> Total Ingresos
+                </div>
+                <div class="stat-card-value" id="totalIngresosDisplay">${{ total_ingresos|intcomma|default:"0" }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card primary">
+                <div class="stat-card-label">
+                    <i class="bi bi-calculator"></i> Saldo en Caja
+                </div>
+                <div class="stat-card-value" id="saldoCajaDisplay">${{ saldo_caja|intcomma|default:"0" }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <div class="card-modern">
+        <div class="card-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0;">
+            <ul class="nav nav-tabs nav-tabs-custom" id="cajaTabs" role="tablist" style="border: none; margin: 0;">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="resumen-tab" data-bs-toggle="tab" data-bs-target="#resumen" type="button" role="tab" aria-controls="resumen" aria-selected="true">
+                        <i class="bi bi-info-circle"></i> Resumen
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="movimientos-tab" data-bs-toggle="tab" data-bs-target="#movimientos" type="button" role="tab" aria-controls="movimientos" aria-selected="false">
+                        <i class="bi bi-list-ul"></i> Todos los Movimientos
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="historial-tab" data-bs-toggle="tab" data-bs-target="#historial" type="button" role="tab" aria-controls="historial" aria-selected="false">
+                        <i class="bi bi-clock-history"></i> Historial
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content" id="cajaTabsContent">
+                <!-- Tab Resumen -->
+                <div class="tab-pane fade show active" id="resumen" role="tabpanel" aria-labelledby="resumen-tab">
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <h5 class="mb-3" style="color: #1e293b; font-weight: 600;">
+                                <i class="bi bi-info-circle"></i> Información de Caja
+                            </h5>
+                            <div class="table-responsive">
+                                <table class="table table-modern">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 200px;">Campo</th>
+                                            <th>Valor</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>Caja</strong></td>
+                                            <td>{{ caja_mostrar.caja }}</td>
+                                            <td></td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Fecha Apertura</strong></td>
+                                            <td>{{ caja_mostrar.fecha_apertura|date:"d/m/Y H:i" }}</td>
+                                            <td></td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Monto Inicial</strong></td>
+                                            <td><strong style="color: #10b981; font-size: 1.1rem;">${{ caja_mostrar.monto_inicial|intcomma }}</strong></td>
+                                            <td></td>
+                                        </tr>
+                                        {% if caja_mostrar.fecha_cierre %}
+                                        <tr>
+                                            <td><strong>Fecha Cierre</strong></td>
+                                            <td>{{ caja_mostrar.fecha_cierre|date:"d/m/Y H:i" }}</td>
+                                            <td></td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Monto Final</strong></td>
+                                            <td><strong style="color: #0ea5e9; font-size: 1.1rem;">${{ caja_mostrar.monto_final|intcomma|default:"0" }}</strong></td>
+                                            <td></td>
+                                        </tr>
+                                        {% endif %}
+                                        <tr>
+                                            <td><strong>Total Ventas</strong></td>
+                                            <td><strong style="color: #10b981;">${{ total_ventas|intcomma|default:"0" }}</strong></td>
+                                            <td></td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Total Ingresos</strong></td>
+                                            <td><strong style="color: #10b981;">${{ total_ingresos|intcomma|default:"0" }}</strong></td>
+                                            <td></td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Total Gastos</strong></td>
+                                            <td><strong style="color: #ef4444;">${{ total_gastos|intcomma|default:"0" }}</strong></td>
+                                            <td></td>
+                                        </tr>
+                                        <tr style="background: #f8fafc;">
+                                            <td><strong style="font-size: 1.1rem;">Saldo en Caja</strong></td>
+                                            <td><strong style="color: #0ea5e9; font-size: 1.3rem;">${{ saldo_caja|intcomma|default:"0" }}</strong></td>
+                                            <td></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Movimientos Unificados -->
+                <div class="tab-pane fade" id="movimientos" role="tabpanel" aria-labelledby="movimientos-tab">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0" style="color: #1e293b; font-weight: 600;">
+                            <i class="bi bi-list-ul"></i> Todos los Movimientos
+                            {% if hoy %}
+                            <small style="color: #64748b; font-weight: 400; margin-left: 0.5rem;">({{ hoy|date:"d/m/Y" }})</small>
+                            {% endif %}
+                        </h5>
+                        <span class="badge badge-modern badge-info-modern" style="font-size: 0.9rem; padding: 0.5rem 1rem;">
+                            Total: {{ movimientos_unificados|length|intcomma }} movimientos
+                        </span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table-modern table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha/Hora</th>
+                                    <th>Tipo</th>
+                                    <th>Descripción</th>
+                                    <th>Monto</th>
+                                    <th>Saldo Antes</th>
+                                    <th>Saldo Después</th>
+                                    <th>Método de Pago</th>
+                                    <th>Usuario</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if caja_mostrar %}
+                                <!-- Fila inicial con monto inicial -->
+                                <tr style="background: #f8fafc; border-left: 4px solid #0ea5e9;">
+                                    <td><strong>{{ caja_mostrar.fecha_apertura|date:"d/m/Y H:i" }}</strong></td>
+                                    <td>
+                                        <span class="badge badge-modern" style="background: #0ea5e9; color: white;">
+                                            <i class="bi bi-box-arrow-in-down"></i> Apertura
+                                        </span>
+                                    </td>
+                                    <td><strong>Apertura de Caja</strong></td>
+                                    <td>
+                                        <strong style="color: #10b981;">+${{ caja_mostrar.monto_inicial|intcomma }}</strong>
+                                    </td>
+                                    <td>
+                                        <strong style="color: #64748b; font-size: 0.9rem;">$0</strong>
+                                    </td>
+                                    <td>
+                                        <strong style="color: #0ea5e9; font-size: 1rem;">${{ caja_mostrar.monto_inicial|intcomma }}</strong>
+                                    </td>
+                                    <td><span class="text-muted">-</span></td>
+                                    <td>
+                                        <small style="color: #64748b;">{{ caja_mostrar.usuario.get_full_name|default:caja_mostrar.usuario.username }}</small>
+                                    </td>
+                                    <td><span class="text-muted">-</span></td>
+                                </tr>
+                                {% endif %}
+                                {% for movimiento in movimientos_unificados %}
+                                <tr>
+                                    <td>{{ movimiento.fecha|date:"d/m/Y H:i" }}</td>
+                                    <td>
+                                        {% if movimiento.tipo == 'venta' %}
+                                        <span class="badge badge-modern" style="background: #3b82f6; color: white;">
+                                            <i class="bi bi-receipt"></i> Venta
+                                        </span>
+                                        {% elif movimiento.tipo == 'gasto' %}
+                                        <span class="badge badge-modern badge-danger-modern">
+                                            <i class="bi bi-arrow-down-circle"></i> Gasto
+                                        </span>
+                                        {% else %}
+                                        <span class="badge badge-modern badge-success-modern">
+                                            <i class="bi bi-arrow-up-circle"></i> Ingreso
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {{ movimiento.descripcion }}
+                                        {% if movimiento.vendedor %}
+                                        <br><small style="color: #64748b;">Vendedor: {{ movimiento.vendedor.get_full_name|default:movimiento.vendedor.username }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if movimiento.tipo == 'venta' %}
+                                        <strong style="color: #3b82f6;">+${{ movimiento.monto|intcomma }}</strong>
+                                        {% elif movimiento.tipo == 'gasto' %}
+                                        <strong style="color: #ef4444;">-${{ movimiento.monto|intcomma }}</strong>
+                                        {% else %}
+                                        <strong style="color: #10b981;">+${{ movimiento.monto|intcomma }}</strong>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <strong style="color: #64748b; font-size: 0.9rem;">${{ movimiento.saldo_antes|intcomma }}</strong>
+                                    </td>
+                                    <td>
+                                        <strong style="color: #0ea5e9; font-size: 1rem;">${{ movimiento.saldo_despues|intcomma }}</strong>
+                                    </td>
+                                    <td>
+                                        {% if movimiento.metodo_pago %}
+                                        <span class="badge badge-modern badge-info-modern">{{ movimiento.metodo_pago }}</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small style="color: #64748b;">{{ movimiento.usuario.get_full_name|default:movimiento.usuario.username }}</small>
+                                    </td>
+                                    <td>
+                                        {% if movimiento.venta_id %}
+                                        <a href="{% url 'pos:detalle_venta' movimiento.venta_id %}" class="btn btn-sm btn-outline-primary" title="Ver detalle">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted py-5">
+                                        <i class="bi bi-inbox" style="font-size: 3rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>
+                                        No hay movimientos registrados el día de hoy
+                                        <br>
+                                        <small style="margin-top: 0.5rem; display: block;">Las ventas, gastos e ingresos aparecerán aquí</small>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tab Historial -->
+                <div class="tab-pane fade" id="historial" role="tabpanel" aria-labelledby="historial-tab">
+                    <h5 class="mb-3" style="color: #1e293b; font-weight: 600;">
+                        <i class="bi bi-clock-history"></i> Historial de Cajas
+                    </h5>
+                    <div class="table-responsive">
+                        <table class="table-modern table">
+                            <thead>
+                                <tr>
+                                    <th>Caja</th>
+                                    <th>Fecha Apertura</th>
+                                    <th>Fecha Cierre</th>
+                                    <th>Monto Inicial</th>
+                                    <th>Monto Final</th>
+                                    <th>Diferencia</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for caja in historial_cajas %}
+                                <tr>
+                                    <td><strong>{{ caja.caja }}</strong></td>
+                                    <td>{{ caja.fecha_apertura|date:"d/m/Y H:i" }}</td>
+                                    <td>
+                                        {% if caja.fecha_cierre %}
+                                        {{ caja.fecha_cierre|date:"d/m/Y H:i" }}
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>${{ caja.monto_inicial|intcomma }}</td>
+                                    <td>
+                                        {% if caja.monto_final %}
+                                        ${{ caja.monto_final|intcomma }}
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if caja.fecha_cierre %}
+                                        {% with diferencia=caja.monto_final|add:"-"|add:caja.monto_inicial %}
+                                        {% if diferencia >= 0 %}
+                                        <strong style="color: #10b981;">+${{ diferencia|intcomma }}</strong>
+                                        {% else %}
+                                        <strong style="color: #ef4444;">${{ diferencia|intcomma }}</strong>
+                                        {% endif %}
+                                        {% endwith %}
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if caja.fecha_cierre %}
+                                        <span class="badge badge-modern" style="background: #e2e8f0; color: #64748b;">Cerrada</span>
+                                        {% else %}
+                                        <span class="badge badge-modern badge-success-modern">Abierta</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-5">
+                                        <i class="bi bi-inbox" style="font-size: 3rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>
+                                        No hay historial de cajas
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Sin Caja Abierta -->
+    <div class="card-modern">
+        <div class="card-header" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+            <h5 class="mb-0" style="color: white;"><i class="bi bi-exclamation-triangle"></i> Sin Caja Abierta para Hoy</h5>
+        </div>
+        <div class="card-body text-center py-5">
+            <i class="bi bi-cash-stack" style="font-size: 4rem; color: #f59e0b; margin-bottom: 1.5rem; opacity: 0.7;"></i>
+            <p style="color: #64748b; font-size: 1.1rem; margin-bottom: 0.5rem;">
+                No tienes una caja abierta para el día de hoy.
+            </p>
+            {% if hoy %}
+            <p style="color: #64748b; font-size: 0.95rem; margin-bottom: 1.5rem;">
+                <strong>Fecha:</strong> {{ hoy|date:"d/m/Y" }}
+            </p>
+            {% endif %}
+            <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem;">
+                Debes abrir una caja diariamente para comenzar a vender y registrar movimientos.
+            </p>
+            <button class="btn btn-primary-pos btn-lg" data-bs-toggle="modal" data-bs-target="#abrirCajaModal">
+                <i class="bi bi-box-arrow-in-down"></i> Abrir Caja para Hoy
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal Abrir Caja -->
+<div class="modal fade" id="abrirCajaModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <h5 class="modal-title"><i class="bi bi-box-arrow-in-down"></i> Abrir Caja para Hoy</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'pos:abrir_caja' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="alert alert-info" style="background: #dbeafe; border: 1px solid #93c5fd; color: #1e40af; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 1rem;">
+                        <i class="bi bi-info-circle"></i> <strong>Nota:</strong> La caja debe abrirse y cerrarse diariamente. Todas las ventas se registran en la Caja Principal.
+                        {% if hoy %}
+                        <br><strong>Fecha:</strong> {{ hoy|date:"d/m/Y" }}
+                        {% endif %}
+                    </div>
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Monto Inicial *</label>
+                        <input type="number" class="form-control form-control-modern" name="monto_inicial" step="1" min="0" value="0" required>
+                        <small style="color: #94a3b8; font-size: 0.8rem;">Monto con el que inicias la caja</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background: #6c757d; border: none;">Cancelar</button>
+                    <button type="submit" class="btn btn-primary-pos">
+                        <i class="bi bi-check-circle"></i> Abrir Caja Principal
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Registrar Gasto -->
+<div class="modal fade" id="registrarGastoModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white;">
+                <h5 class="modal-title"><i class="bi bi-arrow-down-circle"></i> Registrar Gasto</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'pos:registrar_gasto' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Monto *</label>
+                        <input type="number" class="form-control form-control-modern" name="monto" step="1" min="1" required placeholder="Ingrese el monto del gasto">
+                    </div>
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Descripción *</label>
+                        <textarea class="form-control form-control-modern" name="descripcion" rows="4" required placeholder="Ej: Compra de materiales, pago de servicios, transporte, etc."></textarea>
+                        <small style="color: #94a3b8; font-size: 0.8rem;">Describe el motivo del gasto</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background: #6c757d; border: none;">Cancelar</button>
+                    <button type="submit" class="btn btn-danger-pos">
+                        <i class="bi bi-dash-circle"></i> Registrar Gasto
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Registrar Ingreso -->
+<div class="modal fade" id="registrarIngresoModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white;">
+                <h5 class="modal-title"><i class="bi bi-arrow-up-circle"></i> Registrar Entrada de Dinero</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'pos:registrar_ingreso' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Monto *</label>
+                        <input type="number" class="form-control form-control-modern" name="monto" step="1" min="1" required placeholder="Ingrese el monto del ingreso">
+                    </div>
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Descripción *</label>
+                        <textarea class="form-control form-control-modern" name="descripcion" rows="4" required placeholder="Ej: Depósito de cliente, reembolso, préstamo, etc."></textarea>
+                        <small style="color: #94a3b8; font-size: 0.8rem;">Describe el motivo del ingreso</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background: #6c757d; border: none;">Cancelar</button>
+                    <button type="submit" class="btn btn-success-pos">
+                        <i class="bi bi-plus-circle"></i> Registrar Ingreso
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Cerrar Caja -->
+<div class="modal fade" id="cerrarCajaModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); color: white;">
+                <h5 class="modal-title"><i class="bi bi-x-circle"></i> Cerrar Caja</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'pos:cerrar_caja' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="alert alert-warning" style="background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 1rem;">
+                        <i class="bi bi-exclamation-triangle"></i> <strong>Advertencia:</strong> Al cerrar la caja, se registrará el monto final y no podrás realizar más ventas con esta caja.
+                    </div>
+                    <div class="mb-3">
+                        <p style="margin-bottom: 0.5rem;"><strong>Saldo Calculado:</strong></p>
+                        <div style="background: #f0f9ff; border: 2px solid #0ea5e9; border-radius: 0.5rem; padding: 1rem; text-align: center;">
+                            <div style="font-size: 1.8rem; font-weight: 700; color: #0c4a6e;">${{ saldo_caja|intcomma|default:"0" }}</div>
+                            <small style="color: #64748b;">Monto Inicial ({{ caja_mostrar.monto_inicial|intcomma|default:"0" }}) + Ventas ({{ total_ventas|intcomma|default:"0" }}) + Ingresos ({{ total_ingresos|intcomma|default:"0" }}) - Gastos ({{ total_gastos|intcomma|default:"0" }})</small>
+                        </div>
+                    </div>
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Dinero a Retirar</label>
+                        <input type="number" class="form-control form-control-modern" name="dinero_retirar" id="dineroRetirar" step="1" min="0" value="0" placeholder="0">
+                        <small style="color: #94a3b8; font-size: 0.8rem;">Cantidad de dinero que te vas a llevar (se registrará como salida)</small>
+                    </div>
+                    <div class="mb-3" id="saldoDespuesRetiro" style="display: none;">
+                        <p style="margin-bottom: 0.5rem;"><strong>Saldo después del retiro:</strong></p>
+                        <div style="background: #f0fdf4; border: 2px solid #10b981; border-radius: 0.5rem; padding: 1rem; text-align: center;">
+                            <div style="font-size: 1.5rem; font-weight: 700; color: #065f46;" id="saldoCalculado">$0</div>
+                        </div>
+                    </div>
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Monto Final en Caja *</label>
+                        <input type="number" class="form-control form-control-modern" name="monto_final" id="montoFinal" step="1" min="0" required placeholder="Ingrese el monto contado físicamente">
+                        <small style="color: #94a3b8; font-size: 0.8rem;">Monto total contado físicamente en la caja (después del retiro)</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background: #6c757d; border: none;">Cancelar</button>
+                    <button type="submit" class="btn btn-danger-pos">
+                        <i class="bi bi-x-circle"></i> Cerrar Caja
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Estilos personalizados para las tabs */
+    .nav-tabs-custom {
+        border-bottom: none;
+    }
+    
+    .nav-tabs-custom .nav-link {
+        color: rgba(255, 255, 255, 0.8);
+        border: none;
+        border-radius: 0;
+        padding: 1rem 1.5rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        background: transparent;
+    }
+    
+    .nav-tabs-custom .nav-link:hover {
+        color: white;
+        background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .nav-tabs-custom .nav-link.active {
+        color: white;
+        background: rgba(255, 255, 255, 0.2);
+        border-bottom: 3px solid white;
+        font-weight: 600;
+    }
+    
+    .tab-content {
+        padding: 1.5rem 0;
+    }
+    
+    .tab-pane {
+        animation: fadeIn 0.3s ease-in;
+    }
+    
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>
+{% endblock %}
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const dineroRetirarInput = document.getElementById('dineroRetirar');
+        const saldoDespuesRetiro = document.getElementById('saldoDespuesRetiro');
+        const saldoCalculado = document.getElementById('saldoCalculado');
+        const montoFinalInput = document.getElementById('montoFinal');
+        
+        // Saldo inicial de la caja
+        const saldoInicial = {{ saldo_caja|default:0 }};
+        
+        if (dineroRetirarInput && saldoDespuesRetiro && saldoCalculado) {
+            dineroRetirarInput.addEventListener('input', function() {
+                const dineroRetirar = parseFloat(this.value) || 0;
+                
+                if (dineroRetirar > 0) {
+                    const nuevoSaldo = saldoInicial - dineroRetirar;
+                    saldoCalculado.textContent = '$' + nuevoSaldo.toLocaleString('es-ES');
+                    saldoDespuesRetiro.style.display = 'block';
+                    
+                    // Sugerir el monto final (saldo después del retiro)
+                    if (montoFinalInput) {
+                        montoFinalInput.value = Math.max(0, nuevoSaldo);
+                    }
+                } else {
+                    saldoDespuesRetiro.style.display = 'none';
+                    if (montoFinalInput) {
+                        montoFinalInput.value = saldoInicial;
+                    }
+                }
+            });
+        }
+    });
+</script>

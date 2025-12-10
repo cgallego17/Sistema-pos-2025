@@ -1,0 +1,135 @@
+{% extends 'pos/base.html' %}
+{% load humanize %}
+
+{% block title %}Reportes - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-graph-up"></i> Reportes y Estadísticas</h1>
+    </div>
+
+    <div class="cards-grid">
+        <div class="stat-card success">
+            <div class="stat-card-label">
+                <i class="bi bi-currency-dollar"></i> Ventas del Mes
+            </div>
+            <div class="stat-card-value">${{ total_ventas_mes|intcomma }}</div>
+        </div>
+        <div class="stat-card primary">
+            <div class="stat-card-label">
+                <i class="bi bi-receipt"></i> Transacciones
+            </div>
+            <div class="stat-card-value">{{ cantidad_ventas_mes|intcomma }}</div>
+        </div>
+        <div class="stat-card info">
+            <div class="stat-card-label">
+                <i class="bi bi-graph-up-arrow"></i> Promedio por Venta
+            </div>
+            <div class="stat-card-value">${{ promedio_venta|intcomma }}</div>
+        </div>
+        <div class="stat-card warning">
+            <div class="stat-card-label">
+                <i class="bi bi-box-seam"></i> Productos Activos
+            </div>
+            <div class="stat-card-value">{{ total_productos }}</div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Top 10 Productos Más Vendidos</h5>
+                </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Producto</th>
+                                <th>Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in top_productos %}
+                            <tr>
+                                <td>{{ forloop.counter }}</td>
+                                <td>{{ item.producto__nombre }}</td>
+                                <td><span class="badge badge-modern badge-success-modern">{{ item.total_vendido|intcomma }}</span></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">No hay datos</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+        <div class="col-md-6">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Ventas por Método de Pago</h5>
+                </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Método</th>
+                                <th>Cantidad</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for metodo in ventas_por_metodo %}
+                            <tr>
+                                <td>{{ metodo.metodo_pago|capfirst }}</td>
+                                <td>{{ metodo.cantidad|intcomma }}</td>
+                                <td><strong>${{ metodo.total|intcomma }}</strong></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">No hay datos</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <div class="card-modern mt-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-funnel"></i> Filtrar Reportes</h5>
+        </div>
+        <div class="card-body">
+            <form method="get">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label-modern">Fecha Desde</label>
+                        <input type="date" class="form-control form-control-modern" name="fecha_desde" value="{{ fecha_desde|date:'Y-m-d' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label-modern">Fecha Hasta</label>
+                        <input type="date" class="form-control form-control-modern" name="fecha_hasta" value="{{ fecha_hasta|date:'Y-m-d' }}">
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary-pos w-100">
+                            <i class="bi bi-search"></i> Filtrar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

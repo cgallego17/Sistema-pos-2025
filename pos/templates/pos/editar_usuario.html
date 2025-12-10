@@ -1,0 +1,95 @@
+{% extends 'pos/base.html' %}
+
+{% block title %}Editar Usuario - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-pencil"></i> Editar Usuario</h1>
+        <a href="{% url 'pos:usuarios' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Información del Usuario</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">Nombre de Usuario</label>
+                            <input type="text" class="form-control form-control-modern" value="{{ usuario.username }}" disabled>
+                            <small style="color: #94a3b8;">El nombre de usuario no se puede cambiar</small>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group-modern">
+                                    <label class="form-label-modern">Nombre</label>
+                                    <input type="text" class="form-control form-control-modern" name="first_name" value="{{ usuario.first_name|default:'' }}">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group-modern">
+                                    <label class="form-label-modern">Apellido</label>
+                                    <input type="text" class="form-control form-control-modern" name="last_name" value="{{ usuario.last_name|default:'' }}">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">Email *</label>
+                            <input type="email" class="form-control form-control-modern" name="email" value="{{ usuario.email|default:'' }}" required>
+                        </div>
+                        
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">Nueva Contraseña</label>
+                            <input type="password" class="form-control form-control-modern" name="password">
+                            <small style="color: #94a3b8;">Dejar vacío para mantener la contraseña actual</small>
+                        </div>
+                        
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">Grupo</label>
+                            <select class="form-select form-control-modern" name="grupo">
+                                <option value="">Sin grupo</option>
+                                {% for grupo in grupos %}
+                                <option value="{{ grupo.id }}" {% if grupo in usuario_grupos %}selected{% endif %}>{{ grupo.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="is_staff" id="is_staff" {% if usuario.is_staff %}checked{% endif %}>
+                            <label class="form-check-label" for="is_staff" style="color: #475569;">
+                                Es staff (puede acceder al admin)
+                            </label>
+                        </div>
+                        
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="is_active" id="is_active" {% if usuario.is_active %}checked{% endif %}>
+                            <label class="form-check-label" for="is_active" style="color: #475569;">
+                                Usuario activo
+                            </label>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary-pos">
+                                <i class="bi bi-check-circle"></i> Guardar Cambios
+                            </button>
+                            <a href="{% url 'pos:usuarios' %}" class="btn" style="background: #6c757d; color: white; border: none;">
+                                <i class="bi bi-x"></i> Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

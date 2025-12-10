@@ -1,0 +1,90 @@
+{% extends 'pos/base.html' %}
+{% load humanize %}
+
+{% block title %}Detalle Ingreso #{{ ingreso.id }} - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-arrow-down-circle-fill"></i> Ingreso #{{ ingreso.id }}</h1>
+        <a href="{% url 'pos:ingreso_mercancia' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Items del Ingreso</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table-modern table">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Cantidad</th>
+                                    <th>Precio Compra</th>
+                                    <th>Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ingreso.items.all %}
+                                <tr>
+                                    <td>{{ item.producto.nombre }}</td>
+                                    <td>{{ item.cantidad|intcomma }}</td>
+                                    <td>${{ item.precio_compra|intcomma }}</td>
+                                    <td><strong>${{ item.subtotal|intcomma }}</strong></td>
+                                </tr>
+                                {% endfor %}
+                                <tr style="background: #f8fafc;">
+                                    <td colspan="3" class="text-end"><strong>TOTAL:</strong></td>
+                                    <td><strong class="text-success fs-4" style="color: #10b981 !important;">${{ ingreso.total|intcomma }}</strong></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Información</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Proveedor:</strong><br>{{ ingreso.proveedor }}</p>
+                    <p><strong>Número Factura:</strong><br>{{ ingreso.numero_factura|default:"N/A" }}</p>
+                    <p><strong>Fecha:</strong><br>{{ ingreso.fecha|date:"d/m/Y H:i" }}</p>
+                    <p><strong>Usuario:</strong><br>{{ ingreso.usuario.get_full_name|default:ingreso.usuario.username }}</p>
+                    <p><strong>Estado:</strong><br>
+                        {% if ingreso.completado %}
+                        <span class="badge badge-modern badge-success-modern">Completado</span>
+                        {% else %}
+                        <span class="badge badge-modern badge-warning-modern">Pendiente</span>
+                        {% endif %}
+                    </p>
+                    
+                    {% if ingreso.observaciones %}
+                    <hr>
+                    <p><strong>Observaciones:</strong><br>{{ ingreso.observaciones }}</p>
+                    {% endif %}
+                    
+                    {% if not ingreso.completado %}
+                    <hr>
+                    <form method="post">
+                        {% csrf_token %}
+                        <button type="submit" name="completar" class="btn btn-success-pos w-100">
+                            <i class="bi bi-check-circle"></i> Completar Ingreso
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

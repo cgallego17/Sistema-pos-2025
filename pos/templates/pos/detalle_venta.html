@@ -1,0 +1,180 @@
+{% extends 'pos/base.html' %}
+{% load humanize %}
+
+{% block title %}Detalle Venta #{{ venta.id }} - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-receipt"></i> Detalle de Venta #{{ venta.id }}</h1>
+        <a href="{% url 'pos:lista_ventas' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Items de la Venta</h5>
+                </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table-modern table">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th>Precio Unit.</th>
+                                <th>Cantidad</th>
+                                <th>Subtotal</th>
+                            </tr>
+                        </thead>
+                    <tbody>
+                        {% for item in venta.items.all %}
+                        <tr>
+                            <td>{{ item.producto.nombre }}</td>
+                            <td>${{ item.precio_unitario|intcomma }}</td>
+                            <td>{{ item.cantidad|intcomma }}</td>
+                            <td><strong>${{ item.subtotal|intcomma }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                            <tr style="background: #f8fafc;">
+                                <td colspan="3" class="text-end"><strong>TOTAL:</strong></td>
+                                <td><strong class="text-success fs-4" style="color: #10b981 !important;">${{ venta.total|intcomma }}</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+        <div class="col-md-4">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Información de la Venta</h5>
+                </div>
+            <div class="card-body">
+                <p><strong>Fecha:</strong><br>{{ venta.fecha|date:"d/m/Y H:i:s" }}</p>
+                <p><strong>Usuario:</strong><br>
+                    {% if venta.usuario %}
+                        {{ venta.usuario.get_full_name|default:venta.usuario.username }}
+                    {% else %}
+                        Sistema
+                    {% endif %}
+                </p>
+                <p><strong>Método de Pago:</strong><br>
+                    <span class="badge badge-modern badge-info-modern">{{ venta.get_metodo_pago_display }}</span>
+                </p>
+                
+                {% if venta.metodo_pago == 'efectivo' and venta.monto_recibido %}
+                <p><strong>Monto Recibido:</strong><br>${{ venta.monto_recibido|intcomma }}</p>
+                <p><strong>Cambio:</strong><br>${{ venta.monto_recibido|add:"-"|add:venta.total|intcomma }}</p>
+                {% endif %}
+                
+                {% if venta.email_cliente %}
+                <p><strong>Email Cliente:</strong><br>{{ venta.email_cliente }}</p>
+                {% endif %}
+                
+                <p><strong>Estado:</strong><br>
+                    {% if venta.anulada %}
+                    <span class="badge badge-modern badge-danger-modern">Anulada</span>
+                    {% elif venta.completada %}
+                    <span class="badge badge-modern badge-success-modern">Completada</span>
+                    {% else %}
+                    <span class="badge badge-modern badge-warning-modern">Pendiente</span>
+                    {% endif %}
+                </p>
+                
+                {% if venta.anulada %}
+                <hr>
+                <p><strong>Motivo Anulación:</strong><br>{{ venta.motivo_anulacion|default:"No especificado" }}</p>
+                <p><strong>Anulada por:</strong><br>
+                    {% if venta.usuario_anulacion %}
+                        {{ venta.usuario_anulacion.get_full_name|default:venta.usuario_anulacion.username }}
+                    {% else %}
+                        Sistema
+                    {% endif %}
+                </p>
+                <p><strong>Fecha Anulación:</strong><br>{{ venta.fecha_anulacion|date:"d/m/Y H:i" }}</p>
+                {% endif %}
+                
+                {% if venta.caja %}
+                <hr>
+                <p><strong>Caja:</strong><br>{{ venta.caja }}</p>
+                {% endif %}
+            </div>
+        </div>
+        
+            <div class="card-modern mt-3">
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary-pos" onclick="imprimirTicket80mm({{ venta.id }})">
+                            <i class="bi bi-printer"></i> Imprimir Ticket 80mm
+                        </button>
+                        <button class="btn" onclick="window.print()" style="background: #6c757d; color: white; border: none;">
+                            <i class="bi bi-printer"></i> Imprimir Recibo
+                        </button>
+                        {% if not venta.anulada %}
+                        {% if puede_anular_ventas %}
+                        <a href="{% url 'pos:editar_venta' venta.id %}" class="btn btn-warning" style="background: #f59e0b; border: none; color: white;">
+                            <i class="bi bi-pencil"></i> Editar Venta
+                        </a>
+                        <button type="button" class="btn btn-danger-pos" onclick="anularVenta({{ venta.id }})">
+                            <i class="bi bi-x-circle"></i> Anular Venta
+                        </button>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        
+        <!-- Modal para anular venta -->
+        <div class="modal fade" id="modalAnular" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white;">
+                        <h5 class="modal-title">Anular Venta #{{ venta.id }}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form method="post" action="{% url 'pos:anular_venta' venta.id %}" id="formAnular">
+                        {% csrf_token %}
+                        <div class="modal-body">
+                            <p style="color: #475569; margin-bottom: 1rem;">¿Estás seguro de anular esta venta?</p>
+                            <div class="form-group-modern">
+                                <label class="form-label-modern">Motivo de anulación:</label>
+                                <textarea class="form-control form-control-modern" name="motivo" rows="3" required></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn" style="background: #6c757d; color: white; border: none;" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-danger-pos">Anular Venta</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function imprimirTicket80mm(ventaId) {
+    const url = `/ventas/${ventaId}/imprimir/`;
+    const ventana = window.open(url, '_blank', 'width=300,height=600');
+    if (ventana) {
+        ventana.onload = function() {
+            setTimeout(() => {
+                ventana.print();
+            }, 500);
+        };
+    }
+}
+
+function anularVenta(ventaId) {
+    const modal = new bootstrap.Modal(document.getElementById('modalAnular'));
+    modal.show();
+}
+</script>
+{% endblock %}
+

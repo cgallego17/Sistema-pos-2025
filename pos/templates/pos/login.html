@@ -1,0 +1,96 @@
+{% extends 'pos/base.html' %}
+
+{% block title %}Iniciar Sesión - Sistema POS{% endblock %}
+
+{% block full_content %}
+<div class="row justify-content-center align-items-center" style="min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+    <div class="col-md-5">
+        <div class="card-modern shadow-lg">
+            <div class="card-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); text-align: center; color: white;">
+                <h3><i class="bi bi-shop"></i> Sistema POS</h3>
+                <p class="mb-0" style="color: rgba(255,255,255,0.9);">Iniciar Sesión</p>
+            </div>
+            <div class="card-body p-5">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    {% if form.errors %}
+                    <div class="alert alert-danger" style="background: #fee2e2; border-color: #fca5a5; color: #991b1b;">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Usuario o contraseña incorrectos
+                    </div>
+                    {% endif %}
+                    
+                    <div class="form-group-modern">
+                        <label for="username" class="form-label-modern">
+                            <i class="bi bi-person"></i> Usuario
+                        </label>
+                        <input type="text" class="form-control form-control-modern form-control-lg" 
+                               id="username" name="username" required autofocus>
+                    </div>
+                    
+                    <div class="form-group-modern">
+                        <label for="password" class="form-label-modern">
+                            <i class="bi bi-lock"></i> Contraseña
+                        </label>
+                        <input type="password" class="form-control form-control-modern form-control-lg" 
+                               id="password" name="password" required>
+                    </div>
+                    
+                    <div class="mb-4 form-check">
+                        <input type="checkbox" class="form-check-input" id="remember">
+                        <label class="form-check-label" for="remember" style="color: #475569;">
+                            Recordarme
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary-pos btn-lg w-100">
+                        <i class="bi bi-box-arrow-in-right"></i> Ingresar
+                    </button>
+                </form>
+                
+                <hr class="my-4" style="border-color: #e2e8f0;">
+                
+                <div class="text-center">
+                    <button type="button" class="btn" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;" data-bs-toggle="modal" data-bs-target="#pinModal">
+                        <i class="bi bi-keypad"></i> Acceso Rápido con PIN
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal PIN -->
+<div class="modal fade" id="pinModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <h5 class="modal-title"><i class="bi bi-keypad"></i> Acceso con PIN</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-5">
+                <p style="color: #475569; margin-bottom: 1.5rem;">Ingresa tu PIN de 4 dígitos</p>
+                <form method="post" action="{% url 'pos:login_pin' %}">
+                    {% csrf_token %}
+                    <input type="password" class="form-control form-control-modern form-control-lg text-center" 
+                           id="pin" name="pin" maxlength="4" pattern="\d{4}" 
+                           placeholder="****" style="font-size: 2rem; letter-spacing: 20px;">
+                    <button type="submit" class="btn btn-primary-pos btn-lg w-100 mt-4">
+                        <i class="bi bi-check-circle"></i> Ingresar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('pin').addEventListener('input', function(e) {
+    if (this.value.length === 4) {
+        this.form.submit();
+    }
+});
+</script>
+{% endblock %}
+

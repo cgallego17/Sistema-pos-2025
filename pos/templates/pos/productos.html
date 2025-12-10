@@ -1,0 +1,133 @@
+{% extends 'pos/base.html' %}
+{% load humanize %}
+
+{% block title %}Productos - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-box-seam"></i> Gestión de Productos</h1>
+        {% if puede_gestionar_productos %}
+        <a href="{% url 'pos:crear_producto' %}" class="btn btn-primary-pos">
+            <i class="bi bi-plus-circle"></i> Nuevo Producto
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="card-modern">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-funnel"></i> Búsqueda y Filtros</h5>
+        </div>
+        <div class="card-body">
+            <!-- Búsqueda y Filtros -->
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <input type="text" class="form-control form-control-modern" id="buscarProducto" 
+                           placeholder="🔍 Buscar por código o nombre...">
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select form-control-modern" id="filtroEstado">
+                        <option value="">Todos los productos</option>
+                        <option value="activo">Solo activos</option>
+                        <option value="inactivo">Solo inactivos</option>
+                        <option value="bajo-stock">Stock bajo (&lt;10)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card-modern mt-3">
+        <div class="card-body">
+            <!-- Tabla de Productos -->
+            <div class="table-responsive">
+                <table class="table-modern table">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Nombre</th>
+                            <th>Precio</th>
+                            <th>Stock</th>
+                            <th>Estado</th>
+                            <th>Código Barras</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                <tbody id="tablaProductos">
+                    {% for producto in productos %}
+                    <tr data-activo="{{ producto.activo|lower }}" data-stock="{{ producto.stock }}">
+                        <td><strong>{{ producto.codigo }}</strong></td>
+                        <td>
+                            {% if producto.imagen %}
+                            <img src="{{ producto.imagen.url }}" alt="{{ producto.nombre }}" 
+                                 style="width: 40px; height: 40px; object-fit: cover; margin-right: 10px;">
+                            {% endif %}
+                            {{ producto.nombre }}
+                        </td>
+                        <td>${{ producto.precio|intcomma }}</td>
+                        <td>
+                            {% if producto.stock < 10 %}
+                            <span class="badge badge-modern badge-danger-modern">{{ producto.stock|intcomma }}</span>
+                            {% else %}
+                            <span class="badge badge-modern badge-success-modern">{{ producto.stock|intcomma }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if producto.activo %}
+                            <span class="badge badge-modern badge-success-modern">Activo</span>
+                            {% else %}
+                            <span class="badge badge-modern" style="background: #e2e8f0; color: #64748b;">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ producto.codigo_barras|default:"N/A" }}</td>
+                        <td>
+                            {% if puede_gestionar_productos %}
+                            <a href="{% url 'pos:editar_producto' producto.id %}" class="btn btn-sm btn-warning" style="padding: 0.25rem 0.5rem;">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            {% else %}
+                            <span class="text-muted" style="font-size: 0.85rem;">Solo lectura</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted">No hay productos registrados</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Búsqueda
+document.getElementById('buscarProducto').addEventListener('input', filtrarProductos);
+document.getElementById('filtroEstado').addEventListener('change', filtrarProductos);
+
+function filtrarProductos() {
+    let busqueda = document.getElementById('buscarProducto').value.toLowerCase();
+    let filtroEstado = document.getElementById('filtroEstado').value;
+    let filas = document.querySelectorAll('#tablaProductos tr');
+    
+    filas.forEach(fila => {
+        let texto = fila.textContent.toLowerCase();
+        let activo = fila.dataset.activo === 'true';
+        let stock = parseInt(fila.dataset.stock);
+        
+        let mostrar = texto.includes(busqueda);
+        
+        if (mostrar && filtroEstado) {
+            if (filtroEstado === 'activo') mostrar = activo;
+            else if (filtroEstado === 'inactivo') mostrar = !activo;
+            else if (filtroEstado === 'bajo-stock') mostrar = stock < 10;
+        }
+        
+        fila.style.display = mostrar ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}
+

@@ -1,0 +1,171 @@
+{% extends 'pos/base.html' %}
+{% load humanize %}
+
+{% block title %}Inventario - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-box-seam-fill"></i> Inventario</h1>
+    </div>
+
+    <!-- Pestañas -->
+    <ul class="nav nav-tabs mb-4" style="border-bottom: 2px solid #e5e7eb;">
+        <li class="nav-item">
+            <a class="nav-link {% if tipo_activo == 'ingreso' %}active{% endif %}" 
+               href="{% url 'pos:inventario' %}?tipo=ingreso"
+               style="{% if tipo_activo == 'ingreso' %}background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;{% else %}color: #667eea;{% endif %}">
+                <i class="bi bi-arrow-down-circle-fill"></i> Ingreso de Mercancía
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if tipo_activo == 'salida' %}active{% endif %}" 
+               href="{% url 'pos:inventario' %}?tipo=salida"
+               style="{% if tipo_activo == 'salida' %}background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;{% else %}color: #667eea;{% endif %}">
+                <i class="bi bi-arrow-up-circle-fill"></i> Salida de Mercancía
+            </a>
+        </li>
+    </ul>
+
+    <!-- Contenido de Ingresos -->
+    {% if tipo_activo == 'ingreso' %}
+    <div class="card-modern">
+        <div class="card-header-modern">
+            <div class="d-flex justify-content-between align-items-center">
+                <h3 style="margin: 0; color: white;">Ingreso de Mercancía</h3>
+                {% if es_inventario or es_administrador %}
+                <a href="{% url 'pos:crear_ingreso' %}" class="btn btn-primary-pos">
+                    <i class="bi bi-plus-circle"></i> Nuevo Ingreso
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table-modern table">
+                    <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Fecha</th>
+                        <th>Proveedor</th>
+                        <th>Factura</th>
+                        <th>Total</th>
+                        <th>Estado</th>
+                        <th>Usuario</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ingreso in ingresos %}
+                    <tr>
+                        <td>{{ ingreso.id }}</td>
+                        <td>{{ ingreso.fecha|date:"d/m/Y H:i" }}</td>
+                        <td>{{ ingreso.proveedor }}</td>
+                        <td>{{ ingreso.numero_factura|default:"N/A" }}</td>
+                        <td><strong>${{ ingreso.total|intcomma }}</strong></td>
+                        <td>
+                            {% if ingreso.completado %}
+                            <span class="badge badge-modern badge-success-modern">Completado</span>
+                            {% else %}
+                            <span class="badge badge-modern badge-warning-modern">Pendiente</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if ingreso.usuario %}
+                                {{ ingreso.usuario.get_full_name|default:ingreso.usuario.username }}
+                            {% else %}
+                                Sistema
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if es_inventario or es_administrador %}
+                            <a href="{% url 'pos:detalle_ingreso' ingreso.id %}" class="btn btn-sm" style="background: #dbeafe; color: #2563eb; border: none;">
+                                <i class="bi bi-eye"></i> Ver
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted">No hay ingresos registrados</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Contenido de Salidas -->
+    {% if tipo_activo == 'salida' %}
+    <div class="card-modern">
+        <div class="card-header-modern">
+            <div class="d-flex justify-content-between align-items-center">
+                <h3 style="margin: 0; color: white;">Salida de Mercancía</h3>
+                {% if es_inventario or es_administrador %}
+                <a href="{% url 'pos:crear_salida' %}" class="btn btn-primary-pos">
+                    <i class="bi bi-plus-circle"></i> Nueva Salida
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table-modern table">
+                    <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        <th>Destino</th>
+                        <th>Motivo</th>
+                        <th>Estado</th>
+                        <th>Usuario</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for salida in salidas %}
+                    <tr>
+                        <td>{{ salida.id }}</td>
+                        <td>{{ salida.fecha|date:"d/m/Y H:i" }}</td>
+                        <td><span class="badge badge-modern badge-info-modern">{{ salida.get_tipo_display }}</span></td>
+                        <td>{{ salida.destino|default:"N/A" }}</td>
+                        <td>{{ salida.motivo|truncatewords:10 }}</td>
+                        <td>
+                            {% if salida.completado %}
+                            <span class="badge badge-modern badge-success-modern">Completado</span>
+                            {% else %}
+                            <span class="badge badge-modern badge-warning-modern">Pendiente</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if salida.usuario %}
+                                {{ salida.usuario.get_full_name|default:salida.usuario.username }}
+                            {% else %}
+                                Sistema
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if es_inventario or es_administrador %}
+                            <a href="{% url 'pos:detalle_salida' salida.id %}" class="btn btn-sm" style="background: #dbeafe; color: #2563eb; border: none;">
+                                <i class="bi bi-eye"></i> Ver
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted">No hay salidas registradas</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+

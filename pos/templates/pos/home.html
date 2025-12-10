@@ -1,0 +1,324 @@
+{% extends 'pos/base.html' %}
+{% load humanize %}
+
+{% block title %}Inicio - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div>
+            <h1><i class="bi bi-house-door"></i> Dashboard</h1>
+            <p style="color: #64748b; margin: 0.5rem 0 0 0;">Bienvenido, {{ user.get_full_name|default:user.username }}</p>
+        </div>
+    </div>
+
+    <!-- Selector de Registradora -->
+    <div class="card-modern mb-4">
+        <div class="card-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <h5 class="mb-0" style="color: white;"><span style="font-size: 1.3rem; margin-right: 0.5rem;">🖨️</span><i class="bi bi-cash-register"></i> Seleccionar Registradora</h5>
+        </div>
+        <div class="card-body">
+            {% if registradora_seleccionada %}
+            <div class="alert alert-success" style="background: #d1fae5; border: 1px solid #10b981; color: #065f46; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <i class="bi bi-check-circle"></i> <strong>Registradora activa:</strong> {{ registradora_seleccionada.nombre }}
+                </div>
+                <form method="post" action="{% url 'pos:cerrar_registradora' %}" style="margin: 0;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm" style="background: #ef4444; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 0.375rem; font-size: 0.85rem; font-weight: 600;">
+                        <i class="bi bi-x-circle"></i> Cerrar Registradora
+                    </button>
+                </form>
+            </div>
+            {% else %}
+            <div class="alert alert-warning" style="background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 1rem;">
+                <i class="bi bi-exclamation-triangle"></i> <strong>No hay registradora seleccionada.</strong> 
+                {% if not caja_abierta %}
+                <br><small style="display: block; margin-top: 0.5rem;">Debes abrir una caja antes de seleccionar una registradora.</small>
+                {% else %}
+                Por favor, selecciona una para poder realizar ventas.
+                {% endif %}
+            </div>
+            {% endif %}
+            
+            <form method="post" action="{% url 'pos:seleccionar_registradora' %}">
+                {% csrf_token %}
+                <div class="row g-3">
+                    {% for reg in registradoras %}
+                    <div class="col-md-4">
+                        <button type="submit" name="registradora_id" value="{{ reg.id }}" 
+                                class="btn w-100 {% if registradora_seleccionada and registradora_seleccionada.id == reg.id %}btn-success-pos{% elif reg.disponible and caja_abierta %}btn-outline-primary{% else %}btn-outline-secondary{% endif %}" 
+                                style="padding: 1.5rem; font-size: 1.1rem; border: 2px solid {% if registradora_seleccionada and registradora_seleccionada.id == reg.id %}#10b981{% elif reg.disponible and caja_abierta %}#3b82f6{% else %}#94a3b8{% endif %}; {% if not reg.disponible or not caja_abierta %}opacity: 0.6; cursor: not-allowed;{% endif %}"
+                                {% if not reg.disponible %}disabled title="En uso por {{ reg.usuario_activo.get_full_name|default:reg.usuario_activo.username }}"{% elif not caja_abierta %}disabled title="Debes abrir una caja antes de seleccionar una registradora"{% endif %}>
+                            <div style="font-size: 3rem; display: block; margin-bottom: 0.5rem; line-height: 1;">🖨️</div>
+                            <i class="bi bi-cash-register" style="font-size: 1.5rem; display: block; margin-bottom: 0.5rem; opacity: 0.8;"></i>
+                            {{ reg.nombre }}
+                            {% if registradora_seleccionada and registradora_seleccionada.id == reg.id %}
+                            <br><small style="font-size: 0.85rem; margin-top: 0.5rem; display: block;"><i class="bi bi-check-circle-fill"></i> Activa</small>
+                            {% elif reg.usuario_activo %}
+                            <br><small style="font-size: 0.85rem; margin-top: 0.5rem; display: block; color: #ef4444;"><i class="bi bi-x-circle-fill"></i> En uso por {{ reg.usuario_activo.get_full_name|default:reg.usuario_activo.username }}</small>
+                            {% elif not caja_abierta %}
+                            <br><small style="font-size: 0.85rem; margin-top: 0.5rem; display: block; color: #f59e0b;"><i class="bi bi-exclamation-circle-fill"></i> Abre la caja primero</small>
+                            {% endif %}
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Meta de Ventas -->
+    <div class="card-modern mb-4">
+        <div class="card-header" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+            <h5 class="mb-0" style="color: white;"><i class="bi bi-trophy"></i> Meta de Ventas del Mes</h5>
+        </div>
+        <div class="card-body">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <div>
+                    <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 0.25rem;">Ventas del Mes</div>
+                    <div style="font-size: 2rem; font-weight: 700; color: #1e293b;">${{ ventas_totales_mes|intcomma|default:"0" }}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 0.25rem;">Meta</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: #10b981;">${{ meta_ventas|intcomma }}</div>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 0.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <span style="font-size: 0.85rem; color: #64748b;">Progreso</span>
+                    <span id="porcentaje-display" style="font-size: 1.1rem; font-weight: 700; color: #10b981;">0%</span>
+                </div>
+                <div style="background: #e2e8f0; border-radius: 10px; height: 30px; overflow: hidden; position: relative; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+                    <div id="barra-progreso" style="background: linear-gradient(90deg, #10b981 0%, #059669 100%); height: 100%; width: 0%; transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1); display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3); position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%); animation: shimmer 2s infinite;"></div>
+                        {% if porcentaje_meta > 10 %}
+                        <span style="color: white; font-size: 0.75rem; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.2); position: relative; z-index: 1;"></span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const porcentajeMeta = {{ porcentaje_meta|floatformat:2 }};
+                    const barraProgreso = document.getElementById('barra-progreso');
+                    const porcentajeDisplay = document.getElementById('porcentaje-display');
+                    
+                    // Animar la barra
+                    setTimeout(function() {
+                        barraProgreso.style.width = porcentajeMeta + '%';
+                        
+                        // Animar el porcentaje
+                        let porcentajeActual = 0;
+                        const incremento = porcentajeMeta / 60; // 60 frames para la animación
+                        const intervalo = setInterval(function() {
+                            porcentajeActual += incremento;
+                            if (porcentajeActual >= porcentajeMeta) {
+                                porcentajeActual = porcentajeMeta;
+                                clearInterval(intervalo);
+                            }
+                            porcentajeDisplay.textContent = porcentajeActual.toFixed(2) + '%';
+                        }, 25); // ~60fps
+                    }, 300);
+                });
+            </script>
+            
+            <style>
+                @keyframes shimmer {
+                    0% {
+                        transform: translateX(-100%);
+                    }
+                    100% {
+                        transform: translateX(100%);
+                    }
+                }
+            </style>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;">
+                <div style="font-size: 0.85rem; color: #64748b;">
+                    <i class="bi bi-calendar"></i> Mes Actual
+                </div>
+                <div style="font-size: 0.85rem; color: #64748b;">
+                    Faltan: ${{ faltan_para_meta|intcomma|default:"0" }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estadísticas -->
+    <div class="cards-grid">
+        <div class="stat-card success">
+            <div class="stat-card-label">
+                <i class="bi bi-currency-dollar"></i> Ventas Hoy
+            </div>
+            <div class="stat-card-value">${{ ventas_hoy|intcomma|default:"0" }}</div>
+        </div>
+        
+        <div class="stat-card primary">
+            <div class="stat-card-label">
+                <i class="bi bi-receipt"></i> Transacciones
+            </div>
+            <div class="stat-card-value">{{ total_ventas_hoy|intcomma|default:"0" }}</div>
+        </div>
+        
+        <div class="stat-card warning">
+            <div class="stat-card-label">
+                <i class="bi bi-box-seam"></i> Productos
+            </div>
+            <div class="stat-card-value">{{ productos_count|intcomma|default:"0" }}</div>
+        </div>
+        
+        <div class="stat-card danger">
+            <div class="stat-card-label">
+                <i class="bi bi-exclamation-triangle"></i> Stock Bajo
+            </div>
+            <div class="stat-card-value">{{ productos_bajo_stock|intcomma|default:"0" }}</div>
+        </div>
+    </div>
+
+    <!-- Acciones Rápidas -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-lightning-charge"></i> Acciones Rápidas</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <a href="{% url 'pos:vender' %}" class="btn btn-success-pos w-100" style="padding: 1.5rem; font-size: 1.1rem;">
+                                <i class="bi bi-cart-plus" style="font-size: 2rem; display: block; margin-bottom: 0.5rem;"></i>
+                                Nueva Venta
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{% url 'pos:productos' %}" class="btn btn-primary-pos w-100" style="padding: 1.5rem; font-size: 1.1rem;">
+                                <i class="bi bi-box-seam" style="font-size: 2rem; display: block; margin-bottom: 0.5rem;"></i>
+                                Ver Productos
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{% url 'pos:lista_ventas' %}" class="btn btn-primary-pos w-100" style="padding: 1.5rem; font-size: 1.1rem; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                                <i class="bi bi-receipt" style="font-size: 2rem; display: block; margin-bottom: 0.5rem;"></i>
+                                Ver Ventas
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Stock Bajo -->
+            <div class="card-modern mt-4">
+                <div class="card-header" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+                    <h5 class="mb-0" style="color: white;"><i class="bi bi-exclamation-triangle"></i> Productos con Stock Bajo</h5>
+                </div>
+                <div class="card-body">
+                    {% if productos_stock_bajo %}
+                    <div class="table-responsive">
+                        <table class="table-modern table">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Código</th>
+                                    <th>Stock Actual</th>
+                                    <th>Precio</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for producto in productos_stock_bajo %}
+                                <tr>
+                                    <td><strong>{{ producto.nombre }}</strong></td>
+                                    <td><small style="color: #64748b;">{{ producto.codigo|default:"N/A" }}</small></td>
+                                    <td>
+                                        <span class="badge badge-modern badge-danger-modern" style="font-size: 0.9rem; padding: 0.4rem 0.8rem;">
+                                            {{ producto.stock|intcomma }}
+                                        </span>
+                                    </td>
+                                    <td><strong>${{ producto.precio|intcomma }}</strong></td>
+                                    <td>
+                                        {% if puede_gestionar_productos %}
+                                        <a href="{% url 'pos:editar_producto' producto.id %}" class="btn btn-sm btn-primary-pos" style="padding: 0.3rem 0.6rem; font-size: 0.85rem;">
+                                            <i class="bi bi-pencil"></i> Editar
+                                        </a>
+                                        {% else %}
+                                        <a href="{% url 'pos:productos' %}" class="btn btn-sm btn-outline-primary" style="padding: 0.3rem 0.6rem; font-size: 0.85rem;">
+                                            <i class="bi bi-eye"></i> Ver
+                                        </a>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-check-circle" style="font-size: 3rem; color: #10b981; margin-bottom: 1rem;"></i>
+                        <p class="text-muted" style="font-size: 1.1rem; margin: 0;">Todos los productos tienen stock suficiente</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Productos con Stock Bajo -->
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Stock Bajo</h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% if productos_stock_bajo %}
+                    <div class="list-group list-group-flush">
+                        {% for producto in productos_stock_bajo %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center" style="border: none; border-bottom: 1px solid #f1f5f9; padding: 0.75rem 0;">
+                            <div>
+                                <strong style="font-size: 0.9rem;">{{ producto.nombre }}</strong><br>
+                                <small style="color: #64748b;">{{ producto.codigo }}</small>
+                            </div>
+                            <span class="badge badge-modern badge-danger-modern">{{ producto.stock|intcomma }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center py-4">Todos los productos tienen stock suficiente</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Estado de Caja -->
+            {% if caja_abierta %}
+            <div class="card-modern mt-4">
+                <div class="card-header" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                    <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Caja Abierta</h5>
+                </div>
+                <div class="card-body">
+                    <p style="margin-bottom: 0.5rem;"><strong>Caja:</strong> {{ caja_abierta.caja }}</p>
+                    <p style="margin-bottom: 0.5rem;"><strong>Apertura:</strong> {{ caja_abierta.fecha_apertura|date:"H:i" }}</p>
+                    <p style="margin-bottom: 1rem;"><strong>Monto Inicial:</strong> ${{ caja_abierta.monto_inicial|intcomma }}</p>
+                    <a href="{% url 'pos:cerrar_caja' %}" class="btn btn-danger-pos w-100">
+                        <i class="bi bi-x-circle"></i> Cerrar Caja
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <div class="card-modern mt-4">
+                <div class="card-header" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                    <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Sin Caja Abierta</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">No tienes una caja abierta</p>
+                    <a href="{% url 'pos:abrir_caja' %}" class="btn btn-primary-pos w-100">
+                        <i class="bi bi-box-arrow-in-down"></i> Abrir Caja
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+

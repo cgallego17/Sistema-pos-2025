@@ -1,0 +1,253 @@
+{% extends 'pos/base.html' %}
+
+{% block title %}Nueva Salida de Mercancía - Sistema POS{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-plus-circle"></i> Nueva Salida de Mercancía</h1>
+        <a href="{% url 'pos:salida_mercancia' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card-modern">
+                <div class="card-header">
+                    <h5 class="mb-0">Información de la Salida</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="formSalida">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group-modern">
+                                    <label class="form-label-modern">Tipo de Salida *</label>
+                                    <select class="form-select form-control-modern" name="tipo" required>
+                                        <option value="devolucion">Devolución</option>
+                                        <option value="merma">Merma</option>
+                                        <option value="traslado">Traslado</option>
+                                        <option value="donacion">Donación</option>
+                                        <option value="otro">Otro</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group-modern">
+                                    <label class="form-label-modern">Destino</label>
+                                    <input type="text" class="form-control form-control-modern" name="destino">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group-modern">
+                            <label class="form-label-modern">Motivo *</label>
+                            <textarea class="form-control form-control-modern" name="motivo" rows="3" required></textarea>
+                        </div>
+                        
+                        <hr style="margin: 1.5rem 0;">
+                        
+                        <h5 style="margin-bottom: 1rem;">Items de la Salida</h5>
+                        
+                        <div id="items-container">
+                            <div class="item-row mb-3 p-3" style="border: 1px solid #e2e8f0; border-radius: 8px;">
+                                <div class="row g-3">
+                                    <div class="col-md-8">
+                                        <label class="form-label-modern">Producto *</label>
+                                        <div class="autocomplete-wrapper" style="position: relative;">
+                                            <input type="text" class="form-control form-control-modern producto-autocomplete" 
+                                                   placeholder="Buscar por nombre, código o código de barras..." autocomplete="off" required>
+                                            <input type="hidden" class="producto-id" name="producto">
+                                            <div class="autocomplete-dropdown" style="display: none; position: absolute; z-index: 1000; width: 100%; background: white; border: 1px solid #e2e8f0; border-radius: 4px; max-height: 200px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label-modern">Cantidad *</label>
+                                        <input type="number" class="form-control form-control-modern cantidad-input" name="cantidad" min="1" value="1" required>
+                                    </div>
+                                    <div class="col-md-2 d-flex align-items-end">
+                                        <button type="button" class="btn btn-danger w-100 eliminar-item" style="display: none;">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button type="button" class="btn btn-primary-pos btn-sm" id="btn-agregar-item">
+                            <i class="bi bi-plus-circle"></i> Agregar Item
+                        </button>
+                        
+                        <input type="hidden" name="items" id="items-json">
+                        
+                        <hr style="margin: 1.5rem 0;">
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary-pos">
+                                <i class="bi bi-check-circle"></i> Crear Salida
+                            </button>
+                            <a href="{% url 'pos:salida_mercancia' %}" class="btn" style="background: #6c757d; color: white; border: none;">
+                                <i class="bi bi-x"></i> Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Inicializar autocomplete para todos los campos de producto
+function initAutocomplete(input) {
+    const wrapper = input.closest('.autocomplete-wrapper');
+    const dropdown = wrapper.querySelector('.autocomplete-dropdown');
+    const hiddenInput = wrapper.querySelector('.producto-id');
+    const cantidadInput = input.closest('.item-row').querySelector('.cantidad-input');
+    let searchTimeout;
+    
+    input.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            dropdown.style.display = 'none';
+            hiddenInput.value = '';
+            return;
+        }
+        
+        searchTimeout = setTimeout(() => {
+            fetch(`/buscar/?q=${encodeURIComponent(query)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.productos && data.productos.length > 0) {
+                        dropdown.innerHTML = data.productos.map(p => {
+                            const codigoBarras = p.codigo_barras ? ` | Cód. Barras: ${p.codigo_barras}` : '';
+                            return `
+                            <div class="autocomplete-item" style="padding: 0.5rem; cursor: pointer; border-bottom: 1px solid #f1f5f9;" 
+                                 data-id="${p.id}" data-stock="${p.stock}" data-nombre="${p.nombre}">
+                                <strong>${p.nombre}</strong><br>
+                                <small style="color: #64748b;">Código: ${p.codigo}${codigoBarras} | Stock: ${parseInt(p.stock).toLocaleString('es-CO', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</small>
+                            </div>
+                        `;
+                        }).join('');
+                        dropdown.style.display = 'block';
+                        
+                        // Agregar eventos a los items
+                        dropdown.querySelectorAll('.autocomplete-item').forEach(item => {
+                            item.addEventListener('click', function() {
+                                const productoId = this.dataset.id;
+                                const productoNombre = this.dataset.nombre;
+                                const productoStock = this.dataset.stock;
+                                
+                                input.value = productoNombre;
+                                hiddenInput.value = productoId;
+                                if (cantidadInput) {
+                                    cantidadInput.max = productoStock;
+                                }
+                                dropdown.style.display = 'none';
+                            });
+                            
+                            item.addEventListener('mouseenter', function() {
+                                this.style.background = '#f8fafc';
+                            });
+                            item.addEventListener('mouseleave', function() {
+                                this.style.background = 'white';
+                            });
+                        });
+                    } else {
+                        dropdown.innerHTML = '<div style="padding: 0.5rem; color: #64748b;">No se encontraron productos</div>';
+                        dropdown.style.display = 'block';
+                    }
+                })
+                .catch(() => {
+                    dropdown.style.display = 'none';
+                });
+        }, 300);
+    });
+    
+    // Cerrar dropdown al hacer clic fuera
+    document.addEventListener('click', function(e) {
+        if (!wrapper.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+// Inicializar autocomplete para campos existentes
+document.querySelectorAll('.producto-autocomplete').forEach(input => {
+    initAutocomplete(input);
+});
+
+document.getElementById('formSalida').addEventListener('submit', function(e) {
+    const items = [];
+    document.querySelectorAll('.item-row').forEach(row => {
+        const producto = row.querySelector('.producto-id').value;
+        const cantidad = row.querySelector('.cantidad-input').value;
+        
+        if (producto && cantidad) {
+            items.push({
+                producto_id: producto,
+                cantidad: cantidad
+            });
+        }
+    });
+    
+    document.getElementById('items-json').value = JSON.stringify(items);
+});
+
+document.getElementById('btn-agregar-item').addEventListener('click', function() {
+    const container = document.getElementById('items-container');
+    const newRow = document.createElement('div');
+    newRow.className = 'item-row mb-3 p-3';
+    newRow.style.border = '1px solid #e2e8f0';
+    newRow.style.borderRadius = '8px';
+    
+    newRow.innerHTML = `
+        <div class="row g-3">
+            <div class="col-md-8">
+                <label class="form-label-modern">Producto *</label>
+                <div class="autocomplete-wrapper" style="position: relative;">
+                    <input type="text" class="form-control form-control-modern producto-autocomplete" 
+                           placeholder="Buscar por nombre, código o código de barras..." autocomplete="off" required>
+                    <input type="hidden" class="producto-id" name="producto">
+                    <div class="autocomplete-dropdown" style="display: none; position: absolute; z-index: 1000; width: 100%; background: white; border: 1px solid #e2e8f0; border-radius: 4px; max-height: 200px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label-modern">Cantidad *</label>
+                <input type="number" class="form-control form-control-modern cantidad-input" name="cantidad" min="1" value="1" required>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="button" class="btn btn-danger w-100 eliminar-item">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
+    
+    container.appendChild(newRow);
+    
+    // Inicializar autocomplete para el nuevo campo
+    const newAutocomplete = newRow.querySelector('.producto-autocomplete');
+    if (newAutocomplete) {
+        initAutocomplete(newAutocomplete);
+    }
+    
+    newRow.querySelector('.eliminar-item').addEventListener('click', function() {
+        newRow.remove();
+    });
+});
+
+document.querySelectorAll('.eliminar-item').forEach(btn => {
+    btn.addEventListener('click', function() {
+        if (document.querySelectorAll('.item-row').length > 1) {
+            this.closest('.item-row').remove();
+        }
+    });
+});
+</script>
+{% endblock %}
+
