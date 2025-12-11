@@ -48,8 +48,13 @@ def usuario_info(request):
         context['puede_gestionar_productos'] = tiene_rol('Administradores', 'Inventario') or request.user.is_superuser
         context['puede_gestionar_cajas'] = tiene_rol('Administradores', 'Cajeros') or request.user.is_superuser
         context['puede_anular_ventas'] = tiene_rol('Administradores') or request.user.is_superuser or request.user.is_staff
+        
+        # Agregar información de registradora seleccionada
+        registradora_seleccionada = request.session.get('registradora_seleccionada', None)
+        context['registradora_seleccionada'] = registradora_seleccionada
     else:
         context['usuario_autenticado'] = False
+        context['registradora_seleccionada'] = None
     
     return context
 

@@ -1044,8 +1044,11 @@
                 </a>
             </li>
             {% endif %}
-            <li class="nav-item ms-auto">
-                <a href="{% url 'pos:logout' %}" class="nav-link-custom text-danger">
+            <li class="nav-item ms-auto" style="display: flex; align-items: center; gap: 1rem;">
+                <span class="nav-link-custom" style="color: #64748b; font-weight: 500; cursor: default;">
+                    <i class="bi bi-person-circle"></i> {{ user.get_full_name|default:user.username }}
+                </span>
+                <a href="#" class="nav-link-custom text-danger" id="logout-link">
                     <i class="bi bi-box-arrow-right"></i> Salir
                 </a>
             </li>
@@ -1171,6 +1174,46 @@
     </script>
     
     {% block extra_js %}{% endblock %}
+    
+    <script>
+    // Validar logout - cerrar registradora si está activa
+    (function() {
+        function validarLogout(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            {% if user.is_authenticated %}
+            // Verificar si hay registradora activa
+            const tieneRegistradora = {% if registradora_seleccionada %}true{% else %}false{% endif %};
+            
+            if (tieneRegistradora) {
+                const confirmar = confirm('Tienes una registradora activa. Se cerrará automáticamente al salir. ¿Deseas continuar?');
+                if (!confirmar) {
+                    return false;
+                }
+            }
+            
+            // Redirigir al logout (el backend cerrará la registradora automáticamente)
+            window.location.href = '{% url "pos:logout" %}';
+            return false;
+            {% else %}
+            window.location.href = '{% url "pos:logout" %}';
+            return false;
+            {% endif %}
+        }
+        
+        // Agregar event listener cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', function() {
+            const logoutLink = document.getElementById('logout-link');
+            if (logoutLink) {
+                logoutLink.addEventListener('click', validarLogout);
+            }
+        });
+        
+        // También asignar directamente por si el DOM ya está listo
+        window.validarLogout = validarLogout;
+    })();
+    </script>
     
     <!-- Footer -->
     {% if user.is_authenticated %}

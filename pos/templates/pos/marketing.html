@@ -39,11 +39,11 @@
     <div class="cards-grid mb-4">
         <div class="stat-card primary">
             <div class="stat-card-label">
-                <i class="bi bi-currency-dollar"></i> Total General
+                <i class="bi bi-currency-dollar"></i> Total General Neto
             </div>
             <div class="stat-card-value">${{ total_general|intcomma }}</div>
             <div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">
-                <i class="bi bi-info-circle"></i> Solo ventas no anuladas
+                <i class="bi bi-info-circle"></i> Ventas - Anulaciones
             </div>
         </div>
         <div class="stat-card success">
@@ -102,10 +102,10 @@
                             <th style="width: 60px;">#</th>
                             <th>Vendedor</th>
                             <th class="text-end">
-                                Total Ventas
+                                Total Neto
                                 <br>
                                 <small style="font-weight: normal; font-size: 0.75rem; color: rgba(255,255,255,0.8);">
-                                    <i class="bi bi-arrow-down"></i> Ordenado por este valor
+                                    <i class="bi bi-arrow-down"></i> Ventas - Anulaciones
                                 </small>
                             </th>
                             <th class="text-center">Cantidad</th>
@@ -145,6 +145,12 @@
                                 <strong style="font-size: 1.1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
                                     ${{ item.total_ventas|intcomma }}
                                 </strong>
+                                {% if item.total_anuladas > 0 %}
+                                <br>
+                                <small style="color: #dc2626; font-size: 0.7rem;">
+                                    <i class="bi bi-dash-circle"></i> -${{ item.total_anuladas|intcomma }} (anuladas)
+                                </small>
+                                {% endif %}
                             </td>
                             <td class="text-center">
                                 <span class="badge badge-modern badge-success-modern">

@@ -68,7 +68,7 @@
                 </p>
                 
                 {% if venta.metodo_pago == 'efectivo' and venta.monto_recibido %}
-                <p><strong>Monto Recibido:</strong><br>${{ venta.monto_recibido|intcomma }}</p>
+                <p><strong>Monto Recibido:</strong><br>${{ venta.monto_recibido|intcomma }} <span data-monto-recibido="{{ venta.monto_recibido }}" data-metodo-pago="{{ venta.metodo_pago }}" style="display: none;"></span></p>
                 <p><strong>Cambio:</strong><br>${{ venta.monto_recibido|add:"-"|add:venta.total|intcomma }}</p>
                 {% endif %}
                 
@@ -145,6 +145,20 @@
                                 <label class="form-label-modern">Motivo de anulación:</label>
                                 <textarea class="form-control form-control-modern" name="motivo" rows="3" required></textarea>
                             </div>
+                            {% if venta.metodo_pago == 'efectivo' and venta.monto_recibido %}
+                            <div class="form-group-modern" style="margin-top: 1rem;">
+                                <label class="form-label-modern">¿Qué hacer con el dinero recibido?</label>
+                                <select class="form-control form-control-modern" name="accion_dinero" required>
+                                    <option value="devolver">Devolver al cliente (resta de la caja)</option>
+                                    <option value="mantener">Mantener en caja (no resta)</option>
+                                </select>
+                                <small style="color: #64748b; font-size: 0.85rem; margin-top: 0.25rem; display: block;">
+                                    <i class="bi bi-info-circle"></i> Monto recibido: ${{ venta.monto_recibido|intcomma }}
+                                </small>
+                            </div>
+                            {% else %}
+                            <input type="hidden" name="accion_dinero" value="mantener">
+                            {% endif %}
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn" style="background: #6c757d; color: white; border: none;" data-bs-dismiss="modal">Cancelar</button>

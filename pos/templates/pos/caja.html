@@ -122,9 +122,16 @@
                     <!-- Información General de Caja -->
                     <div class="row mb-4">
                         <div class="col-md-12">
-                            <h5 class="mb-3" style="color: #1e293b; font-weight: 600;">
-                                <i class="bi bi-info-circle"></i> Información General
-                            </h5>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0" style="color: #1e293b; font-weight: 600;">
+                                    <i class="bi bi-info-circle"></i> Información General
+                                </h5>
+                                {% if not caja_mostrar.fecha_cierre %}
+                                <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#cerrarCajaModal" style="background: #6b7280; border: none; color: white; padding: 0.5rem 1.25rem; font-size: 0.95rem;">
+                                    <i class="bi bi-x-circle"></i> Cerrar Caja
+                                </button>
+                                {% endif %}
+                            </div>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <div class="card-modern" style="border-left: 4px solid #0ea5e9; background: #f0f9ff;">
@@ -146,6 +153,13 @@
                                                         <br><i class="bi bi-x-circle"></i> Cierre: {{ caja_mostrar.fecha_cierre|date:"d/m/Y H:i" }}
                                                         {% endif %}
                                                     </div>
+                                                    {% if not caja_mostrar.fecha_cierre %}
+                                                    <div style="margin-top: 1rem;">
+                                                        <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#cerrarCajaModal" style="background: #6b7280; border: none; color: white; padding: 0.5rem 1rem; font-size: 0.9rem;">
+                                                            <i class="bi bi-x-circle"></i> Cerrar Caja
+                                                        </button>
+                                                    </div>
+                                                    {% endif %}
                                                 </div>
                                                 <div style="font-size: 2.5rem; opacity: 0.2; color: #0ea5e9;">
                                                     <i class="bi bi-cash-stack"></i>
@@ -472,6 +486,10 @@
                                         <span class="badge badge-modern badge-danger-modern">
                                             <i class="bi bi-arrow-down-circle"></i> Gasto
                                         </span>
+                                        {% elif movimiento.tipo == 'devolucion' %}
+                                        <span class="badge badge-modern" style="background: #dc2626; color: white;">
+                                            <i class="bi bi-arrow-counterclockwise"></i> Devolución
+                                        </span>
                                         {% else %}
                                         <span class="badge badge-modern badge-success-modern">
                                             <i class="bi bi-arrow-up-circle"></i> Ingreso
@@ -494,6 +512,9 @@
                                         <strong style="color: #10b981;">+${{ movimiento.monto|intcomma }}</strong>
                                         {% elif movimiento.tipo == 'venta' %}
                                         <strong style="color: #3b82f6;">+${{ movimiento.monto|intcomma }}</strong>
+                                        {% elif movimiento.tipo == 'devolucion' %}
+                                        <strong style="color: #dc2626;">${{ movimiento.monto|intcomma }}</strong>
+                                        <small style="color: #dc2626; display: block; font-size: 0.8rem;"><i class="bi bi-arrow-counterclockwise"></i> Devolución</small>
                                         {% elif movimiento.tipo == 'retiro' %}
                                         <strong style="color: #f59e0b;">-${{ movimiento.monto|intcomma }}</strong>
                                         {% elif movimiento.tipo == 'gasto' %}
@@ -545,6 +566,9 @@
 
                 <!-- Tab Historial -->
                 <div class="tab-pane fade" id="historial" role="tabpanel" aria-labelledby="historial-tab">
+                    <div class="alert alert-info" style="background: #dbeafe; border: 1px solid #3b82f6; color: #1e40af; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+                        <i class="bi bi-info-circle"></i> <strong>Importante:</strong> Todos los movimientos, ventas y el historial de cajas se conservan permanentemente. Al cerrar una caja, los datos no se borran y permanecen disponibles para consulta.
+                    </div>
                     <div class="d-flex justify-content-between align-items-center mb-4">
                         <h5 class="mb-0" style="color: #1e293b; font-weight: 600;">
                             <i class="bi bi-clock-history"></i> Historial de Cajas
@@ -734,7 +758,7 @@
                 <h5 class="modal-title"><i class="bi bi-box-arrow-in-down"></i> Abrir Caja para Hoy</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <form method="post" action="{% url 'pos:abrir_caja' %}">
+            <form method="post" action="{% url 'pos:abrir_caja' %}" id="formAbrirCaja">
                 {% csrf_token %}
                 <div class="modal-body">
                     <div class="alert alert-info" style="background: #dbeafe; border: 1px solid #93c5fd; color: #1e40af; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 1rem;">
@@ -745,13 +769,13 @@
                     </div>
                     <div class="form-group-modern">
                         <label class="form-label-modern">Monto Inicial *</label>
-                        <input type="number" class="form-control form-control-modern" name="monto_inicial" step="1" min="0" value="0" required>
+                        <input type="number" class="form-control form-control-modern" name="monto_inicial" id="montoInicial" step="1" min="0" value="0" required>
                         <small style="color: #94a3b8; font-size: 0.8rem;">Monto con el que inicias la caja</small>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background: #6c757d; border: none;">Cancelar</button>
-                    <button type="submit" class="btn btn-primary-pos">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background: #6c757d; border: none;" id="btnCancelarAbrir">Cancelar</button>
+                    <button type="submit" class="btn btn-primary-pos" id="btnAbrirCaja">
                         <i class="bi bi-check-circle"></i> Abrir Caja Principal
                     </button>
                 </div>
@@ -837,6 +861,9 @@
                 <div class="modal-body">
                     <div class="alert alert-warning" style="background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 1rem;">
                         <i class="bi bi-exclamation-triangle"></i> <strong>Advertencia:</strong> Al cerrar la caja, se registrará el monto final y no podrás realizar más ventas con esta caja.
+                    </div>
+                    <div class="alert alert-info" style="background: #dbeafe; border: 1px solid #3b82f6; color: #1e40af; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 1rem;">
+                        <i class="bi bi-info-circle"></i> <strong>Nota:</strong> Todos los movimientos, ventas y el historial se conservan permanentemente. Podrás consultarlos en cualquier momento desde el historial de cajas.
                     </div>
                     <div class="mb-3">
                         <p style="margin-bottom: 0.5rem;"><strong>Saldo Calculado:</strong></p>
@@ -955,6 +982,52 @@
                     }
                 }
             });
+        }
+        
+        // Manejar el formulario de abrir caja
+        const formAbrirCaja = document.getElementById('formAbrirCaja');
+        const btnAbrirCaja = document.getElementById('btnAbrirCaja');
+        const btnCancelarAbrir = document.getElementById('btnCancelarAbrir');
+        const abrirCajaModal = document.getElementById('abrirCajaModal');
+        
+        if (formAbrirCaja && btnAbrirCaja) {
+            formAbrirCaja.addEventListener('submit', function(e) {
+                // Validar que el monto inicial sea válido
+                const montoInicial = document.getElementById('montoInicial');
+                if (montoInicial && parseFloat(montoInicial.value) < 0) {
+                    e.preventDefault();
+                    alert('El monto inicial no puede ser negativo');
+                    return false;
+                }
+                
+                // Deshabilitar botones y mostrar indicador de carga
+                btnAbrirCaja.disabled = true;
+                btnAbrirCaja.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Abriendo...';
+                if (btnCancelarAbrir) {
+                    btnCancelarAbrir.disabled = true;
+                }
+                
+                // Permitir que el formulario se envíe normalmente
+                // Django redirigirá después de procesar
+                return true;
+            });
+            
+            // Escuchar cuando el modal se cierre para limpiar el formulario si es necesario
+            if (abrirCajaModal) {
+                abrirCajaModal.addEventListener('hidden.bs.modal', function() {
+                    // Resetear el formulario y botones cuando el modal se cierre
+                    if (formAbrirCaja) {
+                        formAbrirCaja.reset();
+                    }
+                    if (btnAbrirCaja) {
+                        btnAbrirCaja.disabled = false;
+                        btnAbrirCaja.innerHTML = '<i class="bi bi-check-circle"></i> Abrir Caja Principal';
+                    }
+                    if (btnCancelarAbrir) {
+                        btnCancelarAbrir.disabled = false;
+                    }
+                });
+            }
         }
     });
 </script>

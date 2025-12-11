@@ -8,6 +8,10 @@ from django.utils import timezone
 from datetime import datetime
 from functools import wraps
 import json
+import logging
+
+# Configurar logger para trazabilidad
+logger = logging.getLogger(__name__)
 
 from .models import (
     Producto, Venta, ItemVenta, Caja, CajaUsuario,
@@ -16,6 +20,44 @@ from .models import (
     SalidaMercancia, ItemSalidaMercancia,
     CampanaMarketing, ClientePotencial
 )
+
+
+# ============================================
+# FUNCIONES AUXILIARES DE TRAZABILIDAD
+# ============================================
+
+def obtener_caja_mostrar(usuario=None, fecha=None):
+    """
+    Función auxiliar para obtener la caja única global que se debe mostrar/usar.
+    Esta función asegura consistencia en toda la aplicación.
+    
+    Lógica: Solo existe UNA caja en el sistema que se reutiliza.
+    1. Obtiene o crea la Caja Principal (número 1)
+    2. Busca la única caja del sistema (solo hay una)
+    3. Retorna la caja encontrada o None
+    
+    Args:
+        usuario: Parámetro ignorado (mantenido por compatibilidad)
+        fecha: Parámetro ignorado (mantenido por compatibilidad)
+    
+    Returns:
+        CajaUsuario o None
+    """
+    # Obtener o crear la Caja Principal
+    caja_principal = Caja.objects.filter(numero=1).first()
+    if not caja_principal:
+        caja_principal = Caja.objects.create(
+            numero=1,
+            nombre='Caja Principal',
+            activa=True
+        )
+    
+    # Buscar la única caja del sistema (solo hay una)
+    caja_unica = CajaUsuario.objects.filter(
+        caja=caja_principal
+    ).order_by('-fecha_apertura').first()
+    
+    return caja_unica
 
 
 # ============================================
@@ -131,7 +173,31 @@ def login_pin_view(request):
 
 @login_required
 def logout_view(request):
-    """Vista de logout"""
+    """Vista de logout - Cierra TODAS las registradoras del usuario antes de cerrar sesión"""
+    from .models import RegistradoraActiva
+    
+    # IMPORTANTE: Cerrar TODAS las registradoras activas del usuario ANTES de hacer logout
+    # Esto asegura que no queden registradoras abiertas cuando el usuario cierra sesión
+    try:
+        # Obtener todas las registradoras activas del usuario
+        registradoras_activas = RegistradoraActiva.objects.filter(usuario=request.user)
+        cantidad_cerradas = registradoras_activas.count()
+        
+        if cantidad_cerradas > 0:
+            # Eliminar todas las registradoras activas del usuario de la base de datos
+            registradoras_activas.delete()
+        
+        # Limpiar la sesión de registradora seleccionada
+        if 'registradora_seleccionada' in request.session:
+            del request.session['registradora_seleccionada']
+            request.session.modified = True
+    except Exception as e:
+        # Si hay algún error, registrarlo pero continuar con el logout
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f'Error al cerrar registradoras en logout: {str(e)}')
+    
+    # Hacer logout
     logout(request)
     return redirect('pos:login')
 
@@ -140,15 +206,21 @@ def logout_view(request):
 def seleccionar_registradora_view(request):
     """Vista para seleccionar la registradora"""
     from .models import RegistradoraActiva
-    from datetime import date
     
     if request.method == 'POST':
-        # Verificar si hay caja abierta del día actual
-        hoy = date.today()
+        # Verificar si hay caja abierta (caja única global)
+        caja_principal = Caja.objects.filter(numero=1).first()
+        if not caja_principal:
+            messages.error(
+                request, 
+                'No existe la Caja Principal. Por favor, contacta al administrador.'
+            )
+            return redirect('pos:home')
+        
+        # Buscar la única caja del sistema (sin filtrar por usuario)
         caja_abierta = CajaUsuario.objects.filter(
-            usuario=request.user,
-            fecha_cierre__isnull=True,
-            fecha_apertura__date=hoy
+            caja=caja_principal,
+            fecha_cierre__isnull=True
         ).first()
         
         if not caja_abierta:
@@ -220,8 +292,44 @@ def cerrar_registradora_view(request):
     from .models import RegistradoraActiva
     
     if request.method == 'POST':
+        # Obtener registradora_id del POST (puede ser de la sesión o de un parámetro)
+        registradora_id_post = request.POST.get('registradora_id')
         registradora_actual = request.session.get('registradora_seleccionada', None)
-        if registradora_actual:
+        
+        # Determinar qué registradora cerrar
+        if registradora_id_post:
+            # Si se especifica un ID en el POST, cerrar esa registradora
+            registradora_id = int(registradora_id_post)
+            registradoras = {
+                1: 'Registradora 1',
+                2: 'Registradora 2',
+                3: 'Registradora 3',
+            }
+            nombre_registradora = registradoras.get(registradora_id, f'Registradora {registradora_id}')
+            
+            # Buscar la registradora activa
+            registradora_activa = RegistradoraActiva.objects.filter(
+                registradora_id=registradora_id
+            ).first()
+            
+            if registradora_activa:
+                # Verificar si es del usuario actual o si el usuario es admin/staff
+                if registradora_activa.usuario == request.user or request.user.is_staff or request.user.is_superuser:
+                    # Eliminar de la base de datos
+                    registradora_activa.delete()
+                    
+                    # Si es la registradora del usuario actual, eliminar de la sesión
+                    if registradora_actual and registradora_actual.get('id') == registradora_id:
+                        del request.session['registradora_seleccionada']
+                        request.session.modified = True
+                    
+                    messages.success(request, f'{nombre_registradora} cerrada exitosamente')
+                else:
+                    messages.error(request, 'No tienes permisos para cerrar esta registradora')
+            else:
+                messages.warning(request, f'{nombre_registradora} no está activa')
+        elif registradora_actual:
+            # Si no hay ID en POST pero hay registradora en sesión, cerrar esa
             registradora_id = registradora_actual.get('id')
             nombre_registradora = registradora_actual.get('nombre', 'Registradora')
             
@@ -271,14 +379,14 @@ def home_view(request):
         stock__lt=10
     ).order_by('stock')[:10]
     
-    # Caja abierta del día actual
-    from datetime import date
-    hoy = date.today()
-    caja_abierta = CajaUsuario.objects.filter(
-        usuario=request.user,
-        fecha_cierre__isnull=True,
-        fecha_apertura__date=hoy
-    ).first()
+    # Caja abierta (caja única global)
+    caja_principal = Caja.objects.filter(numero=1).first()
+    caja_abierta = None
+    if caja_principal:
+        caja_abierta = CajaUsuario.objects.filter(
+            caja=caja_principal,
+            fecha_cierre__isnull=True
+        ).first()
     
     # Obtener registradora seleccionada de la sesión
     registradora_seleccionada = request.session.get('registradora_seleccionada', None)
@@ -345,14 +453,14 @@ def vender_view(request):
         messages.warning(request, 'Por favor, selecciona una registradora en el Dashboard antes de vender')
         return redirect('pos:home')
     
-    # Verificar si hay caja abierta del día actual
-    from datetime import date
-    hoy = date.today()
-    caja_abierta = CajaUsuario.objects.filter(
-        usuario=request.user,
-        fecha_cierre__isnull=True,
-        fecha_apertura__date=hoy
-    ).first()
+    # Verificar si hay caja abierta (caja única global)
+    caja_principal = Caja.objects.filter(numero=1).first()
+    caja_abierta = None
+    if caja_principal:
+        caja_abierta = CajaUsuario.objects.filter(
+            caja=caja_principal,
+            fecha_cierre__isnull=True
+        ).first()
     
     if not caja_abierta:
         messages.warning(request, 'Debes abrir una caja antes de realizar ventas. Por favor, abre la caja desde el Dashboard.')
@@ -397,14 +505,14 @@ def procesar_venta(request):
     """Procesar una venta (AJAX)"""
     if request.method == 'POST':
         try:
-            # Verificar si hay caja abierta del día actual
-            from datetime import date
-            hoy = date.today()
-            caja_abierta = CajaUsuario.objects.filter(
-                usuario=request.user,
-                fecha_cierre__isnull=True,
-                fecha_apertura__date=hoy
-            ).first()
+            # Verificar si hay caja abierta (caja única global)
+            caja_principal = Caja.objects.filter(numero=1).first()
+            caja_abierta = None
+            if caja_principal:
+                caja_abierta = CajaUsuario.objects.filter(
+                    caja=caja_principal,
+                    fecha_cierre__isnull=True
+                ).first()
             
             if not caja_abierta:
                 return JsonResponse({
@@ -834,7 +942,43 @@ def anular_venta_view(request, venta_id):
                     usuario=request.user
                 )
             
-            messages.success(request, 'Venta anulada exitosamente')
+            # Manejar el dinero recibido si la venta fue en efectivo
+            accion_dinero = request.POST.get('accion_dinero', 'mantener')
+            if accion_dinero == 'devolver' and venta.metodo_pago == 'efectivo' and venta.monto_recibido:
+                # Usar la función auxiliar para obtener la caja única global
+                from datetime import date
+                hoy = date.today()
+                caja_asociada = obtener_caja_mostrar(None, hoy)  # None porque es caja única global
+                
+                if caja_asociada:
+                    # Crear un gasto para restar el monto recibido de la caja
+                    from .models import GastoCaja
+                    monto_devolver = int(venta.monto_recibido)
+                    
+                    # Log para trazabilidad
+                    logger.info(f"Anulación venta #{venta.id}: Creando gasto de devolución de ${monto_devolver:,} en caja #{caja_asociada.id} (usuario: {request.user.username})")
+                    
+                    gasto_creado = GastoCaja.objects.create(
+                        tipo='gasto',
+                        monto=monto_devolver,
+                        descripcion=f'Devolución por anulación de venta #{venta.id} - {venta.motivo_anulacion[:50] if venta.motivo_anulacion else "Sin motivo"}',
+                        usuario=request.user,
+                        caja_usuario=caja_asociada,
+                        fecha=timezone.now()  # Asegurar que tenga fecha actual
+                    )
+                    
+                    # Verificar que se creó correctamente
+                    if gasto_creado.id:
+                        logger.info(f"Gasto de devolución creado exitosamente: ID={gasto_creado.id}, Caja={caja_asociada.id}, Monto=${monto_devolver:,}")
+                        messages.success(request, f'Venta anulada exitosamente. Se restó ${monto_devolver:,} de la caja por devolución al cliente.')
+                    else:
+                        logger.error(f"Error al crear gasto de devolución: Gasto creado pero sin ID")
+                        messages.warning(request, 'Venta anulada exitosamente, pero hubo un problema al registrar el gasto en la caja.')
+                else:
+                    logger.warning(f"Anulación venta #{venta.id}: No se encontró caja para asociar el gasto de devolución (usuario: {request.user.username})")
+                    messages.warning(request, 'Venta anulada exitosamente, pero no se pudo restar de la caja porque no se encontró una caja abierta o cerrada del día actual.')
+            else:
+                messages.success(request, 'Venta anulada exitosamente')
         else:
             messages.warning(request, 'Esta venta ya está anulada')
     
@@ -844,7 +988,7 @@ def anular_venta_view(request, venta_id):
 @login_required
 @requiere_rol('Administradores', 'Cajeros')
 def caja_view(request):
-    """Vista de gestión de caja - Siempre usa la Caja Principal - Sistema diario"""
+    """Vista de gestión de caja - Caja única global compartida por todos"""
     from datetime import date
     
     # Obtener o crear la Caja Principal
@@ -861,54 +1005,20 @@ def caja_view(request):
     inicio_dia = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
     fin_dia = timezone.now().replace(hour=23, minute=59, second=59, microsecond=999999)
     
-    # Buscar caja abierta del día actual
-    caja_abierta = CajaUsuario.objects.filter(
-        usuario=request.user,
-        fecha_cierre__isnull=True,
-        caja=caja_principal,
-        fecha_apertura__date=hoy
-    ).first()
-    
-    # Verificar si hay cajas abiertas de días anteriores
-    cajas_anteriores_abiertas = CajaUsuario.objects.filter(
-        usuario=request.user,
-        fecha_cierre__isnull=True,
+    # Buscar la única caja del sistema (solo hay una)
+    caja_abierta = None
+    caja_unica = CajaUsuario.objects.filter(
         caja=caja_principal
-    ).exclude(fecha_apertura__date=hoy)
+    ).order_by('-fecha_apertura').first()
     
-    if cajas_anteriores_abiertas.exists():
-        # Cerrar automáticamente las cajas de días anteriores
-        for caja_anterior in cajas_anteriores_abiertas:
-            # Calcular monto final basado en el saldo calculado
-            ventas_anteriores = Venta.objects.filter(
-                caja=caja_principal,
-                fecha__gte=caja_anterior.fecha_apertura,
-                fecha__lt=inicio_dia,
-                completada=True,
-                anulada=False
-            )
-            total_ventas_anterior = ventas_anteriores.aggregate(total=Sum('total'))['total'] or 0
-            
-            from .models import GastoCaja
-            gastos_anteriores = GastoCaja.objects.filter(caja_usuario=caja_anterior)
-            total_gastos_anterior = gastos_anteriores.filter(tipo='gasto').aggregate(total=Sum('monto'))['total'] or 0
-            total_ingresos_anterior = gastos_anteriores.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0
-            
-            saldo_anterior = caja_anterior.monto_inicial + total_ventas_anterior + total_ingresos_anterior - total_gastos_anterior
-            
-            # Cerrar la caja anterior
-            from datetime import timedelta
-            caja_anterior.fecha_cierre = inicio_dia - timedelta(seconds=1)
-            caja_anterior.monto_final = saldo_anterior
-            caja_anterior.save()
-        
-        messages.info(request, f'Se cerraron automáticamente {cajas_anteriores_abiertas.count()} caja(s) de días anteriores.')
+    if caja_unica and caja_unica.fecha_cierre is None:
+        caja_abierta = caja_unica
     
     # Obtener historial de cajas con estadísticas calculadas
-    historial_cajas_raw = CajaUsuario.objects.filter(
-        usuario=request.user,
-        caja=caja_principal
-    ).order_by('-fecha_apertura')[:20]
+    # Como solo hay una caja, el historial será solo esa caja
+    historial_cajas_raw = []
+    if caja_unica:
+        historial_cajas_raw = [caja_unica]
     
     # Enriquecer cada caja con estadísticas
     historial_cajas = []
@@ -934,15 +1044,46 @@ def caja_view(request):
         total_ventas_caja = ventas_caja_item.aggregate(total=Sum('total'))['total'] or 0
         cantidad_ventas_caja = ventas_caja_item.count()
         
+        # Obtener TODAS las ventas del período (incluyendo anuladas) para calcular correctamente el saldo
+        if caja_item.fecha_cierre:
+            ventas_caja_todas_item = Venta.objects.filter(
+                caja=caja_principal,
+                fecha__gte=caja_item.fecha_apertura,
+                fecha__lte=caja_item.fecha_cierre,
+                completada=True
+            )
+        else:
+            ventas_caja_todas_item = Venta.objects.filter(
+                caja=caja_principal,
+                fecha__gte=caja_item.fecha_apertura,
+                completada=True
+            )
+        
+        ventas_anuladas_caja_item = ventas_caja_todas_item.filter(anulada=True)
+        total_anuladas_caja = ventas_anuladas_caja_item.aggregate(total=Sum('total'))['total'] or 0
+        
         # Calcular gastos e ingresos
         from .models import GastoCaja
         gastos_caja_item = GastoCaja.objects.filter(caja_usuario=caja_item)
         total_gastos_caja = gastos_caja_item.filter(tipo='gasto').aggregate(total=Sum('monto'))['total'] or 0
         total_ingresos_caja = gastos_caja_item.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0
         
-        # Calcular saldo esperado
+        # Calcular saldo esperado usando la misma lógica que saldo_caja
+        # IMPORTANTE: Si hay gastos de devolución, significa que las ventas anuladas ingresaron dinero
+        gastos_devolucion_caja = gastos_caja_item.filter(
+            descripcion__icontains='Devolución por anulación',
+            tipo='gasto'
+        )
+        gastos_devolucion_caja_total = gastos_devolucion_caja.aggregate(total=Sum('monto'))['total'] or 0
+        
         monto_inicial_caja = int(caja_item.monto_inicial) if caja_item.monto_inicial else 0
-        saldo_esperado = monto_inicial_caja + int(total_ventas_caja) + int(total_ingresos_caja) - int(total_gastos_caja)
+        
+        if gastos_devolucion_caja_total > 0:
+            # Si hay gastos de devolución, las ventas anuladas ingresaron dinero
+            saldo_esperado = monto_inicial_caja + int(total_ventas_caja) + int(total_anuladas_caja) + int(total_ingresos_caja) - int(total_gastos_caja)
+        else:
+            # Si NO hay gastos de devolución, las ventas anuladas no afectan el dinero físico
+            saldo_esperado = monto_inicial_caja + int(total_ventas_caja) + int(total_ingresos_caja) - int(total_gastos_caja)
         
         historial_cajas.append({
             'caja': caja_item,
@@ -958,16 +1099,8 @@ def caja_view(request):
             'diferencia': int(caja_item.monto_final) - saldo_esperado if caja_item.monto_final else None,
         })
     
-    # Si no hay caja abierta, buscar la última caja cerrada del día actual
-    # Priorizar mostrar la caja cerrada más reciente si existe
-    caja_cerrada_hoy = CajaUsuario.objects.filter(
-        usuario=request.user,
-        fecha_cierre__isnull=False,
-        fecha_apertura__date=hoy
-    ).order_by('-fecha_cierre').first()
-    
-    # Si hay caja cerrada, mostrarla; si no, mostrar la abierta
-    caja_mostrar = caja_cerrada_hoy if caja_cerrada_hoy else caja_abierta
+    # Usar la función auxiliar para obtener la única caja del sistema
+    caja_mostrar = obtener_caja_mostrar(None, hoy)  # None porque es caja única global
     
     # Inicializar variables con valores por defecto
     total_ventas = 0
@@ -992,26 +1125,34 @@ def caja_view(request):
     
     if caja_mostrar:
         # Filtrar ventas del período de la caja (desde apertura hasta cierre, o del día si está abierta)
-        # Incluir todas las ventas del período, independientemente de si tienen caja asignada
-        # (ya que todas las ventas deberían estar asociadas a la caja principal)
+        # IMPORTANTE: Incluir TODAS las ventas (anuladas y no anuladas) para mostrar en movimientos
+        # Las ventas anuladas aparecerán como negativas
         if caja_mostrar.fecha_cierre:
             # Si la caja está cerrada, filtrar ventas entre apertura y cierre
-            ventas_caja = Venta.objects.filter(
+            ventas_caja_todas = Venta.objects.filter(
                 fecha__gte=caja_mostrar.fecha_apertura,
                 fecha__lte=caja_mostrar.fecha_cierre,
-                completada=True,
-                anulada=False
+                completada=True
             )
         else:
             # Si la caja está abierta, filtrar ventas del día actual
-            ventas_caja = Venta.objects.filter(
+            ventas_caja_todas = Venta.objects.filter(
                 fecha__gte=inicio_dia,
                 fecha__lte=fin_dia,
-                completada=True,
-                anulada=False
+                completada=True
             )
+        
+        # Separar ventas válidas y anuladas para cálculos
+        ventas_caja = ventas_caja_todas.filter(anulada=False)
+        ventas_anuladas_caja = ventas_caja_todas.filter(anulada=True)
+        
+        # Calcular total de ventas válidas (para estadísticas)
         total_ventas_raw = ventas_caja.aggregate(total=Sum('total'))['total']
         total_ventas = int(total_ventas_raw) if total_ventas_raw else 0
+        
+        # Calcular total de ventas anuladas (para restar del saldo)
+        total_anuladas_raw = ventas_anuladas_caja.aggregate(total=Sum('total'))['total']
+        total_anuladas = int(total_anuladas_raw) if total_anuladas_raw else 0
         
         # Obtener gastos e ingresos de la caja (abierta o cerrada)
         # Incluir TODOS los gastos asociados a esta caja (sin filtrar por fecha)
@@ -1032,19 +1173,55 @@ def caja_view(request):
         # Obtener monto inicial de la caja
         monto_inicial = int(caja_mostrar.monto_inicial) if caja_mostrar.monto_inicial else 0
         
-        # Calcular ventas por método de pago
+        # Calcular ventas por método de pago (solo ventas válidas, no anuladas)
         ventas_efectivo = ventas_caja.filter(metodo_pago='efectivo').aggregate(total=Sum('total'))['total'] or 0
         ventas_tarjeta = ventas_caja.filter(metodo_pago='tarjeta').aggregate(total=Sum('total'))['total'] or 0
         ventas_transferencia = ventas_caja.filter(metodo_pago='transferencia').aggregate(total=Sum('total'))['total'] or 0
+        
+        # Calcular ventas anuladas en efectivo (para restar del dinero físico)
+        ventas_anuladas_efectivo = ventas_anuladas_caja.filter(metodo_pago='efectivo').aggregate(total=Sum('total'))['total'] or 0
         
         # Convertir a enteros
         ventas_efectivo = int(ventas_efectivo)
         ventas_tarjeta = int(ventas_tarjeta)
         ventas_transferencia = int(ventas_transferencia)
+        ventas_anuladas_efectivo = int(ventas_anuladas_efectivo)
         
         # Calcular dinero físico en caja (solo efectivo + monto inicial + ingresos - gastos)
+        # IMPORTANTE sobre ventas anuladas en efectivo:
+        # - Si una venta anulada en efectivo ingresó dinero a la caja (monto_recibido > 0), ese dinero SÍ entró físicamente
+        # - Luego se devolvió cuando se anuló (gasto de devolución)
+        # - Por lo tanto, debemos sumar el dinero que entró (ventas_anuladas_efectivo) y restar el que se devolvió (gastos de devolución)
+        # - Si hay gastos de devolución en efectivo, significa que el dinero SÍ entró a la caja antes de anularse
         # Los otros métodos de pago van a cuentas bancarias
-        dinero_fisico_caja = monto_inicial + ventas_efectivo + total_ingresos - total_gastos
+        # Verificar si hay gastos de devolución en efectivo para saber si el dinero de las ventas anuladas entró a la caja
+        gastos_devolucion_efectivo = gastos_todos.filter(
+            descripcion__icontains='Devolución por anulación',
+            tipo='gasto'
+        )
+        # Filtrar solo los gastos de devolución que corresponden a ventas en efectivo
+        gastos_devolucion_efectivo_total = 0
+        for gasto in gastos_devolucion_efectivo:
+            # Extraer ID de venta de la descripción
+            import re
+            match = re.search(r'venta #(\d+)', gasto.descripcion, re.IGNORECASE)
+            if match:
+                venta_id_devolucion = int(match.group(1))
+                # Verificar si la venta era en efectivo
+                try:
+                    venta_devolucion = Venta.objects.get(id=venta_id_devolucion)
+                    if venta_devolucion.metodo_pago == 'efectivo':
+                        gastos_devolucion_efectivo_total += gasto.monto
+                except Venta.DoesNotExist:
+                    pass
+        
+        if gastos_devolucion_efectivo_total > 0:
+            # Si hay gastos de devolución en efectivo, significa que el dinero de las ventas anuladas SÍ entró a la caja
+            # Por lo tanto, debemos sumarlo al dinero físico (y luego se resta con el gasto de devolución)
+            dinero_fisico_caja = monto_inicial + ventas_efectivo + ventas_anuladas_efectivo + total_ingresos - total_gastos
+        else:
+            # Si NO hay gastos de devolución en efectivo, las ventas anuladas no afectan el dinero físico
+            dinero_fisico_caja = monto_inicial + ventas_efectivo + total_ingresos - total_gastos
         
         # Calcular porcentajes
         porcentaje_efectivo = (ventas_efectivo * 100 / total_ventas) if total_ventas > 0 else 0
@@ -1087,10 +1264,23 @@ def caja_view(request):
             'venta_id': None,
         })
         
-        # Agregar ventas como movimientos
-        # Convertir a lista para asegurar que se itere correctamente
-        ventas_lista = list(ventas_caja.order_by('fecha'))
-        for venta in ventas_lista:
+        # Verificar si hay gastos de devolución por anulación para evitar duplicación
+        # Si existe un GastoCaja de devolución, no agregar el movimiento adicional de anulación
+        gastos_devolucion_ids = set()
+        for gasto in gastos_todos:
+            if 'Devolución por anulación de venta #' in gasto.descripcion:
+                # Extraer el ID de la venta de la descripción
+                import re
+                match = re.search(r'venta #(\d+)', gasto.descripcion, re.IGNORECASE)
+                if match:
+                    venta_id_devolucion = int(match.group(1))
+                    gastos_devolucion_ids.add(venta_id_devolucion)
+        
+        # Agregar TODAS las ventas como movimientos (incluyendo anuladas)
+        # Las ventas aparecen normalmente, y si están anuladas, se agrega un movimiento adicional de anulación
+        # EXCEPTO si ya existe un GastoCaja de devolución (para evitar duplicación)
+        ventas_lista_todas = list(ventas_caja_todas.order_by('fecha'))
+        for venta in ventas_lista_todas:
             # Obtener nombre de la registradora si existe
             registradora_nombre = None
             if venta.registradora_id:
@@ -1101,24 +1291,53 @@ def caja_view(request):
                 }
                 registradora_nombre = registradoras.get(venta.registradora_id, f'Registradora {venta.registradora_id}')
             
+            # Agregar la venta normalmente (incluso si está anulada)
             movimientos_unificados.append({
                 'tipo': 'venta',
                 'fecha': venta.fecha,
                 'monto': venta.total,
-                'descripcion': f'Venta #{venta.id}',
+                'descripcion': f'Venta #{venta.id}' + (' (Anulada)' if venta.anulada else ''),
                 'usuario': venta.usuario,
                 'metodo_pago': venta.get_metodo_pago_display(),
                 'vendedor': venta.vendedor,
                 'venta_id': venta.id,
                 'registradora_id': venta.registradora_id,
                 'registradora_nombre': registradora_nombre,
+                'anulada': venta.anulada,
             })
+            
+            # Si la venta está anulada, agregar un movimiento adicional de anulación que reste
+            # SOLO si NO existe un GastoCaja de devolución (para evitar duplicación)
+            if venta.anulada and venta.id not in gastos_devolucion_ids:
+                movimientos_unificados.append({
+                    'tipo': 'devolucion',  # Tipo especial para devoluciones/anulaciones
+                    'fecha': venta.fecha_anulacion if venta.fecha_anulacion else venta.fecha,
+                    'monto': -venta.total,  # Monto negativo para restar
+                    'descripcion': f'Anulación - Venta #{venta.id}',
+                    'usuario': venta.usuario_anulacion if venta.usuario_anulacion else venta.usuario,
+                    'metodo_pago': venta.get_metodo_pago_display(),
+                    'vendedor': venta.vendedor,
+                    'venta_id': venta.id,
+                    'registradora_id': venta.registradora_id,
+                    'registradora_nombre': registradora_nombre,
+                    'anulada': True,
+                })
         
         # Agregar gastos e ingresos como movimientos
-        for movimiento in gastos_caja.order_by('fecha'):
+        # Convertir a lista para asegurar que se incluyan todos los gastos
+        gastos_lista = list(gastos_todos.order_by('fecha'))
+        
+        # Log para trazabilidad
+        logger.debug(f"Caja #{caja_mostrar.id}: Agregando {len(gastos_lista)} gastos/ingresos a movimientos")
+        
+        for movimiento in gastos_lista:
             # Identificar si es un retiro por la descripción
             es_retiro = 'Retiro de dinero al cerrar caja' in movimiento.descripcion
             tipo_movimiento = 'retiro' if es_retiro else movimiento.tipo
+            
+            # Log para trazabilidad de devoluciones
+            if 'Devolución por anulación' in movimiento.descripcion:
+                logger.debug(f"Movimiento de devolución detectado: ID={movimiento.id}, Monto=${movimiento.monto:,}, Caja={caja_mostrar.id}")
             
             movimientos_unificados.append({
                 'tipo': tipo_movimiento,
@@ -1129,6 +1348,7 @@ def caja_view(request):
                 'metodo_pago': None,
                 'vendedor': None,
                 'venta_id': None,
+                'gasto_id': movimiento.id,  # Agregar ID del gasto para trazabilidad
             })
         
         # Ordenar todos los movimientos por fecha ascendente para calcular saldos
@@ -1146,7 +1366,11 @@ def caja_view(request):
                 # La apertura agrega el monto inicial
                 saldo_despues = saldo_antes + monto
             elif movimiento['tipo'] == 'venta' or movimiento['tipo'] == 'ingreso':
+                # Ventas e ingresos suman al saldo
                 saldo_despues = saldo_antes + monto
+            elif movimiento['tipo'] == 'devolucion':
+                # Devoluciones restan del saldo (el monto ya es negativo)
+                saldo_despues = saldo_antes + monto  # Sumar porque monto es negativo
             elif movimiento['tipo'] == 'retiro' or movimiento['tipo'] == 'gasto':
                 # Retiros y gastos restan del saldo
                 saldo_despues = saldo_antes - monto
@@ -1164,11 +1388,24 @@ def caja_view(request):
         # Ordenar por fecha descendente para mostrar (más recientes primero)
         movimientos_unificados.sort(key=lambda x: x['fecha'], reverse=True)
         
-        # Calcular saldo en caja: Monto Inicial + Ventas + Ingresos - Gastos
+        # Calcular saldo en caja: Monto Inicial + Ventas Válidas + Ventas Anuladas (que ingresaron dinero) + Ingresos - Gastos
+        # IMPORTANTE sobre ventas anuladas:
+        # - Si una venta anulada ingresó dinero a la caja (monto_recibido > 0), ese dinero SÍ entró físicamente
+        # - Luego se devolvió cuando se anuló (gasto de devolución)
+        # - Por lo tanto, debemos sumar el dinero que entró (total_anuladas) y restar el que se devolvió (gastos de devolución)
+        # - Si hay gastos de devolución, significa que el dinero SÍ entró a la caja antes de anularse
         # (monto_inicial ya está definido arriba)
-        # Los gastos incluyen todos los retiros registrados
+        # Los gastos incluyen todos los retiros registrados y devoluciones
         # Este es el dinero físico que debería haber en la caja
-        saldo_caja = monto_inicial + total_ventas + total_ingresos - total_gastos
+        # Verificar si hay gastos de devolución para saber si el dinero de las ventas anuladas entró a la caja
+        gastos_devolucion_total = gastos_todos.filter(descripcion__icontains='Devolución por anulación').aggregate(total=Sum('monto'))['total'] or 0
+        if gastos_devolucion_total > 0:
+            # Si hay gastos de devolución, significa que el dinero de las ventas anuladas SÍ entró a la caja
+            # Por lo tanto, debemos sumarlo al saldo (y luego se resta con el gasto de devolución)
+            saldo_caja = monto_inicial + total_ventas + total_anuladas + total_ingresos - total_gastos
+        else:
+            # Si NO hay gastos de devolución, las ventas anuladas no afectan el dinero físico
+            saldo_caja = monto_inicial + total_ventas + total_ingresos - total_gastos
         
         # Asegurar que el saldo sea un entero
         saldo_caja = int(saldo_caja)
@@ -1206,7 +1443,7 @@ def caja_view(request):
 @login_required
 @requiere_rol('Administradores', 'Cajeros')
 def abrir_caja_view(request):
-    """Abrir una caja - Siempre abre la Caja Principal - Sistema diario"""
+    """Abrir la caja única global - Sistema diario"""
     from datetime import date
     
     if request.method == 'POST':
@@ -1217,49 +1454,99 @@ def abrir_caja_view(request):
         
         hoy = date.today()
         
-        # Verificar si ya tiene una caja abierta del día actual
-        caja_existente_hoy = CajaUsuario.objects.filter(
-            usuario=request.user,
-            fecha_cierre__isnull=True,
-            fecha_apertura__date=hoy
-        ).exists()
-        
-        if caja_existente_hoy:
-            messages.warning(request, 'Ya tienes una caja abierta para hoy. Debes cerrarla antes de abrir una nueva.')
-        else:
-            # Siempre usar la Caja Principal (número 1)
-            caja_principal = Caja.objects.filter(numero=1).first()
-            if not caja_principal:
-                # Si no existe, crearla
-                caja_principal = Caja.objects.create(
-                    numero=1,
-                    nombre='Caja Principal',
-                    activa=True
-                )
-            
-            CajaUsuario.objects.create(
-                caja=caja_principal,
-                usuario=request.user,
-                monto_inicial=monto_inicial
+        # Verificar si la única caja está abierta
+        caja_principal = Caja.objects.filter(numero=1).first()
+        if not caja_principal:
+            caja_principal = Caja.objects.create(
+                numero=1,
+                nombre='Caja Principal',
+                activa=True
             )
+        
+        caja_abierta_existente = CajaUsuario.objects.filter(
+            caja=caja_principal,
+            fecha_cierre__isnull=True
+        ).first()
+        
+        if caja_abierta_existente:
+            messages.warning(request, 'La caja ya está abierta. Debes cerrarla antes de abrirla nuevamente.')
+            return redirect('pos:caja')
+        
+        # Ahora abrir/reutilizar la única caja del sistema
+        try:
+            # Buscar si ya existe la única caja (reutilizar la misma siempre)
+            caja_existente = CajaUsuario.objects.filter(
+                caja=caja_principal
+            ).first()
             
-            messages.success(request, f'Caja Principal abierta exitosamente para el día de hoy')
+            if caja_existente:
+                # Reutilizar la caja existente: abrirla nuevamente
+                caja_existente.fecha_cierre = None
+                caja_existente.monto_inicial = monto_inicial
+                caja_existente.monto_final = None
+                caja_existente.fecha_apertura = timezone.now()
+                caja_existente.usuario = request.user
+                caja_existente.save()
+                
+                logger.info(f'Caja única reutilizada y abierta: ID={caja_existente.id}, Usuario={request.user.username}, Monto inicial=${monto_inicial:,}')
+                messages.success(request, f'Caja abierta exitosamente para el día de hoy')
+            else:
+                # Si no existe ninguna caja, crear la única caja del sistema
+                nueva_caja = CajaUsuario.objects.create(
+                    caja=caja_principal,
+                    usuario=request.user,
+                    monto_inicial=monto_inicial
+                )
+                
+                # Verificar que se creó correctamente
+                if nueva_caja and nueva_caja.id:
+                    logger.info(f'Caja única creada y abierta: ID={nueva_caja.id}, Usuario={request.user.username}, Monto inicial=${monto_inicial:,}')
+                    messages.success(request, f'Caja abierta exitosamente para el día de hoy')
+                else:
+                    logger.error(f'Error al crear caja: nueva_caja={nueva_caja}')
+                    messages.error(request, 'Error al crear la caja. Por favor, intenta nuevamente.')
+        except Exception as e:
+            logger.error(f'Error al abrir caja: {str(e)}', exc_info=True)
+            messages.error(request, f'Error al abrir la caja: {str(e)}')
     
-    return redirect('pos:caja')
+    # Redireccionar explícitamente a la página de caja
+    from django.http import HttpResponseRedirect
+    from django.urls import reverse
+    try:
+        caja_url = reverse('pos:caja')
+        logger.debug(f'Redirigiendo a: {caja_url}')
+        return HttpResponseRedirect(caja_url)
+    except Exception as e:
+        logger.error(f'Error al redirigir: {str(e)}', exc_info=True)
+        # Fallback: redireccionar directamente
+        return HttpResponseRedirect('/caja/')
 
 
 @login_required
 @requiere_rol('Administradores', 'Cajeros')
 def cerrar_caja_view(request):
-    """Cerrar una caja y todas las registradoras activas"""
+    """
+    Cerrar la única caja del sistema y todas las registradoras activas.
+    
+    IMPORTANTE: Esta función NO elimina ningún dato del historial:
+    - Las ventas se mantienen intactas
+    - Los gastos e ingresos se mantienen intactos
+    - Los movimientos de caja se mantienen intactos
+    - Solo se actualiza el estado de la caja (fecha_cierre y monto_final)
+    
+    El historial completo permanece disponible para consulta en cualquier momento.
+    """
     if request.method == 'POST':
-        # Verificar si hay caja abierta del día actual
-        from datetime import date
-        hoy = date.today()
+        # Obtener la única caja del sistema
+        caja_principal = Caja.objects.filter(numero=1).first()
+        if not caja_principal:
+            messages.error(request, 'No existe la Caja Principal')
+            return redirect('pos:caja')
+        
+        # Buscar la única caja del sistema
         caja_abierta = CajaUsuario.objects.filter(
-            usuario=request.user,
-            fecha_cierre__isnull=True,
-            fecha_apertura__date=hoy
+            caja=caja_principal,
+            fecha_cierre__isnull=True
         ).first()
         
         if caja_abierta:
@@ -1267,6 +1554,7 @@ def cerrar_caja_view(request):
             dinero_retirar = int(float(request.POST.get('dinero_retirar', 0)))
             
             # Si hay dinero a retirar, registrarlo como un gasto antes de cerrar
+            # Este gasto se agrega al historial y NO se elimina
             if dinero_retirar > 0:
                 from .models import GastoCaja
                 GastoCaja.objects.create(
@@ -1277,7 +1565,8 @@ def cerrar_caja_view(request):
                     caja_usuario=caja_abierta
                 )
             
-            # Cerrar la caja
+            # IMPORTANTE: Solo actualizar el estado de la caja (fecha_cierre y monto_final)
+            # NO se eliminan ventas, gastos, ingresos ni ningún otro dato del historial
             caja_abierta.fecha_cierre = timezone.now()
             caja_abierta.monto_final = monto_final
             caja_abierta.save()
@@ -1305,7 +1594,7 @@ def cerrar_caja_view(request):
             
             messages.success(request, mensaje)
         else:
-            messages.warning(request, 'No tienes una caja abierta para hoy')
+            messages.warning(request, 'No hay una caja abierta')
     
     return redirect('pos:caja')
 
@@ -1313,19 +1602,30 @@ def cerrar_caja_view(request):
 @login_required
 @requiere_rol('Administradores', 'Cajeros')
 def registrar_gasto_view(request):
-    """Registrar un gasto en la caja"""
+    """Registrar un gasto en la caja única global"""
     if request.method == 'POST':
-        # Verificar si hay caja abierta del día actual
-        from datetime import date
-        hoy = date.today()
+        # Verificar si hay caja abierta (caja única global)
+        # No filtrar por fecha ya que solo puede haber una caja abierta
         caja_abierta = CajaUsuario.objects.filter(
-            usuario=request.user,
-            fecha_cierre__isnull=True,
-            fecha_apertura__date=hoy
-        ).first()
+            fecha_cierre__isnull=True
+        ).order_by('-fecha_apertura').first()
         
         if not caja_abierta:
-            messages.error(request, 'No tienes una caja abierta para hoy. Debes abrir una caja antes de registrar gastos.')
+            messages.error(request, 'No hay una caja abierta para hoy. Debes abrir una caja antes de registrar gastos.')
+            return redirect('pos:caja')
+        
+        # Asegurar que se use la Caja Principal
+        caja_principal = Caja.objects.filter(numero=1).first()
+        if not caja_principal:
+            caja_principal = Caja.objects.create(
+                numero=1,
+                nombre='Caja Principal',
+                activa=True
+            )
+        
+        # Verificar que la caja abierta pertenezca a la Caja Principal
+        if caja_abierta.caja != caja_principal:
+            messages.error(request, 'La caja abierta no pertenece a la Caja Principal.')
             return redirect('pos:caja')
         
         try:
@@ -1361,19 +1661,30 @@ def registrar_gasto_view(request):
 @login_required
 @requiere_rol('Administradores', 'Cajeros')
 def registrar_ingreso_view(request):
-    """Registrar una entrada de dinero en la caja"""
+    """Registrar una entrada de dinero en la caja única global"""
     if request.method == 'POST':
-        # Verificar si hay caja abierta del día actual
-        from datetime import date
-        hoy = date.today()
+        # Verificar si hay caja abierta (caja única global)
+        # No filtrar por fecha ya que solo puede haber una caja abierta
         caja_abierta = CajaUsuario.objects.filter(
-            usuario=request.user,
-            fecha_cierre__isnull=True,
-            fecha_apertura__date=hoy
-        ).first()
+            fecha_cierre__isnull=True
+        ).order_by('-fecha_apertura').first()
         
         if not caja_abierta:
-            messages.error(request, 'No tienes una caja abierta para hoy. Debes abrir una caja antes de registrar ingresos.')
+            messages.error(request, 'No hay una caja abierta para hoy. Debes abrir una caja antes de registrar ingresos.')
+            return redirect('pos:caja')
+        
+        # Asegurar que se use la Caja Principal
+        caja_principal = Caja.objects.filter(numero=1).first()
+        if not caja_principal:
+            caja_principal = Caja.objects.create(
+                numero=1,
+                nombre='Caja Principal',
+                activa=True
+            )
+        
+        # Verificar que la caja abierta pertenezca a la Caja Principal
+        if caja_abierta.caja != caja_principal:
+            messages.error(request, 'La caja abierta no pertenece a la Caja Principal.')
             return redirect('pos:caja')
         
         try:
@@ -1525,31 +1836,26 @@ def marketing_view(request):
     else:
         fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
     
-    # Obtener ventas en el rango de fechas (SOLO NO ANULADAS)
-    ventas = Venta.objects.filter(
+    # Obtener TODAS las ventas (incluyendo anuladas) para calcular total bruto
+    ventas_todas = Venta.objects.filter(
         fecha__date__gte=fecha_desde,
         fecha__date__lte=fecha_hasta,
         completada=True,
-        anulada=False,  # IMPORTANTE: Excluir ventas anuladas del ranking
         vendedor__isnull=False
     )
     
-    # Obtener también ventas anuladas para estadísticas
-    ventas_anuladas = Venta.objects.filter(
-        fecha__date__gte=fecha_desde,
-        fecha__date__lte=fecha_hasta,
-        completada=True,
-        anulada=True,  # Solo ventas anuladas
-        vendedor__isnull=False
-    )
+    # Obtener ventas NO anuladas para cantidad y promedio
+    ventas = ventas_todas.filter(anulada=False)
     
-    # Calcular ranking por vendedor (SOLO VENTAS NO ANULADAS)
-    # IMPORTANTE: Ordenar por total_ventas (dinero vendido), NO por cantidad de items
-    ranking_vendedores = ventas.values('vendedor').annotate(
-        total_ventas=Sum('total'),  # Total de dinero vendido
-        cantidad_ventas=Count('id'),  # Cantidad de ventas (solo informativo)
-        promedio_venta=Avg('total')
-    ).order_by('-total_ventas')  # Ordenar por dinero vendido (descendente)
+    # Obtener ventas anuladas para restar
+    ventas_anuladas = ventas_todas.filter(anulada=True)
+    
+    # Calcular ranking por vendedor (TODAS LAS VENTAS, incluyendo anuladas)
+    # Esto nos da el total bruto de cada vendedor
+    ranking_vendedores_bruto = ventas_todas.values('vendedor').annotate(
+        total_ventas_bruto=Sum('total'),  # Total bruto (incluye anuladas)
+        cantidad_ventas_total=Count('id')
+    )
     
     # Calcular estadísticas de anulaciones por vendedor
     anulaciones_por_vendedor = ventas_anuladas.values('vendedor').annotate(
@@ -1557,12 +1863,19 @@ def marketing_view(request):
         cantidad_anuladas=Count('id')
     )
     
-    # Crear diccionario de anulaciones para fácil acceso
+    # Calcular estadísticas de ventas válidas por vendedor (para cantidad y promedio)
+    ventas_validas_por_vendedor = ventas.values('vendedor').annotate(
+        cantidad_ventas=Count('id'),
+        promedio_venta=Avg('total')
+    )
+    
+    # Crear diccionarios para fácil acceso
     anulaciones_dict = {item['vendedor']: item for item in anulaciones_por_vendedor}
+    ventas_validas_dict = {item['vendedor']: item for item in ventas_validas_por_vendedor}
     
     # Enriquecer con información del usuario y estadísticas de anulaciones
     ranking_completo = []
-    for i, item in enumerate(ranking_vendedores, 1):
+    for item in ranking_vendedores_bruto:
         try:
             vendedor = User.objects.get(id=item['vendedor'])
             # Obtener estadísticas de anulaciones para este vendedor
@@ -1570,28 +1883,51 @@ def marketing_view(request):
             total_anuladas = anulaciones_vendedor.get('total_anuladas', 0) or 0
             cantidad_anuladas = anulaciones_vendedor.get('cantidad_anuladas', 0) or 0
             
+            # Obtener estadísticas de ventas válidas
+            ventas_validas_vendedor = ventas_validas_dict.get(item['vendedor'], {})
+            cantidad_ventas = ventas_validas_vendedor.get('cantidad_ventas', 0) or 0
+            promedio_venta = ventas_validas_vendedor.get('promedio_venta', 0) or 0
+            
+            # Calcular total neto (ventas brutas - anulaciones)
+            total_ventas_bruto = item['total_ventas_bruto'] or 0
+            total_anuladas_decimal = int(total_anuladas)
+            total_ventas_neto = total_ventas_bruto - total_anuladas_decimal
+            
             ranking_completo.append({
-                'posicion': i,
                 'vendedor': vendedor,
                 'nombre_completo': vendedor.get_full_name() or vendedor.username,
                 'username': vendedor.username,
-                'total_ventas': item['total_ventas'] or 0,
-                'cantidad_ventas': item['cantidad_ventas'] or 0,
-                'promedio_venta': item['promedio_venta'] or 0,
-                'total_anuladas': int(total_anuladas),
+                'total_ventas': total_ventas_neto,  # Total neto después de restar anulaciones
+                'total_ventas_bruto': total_ventas_bruto,  # Total bruto (sin restar anulaciones)
+                'cantidad_ventas': cantidad_ventas,
+                'promedio_venta': promedio_venta,
+                'total_anuladas': total_anuladas_decimal,
                 'cantidad_anuladas': cantidad_anuladas,
             })
         except User.DoesNotExist:
             continue
     
-    # Estadísticas generales (SOLO VENTAS NO ANULADAS)
-    total_general = ventas.aggregate(total=Sum('total'))['total'] or 0
+    # Estadísticas generales
+    # Total bruto (todas las ventas, incluyendo anuladas)
+    total_general_bruto = ventas_todas.aggregate(total=Sum('total'))['total'] or 0
+    # Cantidad de ventas válidas (no anuladas)
     cantidad_general = ventas.count()
-    promedio_general = total_general / cantidad_general if cantidad_general > 0 else 0
     
     # Estadísticas de anulaciones generales
     total_anuladas_general = ventas_anuladas.aggregate(total=Sum('total'))['total'] or 0
     cantidad_anuladas_general = ventas_anuladas.count()
+    
+    # Calcular total neto general (ventas brutas - anulaciones)
+    total_anuladas_general_decimal = int(total_anuladas_general)
+    total_general = total_general_bruto - total_anuladas_general_decimal
+    promedio_general = total_general / cantidad_general if cantidad_general > 0 else 0
+    
+    # Reordenar ranking por total_ventas neto (después de restar anulaciones)
+    ranking_completo = sorted(ranking_completo, key=lambda x: x['total_ventas'], reverse=True)
+    
+    # Actualizar posiciones después de reordenar
+    for i, item in enumerate(ranking_completo, 1):
+        item['posicion'] = i
     
     # Top vendedor
     top_vendedor = ranking_completo[0] if ranking_completo else None
@@ -1880,14 +2216,11 @@ def procesar_venta_completa_view(request):
     """Procesar venta completa desde el carrito de sesión"""
     if request.method == 'POST':
         try:
-            # Verificar si hay caja abierta del día actual
-            from datetime import date
-            hoy = date.today()
+            # Verificar si hay caja abierta (caja única global)
+            # No filtrar por fecha ya que solo puede haber una caja abierta
             caja_abierta = CajaUsuario.objects.filter(
-                usuario=request.user,
-                fecha_cierre__isnull=True,
-                fecha_apertura__date=hoy
-            ).first()
+                fecha_cierre__isnull=True
+            ).order_by('-fecha_apertura').first()
             
             if not caja_abierta:
                 return JsonResponse({

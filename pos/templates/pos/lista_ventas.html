@@ -106,7 +106,14 @@
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 {% if user.is_staff %}
-                                <button type="button" class="btn btn-sm btn-danger-pos" onclick="anularVenta({{ venta.id }})" title="Anular venta" style="padding: 0.25rem 0.5rem;">
+                                <button type="button" 
+                                        class="btn btn-sm btn-danger-pos" 
+                                        onclick="anularVenta({{ venta.id }}, '{{ venta.metodo_pago }}', {{ venta.monto_recibido|default:0 }})" 
+                                        title="Anular venta" 
+                                        style="padding: 0.25rem 0.5rem;"
+                                        data-venta-id="{{ venta.id }}"
+                                        data-metodo-pago="{{ venta.metodo_pago }}"
+                                        data-monto-recibido="{{ venta.monto_recibido|default:0 }}">
                                     <i class="bi bi-x-circle"></i>
                                 </button>
                                 {% endif %}
@@ -144,6 +151,15 @@
                         <label class="form-label">Motivo de anulación:</label>
                         <textarea class="form-control" name="motivo" rows="3" required></textarea>
                     </div>
+                    <div class="mb-3" id="accionDineroContainer" style="display: none;">
+                        <label class="form-label">¿Qué hacer con el dinero recibido?</label>
+                        <select class="form-control" name="accion_dinero" id="accionDineroSelect">
+                            <option value="devolver">Devolver al cliente (resta de la caja)</option>
+                            <option value="mantener">Mantener en caja (no resta)</option>
+                        </select>
+                        <small class="text-muted" id="montoRecibidoInfo"></small>
+                    </div>
+                    <input type="hidden" name="accion_dinero" value="mantener" id="accionDineroHidden">
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -169,10 +185,37 @@ function imprimirTicket(ventaId) {
     }
 }
 
-function anularVenta(ventaId) {
+function anularVenta(ventaId, metodoPago, montoRecibido) {
     const modal = new bootstrap.Modal(document.getElementById('modalAnular'));
     const form = document.getElementById('formAnular');
     form.action = `/ventas/${ventaId}/anular/`;
+    
+    const accionDineroContainer = document.getElementById('accionDineroContainer');
+    const accionDineroSelect = document.getElementById('accionDineroSelect');
+    const accionDineroHidden = document.getElementById('accionDineroHidden');
+    const montoRecibidoInfo = document.getElementById('montoRecibidoInfo');
+    
+    // Mostrar opciones de dinero solo si la venta fue en efectivo y tiene monto recibido
+    if (metodoPago === 'efectivo' && montoRecibido && parseFloat(montoRecibido) > 0) {
+        accionDineroContainer.style.display = 'block';
+        accionDineroSelect.name = 'accion_dinero';
+        accionDineroSelect.required = true;
+        if (accionDineroHidden.parentNode) {
+            accionDineroHidden.remove();
+        }
+        // Formatear monto con separadores de miles
+        const montoFormateado = parseFloat(montoRecibido).toLocaleString('es-CO', {style: 'currency', currency: 'COP', minimumFractionDigits: 0});
+        montoRecibidoInfo.textContent = `Monto recibido: ${montoFormateado}`;
+    } else {
+        accionDineroContainer.style.display = 'none';
+        accionDineroSelect.removeAttribute('name');
+        accionDineroSelect.removeAttribute('required');
+        if (!accionDineroHidden.parentNode) {
+            form.querySelector('.modal-body').appendChild(accionDineroHidden);
+        }
+        accionDineroHidden.name = 'accion_dinero';
+    }
+    
     modal.show();
 }
 
