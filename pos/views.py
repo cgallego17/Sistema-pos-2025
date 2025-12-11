@@ -2280,25 +2280,33 @@ def marketing_view(request):
 def formulario_clientes_view(request):
     """Vista de formulario de clientes (pública)"""
     if request.method == 'POST':
-        nombre = request.POST.get('nombre')
-        email = request.POST.get('email')
-        telefono = request.POST.get('telefono')
+        nombre = request.POST.get('nombre', '').strip()
+        email = request.POST.get('email', '').strip()
+        telefono = request.POST.get('telefono', '').strip()
         tipo_interes = request.POST.get('tipo_interes', 'mayorista')
-        empresa = request.POST.get('empresa')
-        mensaje = request.POST.get('mensaje')
+        empresa = request.POST.get('empresa', '').strip()
+        mensaje = request.POST.get('mensaje', '').strip()
         
-        ClientePotencial.objects.create(
-            nombre=nombre,
-            email=email,
-            telefono=telefono,
-            tipo_interes=tipo_interes,
-            empresa=empresa,
-            mensaje=mensaje,
-            estado='nuevo'
-        )
+        # Validación básica
+        if not nombre or not email:
+            messages.error(request, 'Por favor completa los campos requeridos (Nombre y Email)')
+            return render(request, 'pos/formulario_clientes.html')
         
-        messages.success(request, 'Cliente registrado exitosamente')
-        return redirect('pos:formulario_clientes')
+        try:
+            ClientePotencial.objects.create(
+                nombre=nombre,
+                email=email,
+                telefono=telefono or None,
+                tipo_interes=tipo_interes,
+                empresa=empresa or None,
+                mensaje=mensaje or None,
+                estado='nuevo'
+            )
+            messages.success(request, 'Cliente registrado exitosamente. Nos pondremos en contacto contigo pronto.')
+            return redirect('pos:formulario_clientes')
+        except Exception as e:
+            messages.error(request, 'Error al registrar el cliente. Por favor intenta nuevamente.')
+            return render(request, 'pos/formulario_clientes.html')
     
     return render(request, 'pos/formulario_clientes.html')
 
