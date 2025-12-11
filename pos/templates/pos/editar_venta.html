@@ -1,140 +1,375 @@
 {% extends 'pos/base.html' %}
 {% load humanize %}
 
-{% block title %}Editar Venta #{{ venta.id }} - Sistema POS{% endblock %}
+{% block title %}Editar Venta #{{ venta.id }} - MegaPos By Megadominio.co{% endblock %}
 
 {% block content %}
 <div class="page-container">
     <div class="page-header">
-        <h1><i class="bi bi-pencil"></i> Editar Venta #{{ venta.id }}</h1>
+        <div>
+            <h1><i class="bi bi-pencil"></i> Editar Venta #{{ venta.id }}</h1>
+            <p style="color: #64748b; margin: 0.5rem 0 0 0;">
+                <i class="bi bi-calendar"></i> {{ venta.fecha|date:"d/m/Y H:i" }}
+                {% if venta.vendedor %}
+                | <i class="bi bi-person"></i> Vendedor: {{ venta.vendedor.get_full_name|default:venta.vendedor.username }}
+                {% endif %}
+                {% if venta.anulada %}
+                | <span class="badge badge-danger-modern">ANULADA</span>
+                {% endif %}
+            </p>
+        </div>
         <a href="{% url 'pos:detalle_venta' venta.id %}" class="btn btn-secondary">
             <i class="bi bi-arrow-left"></i> Volver
         </a>
     </div>
 
+    {% if venta.anulada %}
+    <div class="alert alert-danger" style="background: #fee2e2; border-color: #fca5a5; color: #991b1b; margin-bottom: 1.5rem;">
+        <i class="bi bi-exclamation-triangle"></i> <strong>Esta venta está anulada y no puede ser editada.</strong>
+    </div>
+    {% else %}
+    
     <div class="row">
         <div class="col-md-8">
             <div class="card-modern">
                 <div class="card-header">
-                    <h5 class="mb-0">Items de la Venta</h5>
+                    <h5 class="mb-0"><i class="bi bi-cart"></i> Items de la Venta</h5>
                 </div>
-            <div class="card-body">
-                <form method="post" id="form-editar-venta">
-                    {% csrf_token %}
-                    <div class="table-responsive">
-                        <table class="table-modern table" id="items-table">
-                            <thead>
-                                <tr>
-                                    <th>Producto</th>
-                                    <th>Precio Unit.</th>
-                                    <th>Cantidad</th>
-                                    <th>Subtotal</th>
-                                    <th>Acciones</th>
-                                </tr>
-                            </thead>
-                        <tbody>
-                            {% for item in venta.items.all %}
-                            <tr data-item-id="{{ item.id }}">
-                                <td>
-                                    <select class="form-select form-select-sm form-control-modern producto-select" name="producto" required>
-                                        <option value="">Seleccionar...</option>
-                                        {% for producto in productos %}
-                                        <option value="{{ producto.id }}" data-precio="{{ producto.precio }}" {% if producto.id == item.producto.id %}selected{% endif %}>
-                                            {{ producto.nombre }}
-                                        </option>
-                                        {% endfor %}
-                                    </select>
-                                    <input type="hidden" class="item-id" value="{{ item.id }}">
-                                </td>
-                                <td>
-                                    <input type="number" class="form-control form-control-sm form-control-modern precio-input" 
-                                           value="{{ item.precio_unitario }}" step="1" min="0" required>
-                                </td>
-                                <td>
-                                    <input type="number" class="form-control form-control-sm form-control-modern cantidad-input" 
-                                           value="{{ item.cantidad }}" min="1" required>
-                                </td>
-                                <td class="subtotal-cell">$<span class="subtotal-value">{{ item.subtotal|intcomma }}</span></td>
-                                <td>
-                                    <button type="button" class="btn btn-sm btn-danger eliminar-item" style="background: #ef4444; border: none; color: white;">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                            <tfoot>
-                                <tr style="background: #f8fafc;">
-                                    <td colspan="3" class="text-end"><strong>TOTAL:</strong></td>
-                                    <td><strong class="text-success fs-4" id="total-venta" style="color: #10b981 !important;">${{ venta.total|intcomma }}</strong></td>
-                                    <td></td>
-                                </tr>
-                            </tfoot>
-                        </table>
+                <div class="card-body">
+                    <!-- Búsqueda de productos -->
+                    <div class="mb-3">
+                        <label class="form-label-modern"><i class="bi bi-search"></i> Buscar Producto</label>
+                        <input type="text" class="form-control form-control-modern" id="buscar-producto" 
+                               placeholder="Escribe el nombre, código o código de barras del producto...">
+                        <div id="resultados-busqueda" style="display: none; position: absolute; z-index: 1000; background: white; border: 1px solid #e2e8f0; border-radius: 6px; max-height: 300px; overflow-y: auto; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 2px;"></div>
                     </div>
                     
-                    <button type="button" class="btn btn-primary-pos btn-sm mt-3" id="btn-agregar-item">
-                        <i class="bi bi-plus-circle"></i> Agregar Item
-                    </button>
-                </form>
+                    <form method="post" id="form-editar-venta">
+                        {% csrf_token %}
+                        <div class="table-responsive">
+                            <table class="table-modern table" id="items-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40%;">Producto</th>
+                                        <th style="width: 15%;">Precio Unit.</th>
+                                        <th style="width: 12%;">Cantidad</th>
+                                        <th style="width: 15%;">Subtotal</th>
+                                        <th style="width: 8%;">Stock</th>
+                                        <th style="width: 10%;">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in venta.items.all %}
+                                    <tr data-item-id="{{ item.id }}" data-producto-id="{{ item.producto.id }}">
+                                        <td>
+                                            <div class="autocomplete-wrapper" style="position: relative;">
+                                                <input type="text" class="form-control form-control-sm form-control-modern producto-autocomplete" 
+                                                       value="{{ item.producto.nombre }}" 
+                                                       data-producto-id="{{ item.producto.id }}"
+                                                       data-precio="{{ item.producto.precio }}"
+                                                       data-stock="{{ item.producto.stock }}"
+                                                       placeholder="Buscar producto..." autocomplete="off" required>
+                                                <input type="hidden" class="producto-id-input" name="producto_id" value="{{ item.producto.id }}">
+                                                <div class="autocomplete-dropdown" style="display: none;"></div>
+                                            </div>
+                                            <small class="text-muted" style="font-size: 0.75rem;">{{ item.producto.codigo }}</small>
+                                        </td>
+                                        <td>
+                                            <input type="number" class="form-control form-control-sm form-control-modern precio-input" 
+                                                   value="{{ item.precio_unitario }}" step="1" min="0" required>
+                                        </td>
+                                        <td>
+                                            <input type="number" class="form-control form-control-sm form-control-modern cantidad-input" 
+                                                   value="{{ item.cantidad }}" min="1" required>
+                                            <small class="stock-warning" style="display: none; color: #ef4444; font-size: 0.7rem;"></small>
+                                        </td>
+                                        <td class="subtotal-cell">
+                                            <strong>$<span class="subtotal-value">{{ item.subtotal|intcomma }}</span></strong>
+                                        </td>
+                                        <td>
+                                            <span class="stock-display badge {% if item.producto.stock > 10 %}badge-success-modern{% elif item.producto.stock > 0 %}badge-warning-modern{% else %}badge-danger-modern{% endif %}">
+                                                {{ item.producto.stock }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-danger eliminar-item" 
+                                                    style="background: #ef4444; border: none; color: white;" title="Eliminar item">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);">
+                                        <td colspan="3" class="text-end"><strong style="font-size: 1.1rem;">TOTAL:</strong></td>
+                                        <td colspan="3">
+                                            <strong class="text-success" id="total-venta" style="color: #10b981 !important; font-size: 1.5rem;">
+                                                ${{ venta.total|intcomma }}
+                                            </strong>
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        
+                        <div class="mt-3 d-flex gap-2">
+                            <button type="button" class="btn btn-primary-pos" id="btn-agregar-item">
+                                <i class="bi bi-plus-circle"></i> Agregar Item
+                            </button>
+                            <button type="button" class="btn" style="background: #6c757d; color: white; border: none;" onclick="limpiarTabla()">
+                                <i class="bi bi-x-circle"></i> Limpiar Todo
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
-    
+        
         <div class="col-md-4">
             <div class="card-modern">
                 <div class="card-header">
-                    <h5 class="mb-0">Información de Pago</h5>
+                    <h5 class="mb-0"><i class="bi bi-credit-card"></i> Información de Pago</h5>
                 </div>
-            <div class="card-body">
-                <div class="form-group-modern">
-                    <label class="form-label-modern">Método de Pago:</label>
-                    <select class="form-select form-control-modern" name="metodo_pago" id="metodo-pago">
-                        <option value="efectivo" {% if venta.metodo_pago == 'efectivo' %}selected{% endif %}>Efectivo</option>
-                        <option value="tarjeta" {% if venta.metodo_pago == 'tarjeta' %}selected{% endif %}>Tarjeta</option>
-                        <option value="transferencia" {% if venta.metodo_pago == 'transferencia' %}selected{% endif %}>Transferencia</option>
-                    </select>
+                <div class="card-body">
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Método de Pago *</label>
+                        <select class="form-select form-control-modern" name="metodo_pago" id="metodo-pago" required>
+                            <option value="efectivo" {% if venta.metodo_pago == 'efectivo' %}selected{% endif %}>💵 Efectivo</option>
+                            <option value="tarjeta" {% if venta.metodo_pago == 'tarjeta' %}selected{% endif %}>💳 Tarjeta</option>
+                            <option value="transferencia" {% if venta.metodo_pago == 'transferencia' %}selected{% endif %}>🏦 Transferencia</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group-modern" id="monto-recibido-group" style="display: {% if venta.metodo_pago == 'efectivo' %}block{% else %}none{% endif %};">
+                        <label class="form-label-modern">Monto Recibido</label>
+                        <input type="text" class="form-control form-control-modern" name="monto_recibido" 
+                               id="monto-recibido" value="{% if venta.monto_recibido %}{{ venta.monto_recibido|intcomma }}{% endif %}"
+                               placeholder="0">
+                        <small class="text-muted" style="font-size: 0.8rem;">Ingrese el monto recibido del cliente</small>
+                    </div>
+                    
+                    <div id="cambio-display" style="display: none; margin-top: 1rem; padding: 1rem; background: #d1fae5; border-radius: 6px; border-left: 4px solid #10b981;">
+                        <strong style="color: #059669;">Cambio:</strong>
+                        <div id="cambio-monto" style="font-size: 1.5rem; font-weight: 700; color: #059669;">$0</div>
+                    </div>
+                    
+                    <hr style="margin: 1.5rem 0;">
+                    
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Vendedor</label>
+                        <select class="form-select form-control-modern" name="vendedor_id" id="vendedor-id">
+                            <option value="">Sin vendedor</option>
+                            {% for usuario in usuarios %}
+                            <option value="{{ usuario.id }}" {% if venta.vendedor and venta.vendedor.id == usuario.id %}selected{% endif %}>
+                                {{ usuario.get_full_name|default:usuario.username }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <hr style="margin: 1.5rem 0;">
+                    
+                    <div class="d-grid gap-2">
+                        <button type="button" class="btn btn-primary-pos btn-lg" onclick="guardarCambios()" id="btn-guardar">
+                            <i class="bi bi-save"></i> Guardar Cambios
+                        </button>
+                        <a href="{% url 'pos:detalle_venta' venta.id %}" class="btn" style="background: #6c757d; color: white; border: none;">
+                            <i class="bi bi-x"></i> Cancelar
+                        </a>
+                    </div>
+                    
+                    <div id="mensaje-validacion" style="display: none; margin-top: 1rem; padding: 0.75rem; border-radius: 6px;"></div>
                 </div>
-                
-                <div class="form-group-modern" id="monto-recibido-group" style="display: {% if venta.metodo_pago == 'efectivo' %}block{% else %}none{% endif %};">
-                    <label class="form-label-modern">Monto Recibido:</label>
-                    <input type="text" class="form-control form-control-modern" name="monto_recibido" 
-                           id="monto-recibido" value="{% if venta.monto_recibido %}{{ venta.monto_recibido|intcomma }}{% endif %}">
+            </div>
+            
+            <!-- Resumen de la venta -->
+            <div class="card-modern mt-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> Resumen</h5>
                 </div>
-                
-                <div class="d-grid gap-2">
-                    <button type="button" class="btn btn-primary-pos" onclick="guardarCambios()">
-                        <i class="bi bi-save"></i> Guardar Cambios
-                    </button>
-                    <a href="{% url 'pos:detalle_venta' venta.id %}" class="btn" style="background: #6c757d; color: white; border: none;">
-                        <i class="bi bi-x"></i> Cancelar
-                    </a>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">Fecha:</small><br>
+                        <strong>{{ venta.fecha|date:"d/m/Y H:i" }}</strong>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Usuario:</small><br>
+                        <strong>{{ venta.usuario.get_full_name|default:venta.usuario.username }}</strong>
+                    </div>
+                    {% if venta.vendedor %}
+                    <div class="mb-2">
+                        <small class="text-muted">Vendedor:</small><br>
+                        <strong>{{ venta.vendedor.get_full_name|default:venta.vendedor.username }}</strong>
+                    </div>
+                    {% endif %}
+                    <div class="mb-2">
+                        <small class="text-muted">Items:</small><br>
+                        <strong id="resumen-items">{{ venta.items.count }}</strong>
+                    </div>
                 </div>
             </div>
         </div>
-        </div>
     </div>
+    {% endif %}
 </div>
 
+{% block extra_css %}
+<style>
+    .autocomplete-wrapper {
+        position: relative;
+    }
+    
+    .autocomplete-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 1000;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-top: 2px;
+    }
+    
+    .autocomplete-item {
+        padding: 0.5rem;
+        cursor: pointer;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    
+    .autocomplete-item:hover {
+        background: #f8fafc;
+    }
+    
+    .autocomplete-item:last-child {
+        border-bottom: none;
+    }
+    
+    .stock-warning {
+        display: block !important;
+    }
+    
+    #resultados-busqueda {
+        position: relative;
+    }
+</style>
+{% endblock %}
+
 <script>
-// Cargar productos para select
+// Cargar productos para búsqueda
 const productos = [
     {% for producto in productos %}
-    {id: {{ producto.id }}, nombre: "{{ producto.nombre|escapejs }}", precio: {{ producto.precio }}, stock: {{ producto.stock }}},
+    {id: {{ producto.id }}, nombre: "{{ producto.nombre|escapejs }}", codigo: "{{ producto.codigo|escapejs }}", precio: {{ producto.precio }}, stock: {{ producto.stock }}{% if producto.codigo_barras %}, codigo_barras: "{{ producto.codigo_barras|escapejs }}"{% endif %}},
     {% endfor %}
 ];
 
-// Event listener para cambio de producto
-document.querySelectorAll('.producto-select').forEach(select => {
-    select.addEventListener('change', function() {
-        const option = this.options[this.selectedIndex];
-        if (option.dataset.precio) {
-            const row = this.closest('tr');
-            row.querySelector('.precio-input').value = option.dataset.precio;
-            calcularSubtotal(row);
+// Búsqueda de productos
+let timeoutBusqueda;
+document.getElementById('buscar-producto').addEventListener('input', function(e) {
+    clearTimeout(timeoutBusqueda);
+    const query = this.value.trim().toLowerCase();
+    const resultados = document.getElementById('resultados-busqueda');
+    
+    if (query.length < 2) {
+        resultados.style.display = 'none';
+        return;
+    }
+    
+    timeoutBusqueda = setTimeout(() => {
+        const matches = productos.filter(p => 
+            p.nombre.toLowerCase().includes(query) ||
+            p.codigo.toLowerCase().includes(query) ||
+            (p.codigo_barras && p.codigo_barras.toLowerCase().includes(query))
+        ).slice(0, 10);
+        
+        if (matches.length > 0) {
+            resultados.innerHTML = matches.map(p => `
+                <div class="autocomplete-item" onclick="agregarProductoDesdeBusqueda(${p.id})">
+                    <strong>${p.nombre}</strong><br>
+                    <small class="text-muted">Código: ${p.codigo} | Precio: $${p.precio.toLocaleString('es-CO')} | Stock: ${p.stock}</small>
+                </div>
+            `).join('');
+            resultados.style.display = 'block';
+        } else {
+            resultados.innerHTML = '<div class="autocomplete-item" style="color: #64748b;">No se encontraron productos</div>';
+            resultados.style.display = 'block';
+        }
+    }, 300);
+});
+
+// Cerrar resultados al hacer clic fuera
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#buscar-producto') && !e.target.closest('#resultados-busqueda')) {
+        document.getElementById('resultados-busqueda').style.display = 'none';
+    }
+});
+
+function agregarProductoDesdeBusqueda(productoId) {
+    const producto = productos.find(p => p.id === productoId);
+    if (producto) {
+        agregarItem(producto);
+        document.getElementById('buscar-producto').value = '';
+        document.getElementById('resultados-busqueda').style.display = 'none';
+    }
+}
+
+// Autocomplete para productos en la tabla
+document.querySelectorAll('.producto-autocomplete').forEach(input => {
+    input.addEventListener('input', function(e) {
+        const query = this.value.trim().toLowerCase();
+        const dropdown = this.nextElementSibling.nextElementSibling;
+        
+        if (query.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        const matches = productos.filter(p => 
+            p.nombre.toLowerCase().includes(query) ||
+            p.codigo.toLowerCase().includes(query)
+        ).slice(0, 5);
+        
+        if (matches.length > 0) {
+            dropdown.innerHTML = matches.map(p => `
+                <div class="autocomplete-item" onclick="seleccionarProducto(this, ${p.id}, '${p.nombre.replace(/'/g, "\\'")}', ${p.precio}, ${p.stock})">
+                    <strong>${p.nombre}</strong><br>
+                    <small class="text-muted">$${p.precio.toLocaleString('es-CO')} | Stock: ${p.stock}</small>
+                </div>
+            `).join('');
+            dropdown.style.display = 'block';
+        } else {
+            dropdown.style.display = 'none';
         }
     });
 });
+
+function seleccionarProducto(element, productoId, nombre, precio, stock) {
+    const row = element.closest('tr');
+    const input = row.querySelector('.producto-autocomplete');
+    const hiddenInput = row.querySelector('.producto-id-input');
+    const precioInput = row.querySelector('.precio-input');
+    const stockDisplay = row.querySelector('.stock-display');
+    const stockWarning = row.querySelector('.stock-warning');
+    
+    input.value = nombre;
+    hiddenInput.value = productoId;
+    precioInput.value = precio;
+    stockDisplay.textContent = stock;
+    stockDisplay.className = `stock-display badge ${stock > 10 ? 'badge-success-modern' : stock > 0 ? 'badge-warning-modern' : 'badge-danger-modern'}`;
+    
+    row.setAttribute('data-producto-id', productoId);
+    input.setAttribute('data-producto-id', productoId);
+    input.setAttribute('data-precio', precio);
+    input.setAttribute('data-stock', stock);
+    
+    element.closest('.autocomplete-dropdown').style.display = 'none';
+    calcularSubtotal(row);
+    validarStock(row);
+}
 
 function calcularSubtotal(row) {
     const precio = parseFloat(row.querySelector('.precio-input').value) || 0;
@@ -142,6 +377,7 @@ function calcularSubtotal(row) {
     const subtotal = precio * cantidad;
     row.querySelector('.subtotal-value').textContent = subtotal.toLocaleString('es-CO', {minimumFractionDigits: 0});
     calcularTotal();
+    calcularCambio();
 }
 
 function calcularTotal() {
@@ -151,12 +387,74 @@ function calcularTotal() {
         total += subtotal;
     });
     document.getElementById('total-venta').textContent = '$' + total.toLocaleString('es-CO', {minimumFractionDigits: 0});
+    document.getElementById('resumen-items').textContent = document.querySelectorAll('#items-table tbody tr').length;
+}
+
+function calcularCambio() {
+    const metodoPago = document.getElementById('metodo-pago').value;
+    const montoRecibidoInput = document.getElementById('monto-recibido');
+    const montoRecibido = parseFloat(montoRecibidoInput.value.replace(/[^0-9]/g, '')) || 0;
+    const total = parseFloat(document.getElementById('total-venta').textContent.replace(/[^0-9]/g, '')) || 0;
+    const cambioDisplay = document.getElementById('cambio-display');
+    const cambioMonto = document.getElementById('cambio-monto');
+    
+    // Limpiar estilo de error previo
+    montoRecibidoInput.style.borderColor = '';
+    
+    if (metodoPago === 'efectivo') {
+        if (montoRecibido > 0) {
+            const cambio = montoRecibido - total;
+            if (cambio >= 0) {
+                cambioMonto.textContent = '$' + cambio.toLocaleString('es-CO', {minimumFractionDigits: 0});
+                cambioDisplay.style.display = 'block';
+                cambioDisplay.style.background = '#d1fae5';
+                cambioMonto.style.color = '#059669';
+                montoRecibidoInput.style.borderColor = '#10b981';
+            } else {
+                const falta = Math.abs(cambio);
+                cambioMonto.textContent = '$' + falta.toLocaleString('es-CO', {minimumFractionDigits: 0}) + ' (FALTA)';
+                cambioDisplay.style.display = 'block';
+                cambioDisplay.style.background = '#fee2e2';
+                cambioMonto.style.color = '#dc2626';
+                montoRecibidoInput.style.borderColor = '#ef4444';
+            }
+        } else if (total > 0) {
+            // Mostrar advertencia si hay total pero no monto recibido
+            cambioMonto.textContent = 'Ingrese monto recibido';
+            cambioDisplay.style.display = 'block';
+            cambioDisplay.style.background = '#fef3c7';
+            cambioMonto.style.color = '#d97706';
+            montoRecibidoInput.style.borderColor = '#f59e0b';
+        } else {
+            cambioDisplay.style.display = 'none';
+        }
+    } else {
+        cambioDisplay.style.display = 'none';
+        montoRecibidoInput.style.borderColor = '';
+    }
+}
+
+function validarStock(row) {
+    const cantidad = parseInt(row.querySelector('.cantidad-input').value) || 0;
+    const stock = parseInt(row.querySelector('.producto-autocomplete').getAttribute('data-stock')) || 0;
+    const stockWarning = row.querySelector('.stock-warning');
+    
+    if (cantidad > stock) {
+        stockWarning.textContent = `Stock insuficiente (disponible: ${stock})`;
+        stockWarning.style.display = 'block';
+        row.style.background = '#fee2e2';
+    } else {
+        stockWarning.style.display = 'none';
+        row.style.background = '';
+    }
 }
 
 // Event listeners
 document.querySelectorAll('.precio-input, .cantidad-input').forEach(input => {
     input.addEventListener('input', function() {
-        calcularSubtotal(this.closest('tr'));
+        const row = this.closest('tr');
+        calcularSubtotal(row);
+        validarStock(row);
     });
 });
 
@@ -165,60 +463,7 @@ document.querySelectorAll('.eliminar-item').forEach(btn => {
         if (confirm('¿Eliminar este item?')) {
             this.closest('tr').remove();
             calcularTotal();
-        }
-    });
-});
-
-// Agregar item
-document.getElementById('btn-agregar-item').addEventListener('click', function() {
-    const tbody = document.querySelector('#items-table tbody');
-    const newRow = document.createElement('tr');
-    newRow.innerHTML = `
-        <td>
-            <select class="form-select form-select-sm form-control-modern producto-select" name="producto" required>
-                <option value="">Seleccionar...</option>
-                ${productos.map(p => `<option value="${p.id}" data-precio="${p.precio}">${p.nombre}</option>`).join('')}
-            </select>
-            <input type="hidden" class="item-id" value="">
-        </td>
-        <td>
-            <input type="number" class="form-control form-control-sm form-control-modern precio-input" 
-                   value="0" step="1" min="0" required>
-        </td>
-        <td>
-            <input type="number" class="form-control form-control-sm form-control-modern cantidad-input" 
-                   value="1" min="1" required>
-        </td>
-        <td class="subtotal-cell">$<span class="subtotal-value">0</span></td>
-        <td>
-            <button type="button" class="btn btn-sm btn-danger eliminar-item" style="background: #ef4444; border: none; color: white;">
-                <i class="bi bi-trash"></i>
-            </button>
-        </td>
-    `;
-    tbody.appendChild(newRow);
-    
-    // Event listeners para el nuevo row
-    newRow.querySelector('.producto-select').addEventListener('change', function() {
-        const option = this.options[this.selectedIndex];
-        if (option.dataset.precio) {
-            newRow.querySelector('.precio-input').value = option.dataset.precio;
-            calcularSubtotal(newRow);
-        }
-    });
-    
-    newRow.querySelector('.precio-input').addEventListener('input', function() {
-        calcularSubtotal(newRow);
-    });
-    
-    newRow.querySelector('.cantidad-input').addEventListener('input', function() {
-        calcularSubtotal(newRow);
-    });
-    
-    newRow.querySelector('.eliminar-item').addEventListener('click', function() {
-        if (confirm('¿Eliminar este item?')) {
-            newRow.remove();
-            calcularTotal();
+            calcularCambio();
         }
     });
 });
@@ -230,51 +475,332 @@ document.getElementById('metodo-pago').addEventListener('change', function() {
         montoGroup.style.display = 'block';
     } else {
         montoGroup.style.display = 'none';
+        document.getElementById('cambio-display').style.display = 'none';
     }
 });
 
+document.getElementById('monto-recibido').addEventListener('input', function() {
+    // Limpiar caracteres no numéricos excepto puntos y comas
+    this.value = this.value.replace(/[^0-9.,]/g, '');
+    calcularCambio();
+});
+
+// Validar monto recibido al perder el foco
+document.getElementById('monto-recibido').addEventListener('blur', function() {
+    const metodoPago = document.getElementById('metodo-pago').value;
+    if (metodoPago === 'efectivo') {
+        const monto = parseFloat(this.value.replace(/[^0-9]/g, '')) || 0;
+        const total = parseFloat(document.getElementById('total-venta').textContent.replace(/[^0-9]/g, '')) || 0;
+        
+        if (monto > 0 && monto < total) {
+            this.style.borderColor = '#ef4444';
+            this.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.1)';
+        } else {
+            this.style.borderColor = '';
+            this.style.boxShadow = '';
+        }
+    }
+});
+
+// Agregar item
+function agregarItem(producto) {
+    const tbody = document.querySelector('#items-table tbody');
+    const newRow = document.createElement('tr');
+    newRow.setAttribute('data-producto-id', producto.id);
+    newRow.innerHTML = `
+        <td>
+            <div class="autocomplete-wrapper" style="position: relative;">
+                <input type="text" class="form-control form-control-sm form-control-modern producto-autocomplete" 
+                       value="${producto.nombre}" 
+                       data-producto-id="${producto.id}"
+                       data-precio="${producto.precio}"
+                       data-stock="${producto.stock}"
+                       placeholder="Buscar producto..." autocomplete="off" required>
+                <input type="hidden" class="producto-id-input" name="producto_id" value="${producto.id}">
+                <div class="autocomplete-dropdown" style="display: none;"></div>
+            </div>
+            <small class="text-muted" style="font-size: 0.75rem;">${producto.codigo}</small>
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm form-control-modern precio-input" 
+                   value="${producto.precio}" step="1" min="0" required>
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm form-control-modern cantidad-input" 
+                   value="1" min="1" required>
+            <small class="stock-warning" style="display: none; color: #ef4444; font-size: 0.7rem;"></small>
+        </td>
+        <td class="subtotal-cell">
+            <strong>$<span class="subtotal-value">${producto.precio.toLocaleString('es-CO')}</span></strong>
+        </td>
+        <td>
+            <span class="stock-display badge ${producto.stock > 10 ? 'badge-success-modern' : producto.stock > 0 ? 'badge-warning-modern' : 'badge-danger-modern'}">
+                ${producto.stock}
+            </span>
+        </td>
+        <td>
+            <button type="button" class="btn btn-sm btn-danger eliminar-item" 
+                    style="background: #ef4444; border: none; color: white;" title="Eliminar item">
+                <i class="bi bi-trash"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(newRow);
+    
+    // Event listeners para el nuevo row
+    setupRowEvents(newRow);
+    calcularTotal();
+    calcularCambio();
+}
+
+function setupRowEvents(row) {
+    row.querySelector('.producto-autocomplete').addEventListener('input', function(e) {
+        const query = this.value.trim().toLowerCase();
+        const dropdown = this.nextElementSibling.nextElementSibling;
+        
+        if (query.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        const matches = productos.filter(p => 
+            p.nombre.toLowerCase().includes(query) ||
+            p.codigo.toLowerCase().includes(query)
+        ).slice(0, 5);
+        
+        if (matches.length > 0) {
+            dropdown.innerHTML = matches.map(p => `
+                <div class="autocomplete-item" onclick="seleccionarProducto(this, ${p.id}, '${p.nombre.replace(/'/g, "\\'")}', ${p.precio}, ${p.stock})">
+                    <strong>${p.nombre}</strong><br>
+                    <small class="text-muted">$${p.precio.toLocaleString('es-CO')} | Stock: ${p.stock}</small>
+                </div>
+            `).join('');
+            dropdown.style.display = 'block';
+        } else {
+            dropdown.style.display = 'none';
+        }
+    });
+    
+    row.querySelector('.precio-input').addEventListener('input', function() {
+        calcularSubtotal(row);
+    });
+    
+    row.querySelector('.cantidad-input').addEventListener('input', function() {
+        calcularSubtotal(row);
+        validarStock(row);
+    });
+    
+    row.querySelector('.eliminar-item').addEventListener('click', function() {
+        if (confirm('¿Eliminar este item?')) {
+            row.remove();
+            calcularTotal();
+            calcularCambio();
+        }
+    });
+}
+
+document.getElementById('btn-agregar-item').addEventListener('click', function() {
+    if (productos.length > 0) {
+        agregarItem(productos[0]);
+    }
+});
+
+function limpiarTabla() {
+    if (confirm('¿Está seguro de que desea eliminar todos los items? Esta acción no se puede deshacer.')) {
+        document.querySelectorAll('#items-table tbody tr').forEach(row => row.remove());
+        calcularTotal();
+        calcularCambio();
+    }
+}
+
 function guardarCambios() {
+    const btnGuardar = document.getElementById('btn-guardar');
+    const mensajeValidacion = document.getElementById('mensaje-validacion');
+    
+    // Limpiar estilos de error previos
+    document.querySelectorAll('#items-table tbody tr').forEach(row => {
+        row.style.background = '';
+    });
+    
+    // Validación 1: Debe haber al menos un item
+    const rows = document.querySelectorAll('#items-table tbody tr');
+    if (rows.length === 0) {
+        mensajeValidacion.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <strong>Error:</strong> Debe agregar al menos un item a la venta.</div>';
+        mensajeValidacion.style.display = 'block';
+        mensajeValidacion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+    }
+    
+    // Validación 2: Validar cada item
+    let hayErrores = false;
+    let erroresItems = [];
+    let totalVenta = 0;
+    
+    rows.forEach((row, index) => {
+        const productoId = row.querySelector('.producto-id-input')?.value;
+        const productoNombre = row.querySelector('.producto-autocomplete')?.value;
+        const cantidad = parseInt(row.querySelector('.cantidad-input')?.value) || 0;
+        const precio = parseFloat(row.querySelector('.precio-input')?.value) || 0;
+        const stock = parseInt(row.querySelector('.producto-autocomplete')?.getAttribute('data-stock')) || 0;
+        const subtotal = parseFloat(row.querySelector('.subtotal-value')?.textContent.replace(/[^0-9]/g, '')) || 0;
+        
+        // Validar producto seleccionado
+        if (!productoId || !productoNombre || productoNombre.trim() === '') {
+            hayErrores = true;
+            row.style.background = '#fee2e2';
+            erroresItems.push(`Item ${index + 1}: Debe seleccionar un producto`);
+        }
+        
+        // Validar cantidad
+        if (cantidad <= 0) {
+            hayErrores = true;
+            row.style.background = '#fee2e2';
+            erroresItems.push(`Item ${index + 1} (${productoNombre || 'Sin producto'}): La cantidad debe ser mayor a 0`);
+        }
+        
+        // Validar stock
+        if (productoId && cantidad > stock) {
+            hayErrores = true;
+            row.style.background = '#fee2e2';
+            erroresItems.push(`Item ${index + 1} (${productoNombre}): Stock insuficiente. Disponible: ${stock}, Solicitado: ${cantidad}`);
+        }
+        
+        // Validar precio
+        if (precio < 0) {
+            hayErrores = true;
+            row.style.background = '#fee2e2';
+            erroresItems.push(`Item ${index + 1} (${productoNombre || 'Sin producto'}): El precio no puede ser negativo`);
+        }
+        
+        totalVenta += subtotal;
+    });
+    
+    if (hayErrores) {
+        let mensajeError = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <strong>Errores encontrados:</strong><ul style="margin: 0.5rem 0 0 0; padding-left: 1.5rem;">';
+        erroresItems.forEach(error => {
+            mensajeError += `<li>${error}</li>`;
+        });
+        mensajeError += '</ul></div>';
+        mensajeValidacion.innerHTML = mensajeError;
+        mensajeValidacion.style.display = 'block';
+        mensajeValidacion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+    }
+    
+    // Validación 3: Validar método de pago y monto recibido
+    const metodoPago = document.getElementById('metodo-pago').value;
+    const montoRecibidoInput = document.getElementById('monto-recibido');
+    let montoRecibido = 0;
+    
+    if (metodoPago === 'efectivo') {
+        if (!montoRecibidoInput.value || montoRecibidoInput.value.trim() === '') {
+            mensajeValidacion.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <strong>Error:</strong> Debe ingresar el monto recibido cuando el método de pago es efectivo.</div>';
+            mensajeValidacion.style.display = 'block';
+            montoRecibidoInput.focus();
+            montoRecibidoInput.style.borderColor = '#ef4444';
+            mensajeValidacion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            return;
+        }
+        
+        montoRecibido = parseFloat(montoRecibidoInput.value.replace(/[^0-9]/g, '')) || 0;
+        
+        if (montoRecibido < 0) {
+            mensajeValidacion.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <strong>Error:</strong> El monto recibido no puede ser negativo.</div>';
+            mensajeValidacion.style.display = 'block';
+            montoRecibidoInput.focus();
+            montoRecibidoInput.style.borderColor = '#ef4444';
+            mensajeValidacion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            return;
+        }
+        
+        if (montoRecibido < totalVenta) {
+            const falta = totalVenta - montoRecibido;
+            mensajeValidacion.innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <strong>Error de caja:</strong> El monto recibido ($${montoRecibido.toLocaleString('es-CO')}) es menor al total de la venta ($${totalVenta.toLocaleString('es-CO')}). <strong>Faltan $${falta.toLocaleString('es-CO')}</strong></div>`;
+            mensajeValidacion.style.display = 'block';
+            montoRecibidoInput.focus();
+            montoRecibidoInput.style.borderColor = '#ef4444';
+            mensajeValidacion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            return;
+        }
+    }
+    
+    // Limpiar estilos de error
+    montoRecibidoInput.style.borderColor = '';
+    
+    // Si llegamos aquí, todas las validaciones pasaron
+    mensajeValidacion.style.display = 'none';
+    btnGuardar.disabled = true;
+    btnGuardar.innerHTML = '<i class="bi bi-hourglass-split"></i> Guardando...';
+    
     const form = document.getElementById('form-editar-venta');
     const formData = new FormData(form);
     
-    // Agregar items
+    // Agregar items con validación adicional
     const items = [];
-    document.querySelectorAll('#items-table tbody tr').forEach(row => {
-        const productoSelect = row.querySelector('.producto-select');
-        const precio = row.querySelector('.precio-input').value;
-        const cantidad = row.querySelector('.cantidad-input').value;
-        const itemId = row.querySelector('.item-id')?.value;
+    rows.forEach(row => {
+        const productoId = row.querySelector('.producto-id-input')?.value;
+        const precio = parseFloat(row.querySelector('.precio-input')?.value) || 0;
+        const cantidad = parseInt(row.querySelector('.cantidad-input')?.value) || 0;
+        const itemId = row.getAttribute('data-item-id');
         
-        if (productoSelect.value && precio && cantidad) {
+        // Validación final antes de agregar
+        if (productoId && precio >= 0 && cantidad > 0) {
             items.push({
                 item_id: itemId || null,
-                producto_id: productoSelect.value,
+                producto_id: productoId,
                 precio: precio,
                 cantidad: cantidad
             });
         }
     });
     
+    // Validar que haya items válidos
+    if (items.length === 0) {
+        mensajeValidacion.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <strong>Error:</strong> No hay items válidos para guardar.</div>';
+        mensajeValidacion.style.display = 'block';
+        btnGuardar.disabled = false;
+        btnGuardar.innerHTML = '<i class="bi bi-save"></i> Guardar Cambios';
+        return;
+    }
+    
     formData.append('items', JSON.stringify(items));
     formData.append('metodo_pago', document.getElementById('metodo-pago').value);
-    formData.append('monto_recibido', document.getElementById('monto-recibido').value);
+    formData.append('monto_recibido', montoRecibidoInput.value.replace(/[^0-9]/g, ''));
+    formData.append('vendedor_id', document.getElementById('vendedor-id').value);
     
     fetch('{% url "pos:editar_venta" venta.id %}', {
         method: 'POST',
         body: formData,
-        headers: {'X-Requested-With': 'XMLHttpRequest'}
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+        }
     })
-    .then(r => {
-        if (r.ok) {
+    .then(r => r.json().catch(() => ({success: r.ok})))
+    .then(data => {
+        if (data.success !== false) {
             window.location.href = '{% url "pos:detalle_venta" venta.id %}';
         } else {
-            alert('Error al guardar los cambios');
+            mensajeValidacion.innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> ${data.error || 'Error al guardar los cambios'}</div>`;
+            mensajeValidacion.style.display = 'block';
+            btnGuardar.disabled = false;
+            btnGuardar.innerHTML = '<i class="bi bi-save"></i> Guardar Cambios';
         }
     })
     .catch(() => {
-        alert('Error de conexión');
+        mensajeValidacion.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> Error de conexión. Por favor, intente nuevamente.</div>';
+        mensajeValidacion.style.display = 'block';
+        btnGuardar.disabled = false;
+        btnGuardar.innerHTML = '<i class="bi bi-save"></i> Guardar Cambios';
     });
 }
+
+// Inicializar eventos para filas existentes
+document.querySelectorAll('#items-table tbody tr').forEach(row => {
+    setupRowEvents(row);
+});
+
+// Calcular cambio inicial
+calcularCambio();
 </script>
 {% endblock %}
-

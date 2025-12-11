@@ -82,20 +82,32 @@ def puede_realizar_ventas(user):
 
 
 def login_view(request):
-    """Vista de login"""
+    """Vista de login con usuario y PIN"""
     if request.user.is_authenticated:
         return redirect('pos:home')
     
     if request.method == 'POST':
         username = request.POST.get('username')
-        password = request.POST.get('password')
-        user = authenticate(request, username=username, password=password)
+        pin = request.POST.get('pin')
         
-        if user is not None:
-            login(request, user)
-            return redirect('pos:home')
-        else:
-            messages.error(request, 'Usuario o contraseña incorrectos')
+        if not username or not pin:
+            messages.error(request, 'Debes ingresar usuario y PIN')
+            return render(request, 'pos/login.html')
+        
+        # Buscar usuario por username
+        try:
+            from django.contrib.auth.models import User
+            user = User.objects.get(username=username, is_active=True)
+            
+            # Verificar PIN
+            try:
+                perfil = PerfilUsuario.objects.get(usuario=user, pin=pin, pin_establecido=True)
+                login(request, user)
+                return redirect('pos:home')
+            except PerfilUsuario.DoesNotExist:
+                messages.error(request, 'Usuario o PIN incorrectos')
+        except User.DoesNotExist:
+            messages.error(request, 'Usuario o PIN incorrectos')
     
     return render(request, 'pos/login.html')
 
@@ -555,19 +567,62 @@ def editar_venta_view(request, venta_id):
         return redirect('pos:detalle_venta', venta_id=venta_id)
     
     productos = Producto.objects.filter(activo=True).order_by('nombre')
+    from django.contrib.auth.models import User
+    usuarios = User.objects.filter(is_active=True).order_by('username')
     
     if request.method == 'POST':
-        # Actualizar método de pago
-        if 'metodo_pago' in request.POST:
-            venta.metodo_pago = request.POST.get('metodo_pago')
+        # Validar que la venta no esté anulada
+        if venta.anulada:
+            error_msg = 'No se puede editar una venta anulada'
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'error': error_msg})
+            messages.error(request, error_msg)
+            return redirect('pos:detalle_venta', venta_id=venta_id)
         
-        # Actualizar monto recibido
+        # Actualizar método de pago
+        metodo_pago = request.POST.get('metodo_pago', venta.metodo_pago)
+        if metodo_pago not in ['efectivo', 'tarjeta', 'transferencia']:
+            error_msg = 'Método de pago inválido'
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'error': error_msg})
+            messages.error(request, error_msg)
+            return redirect('pos:editar_venta', venta_id=venta_id)
+        venta.metodo_pago = metodo_pago
+        
+        # Actualizar monto recibido con validaciones
+        monto_recibido = None
         if 'monto_recibido' in request.POST:
-            monto = request.POST.get('monto_recibido', '')
+            monto = request.POST.get('monto_recibido', '').strip()
             if monto:
-                import re
-                monto_limpio = re.sub(r'[^0-9]', '', monto)
-                venta.monto_recibido = int(float(monto_limpio)) if monto_limpio else None
+                try:
+                    import re
+                    monto_limpio = re.sub(r'[^0-9]', '', monto)
+                    if monto_limpio:
+                        monto_recibido = int(float(monto_limpio))
+                        if monto_recibido < 0:
+                            error_msg = 'El monto recibido no puede ser negativo'
+                            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                                return JsonResponse({'success': False, 'error': error_msg})
+                            messages.error(request, error_msg)
+                            return redirect('pos:editar_venta', venta_id=venta_id)
+                except (ValueError, TypeError):
+                    error_msg = 'El monto recibido no es un número válido'
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return JsonResponse({'success': False, 'error': error_msg})
+                    messages.error(request, error_msg)
+                    return redirect('pos:editar_venta', venta_id=venta_id)
+        venta.monto_recibido = monto_recibido
+        
+        # Actualizar vendedor
+        if 'vendedor_id' in request.POST:
+            vendedor_id = request.POST.get('vendedor_id', '').strip()
+            if vendedor_id:
+                try:
+                    venta.vendedor = User.objects.get(id=int(vendedor_id), is_active=True)
+                except (User.DoesNotExist, ValueError):
+                    venta.vendedor = None
+            else:
+                venta.vendedor = None
         
         # Actualizar items
         if 'items' in request.POST:
@@ -578,12 +633,50 @@ def editar_venta_view(request, venta_id):
                 items_procesados = set()
                 total = 0
                 
+                # Validar que haya al menos un item
+                if not items_data:
+                    error_msg = 'Debe agregar al menos un item a la venta'
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return JsonResponse({'success': False, 'error': error_msg})
+                    messages.error(request, error_msg)
+                    return redirect('pos:editar_venta', venta_id=venta_id)
+                
                 # Actualizar o crear items
                 for item_data in items_data:
-                    producto_id = int(item_data['producto_id'])
-                    cantidad = int(item_data['cantidad'])
-                    precio = int(float(item_data['precio']))
-                    item_id = item_data.get('item_id')
+                    # Validar datos del item
+                    try:
+                        producto_id = int(item_data.get('producto_id', 0))
+                        cantidad = int(item_data.get('cantidad', 0))
+                        precio = int(float(item_data.get('precio', 0)))
+                        item_id = item_data.get('item_id')
+                    except (ValueError, TypeError, KeyError):
+                        error_msg = 'Datos inválidos en uno de los items'
+                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                            return JsonResponse({'success': False, 'error': error_msg})
+                        messages.error(request, error_msg)
+                        return redirect('pos:editar_venta', venta_id=venta_id)
+                    
+                    # Validar que los valores sean positivos
+                    if producto_id <= 0:
+                        error_msg = 'Debe seleccionar un producto válido'
+                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                            return JsonResponse({'success': False, 'error': error_msg})
+                        messages.error(request, error_msg)
+                        return redirect('pos:editar_venta', venta_id=venta_id)
+                    
+                    if cantidad <= 0:
+                        error_msg = 'La cantidad debe ser mayor a 0'
+                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                            return JsonResponse({'success': False, 'error': error_msg})
+                        messages.error(request, error_msg)
+                        return redirect('pos:editar_venta', venta_id=venta_id)
+                    
+                    if precio < 0:
+                        error_msg = 'El precio no puede ser negativo'
+                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                            return JsonResponse({'success': False, 'error': error_msg})
+                        messages.error(request, error_msg)
+                        return redirect('pos:editar_venta', venta_id=venta_id)
                     
                     if item_id and int(item_id) in items_actuales:
                         # Actualizar item existente
@@ -603,9 +696,20 @@ def editar_venta_view(request, venta_id):
                         items_procesados.add(item.id)
                     else:
                         # Crear nuevo item
-                        producto = Producto.objects.get(id=producto_id)
+                        try:
+                            producto = Producto.objects.get(id=producto_id, activo=True)
+                        except Producto.DoesNotExist:
+                            error_msg = f'El producto con ID {producto_id} no existe o está inactivo'
+                            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                                return JsonResponse({'success': False, 'error': error_msg})
+                            messages.error(request, error_msg)
+                            return redirect('pos:editar_venta', venta_id=venta_id)
+                        
                         if producto.stock < cantidad:
-                            messages.error(request, f'Stock insuficiente para {producto.nombre}')
+                            error_msg = f'Stock insuficiente para {producto.nombre}. Disponible: {producto.stock}, Solicitado: {cantidad}'
+                            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                                return JsonResponse({'success': False, 'error': error_msg})
+                            messages.error(request, error_msg)
                             return redirect('pos:editar_venta', venta_id=venta_id)
                         
                         ItemVenta.objects.create(
@@ -630,17 +734,51 @@ def editar_venta_view(request, venta_id):
                         item.delete()
                 
                 venta.total = total
+                
+                # Validar monto recibido si es efectivo
+                if venta.metodo_pago == 'efectivo' and venta.monto_recibido is not None:
+                    if venta.monto_recibido < total:
+                        error_msg = f'El monto recibido (${venta.monto_recibido:,}) es menor al total de la venta (${total:,}). Faltan ${(total - venta.monto_recibido):,}'
+                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                            return JsonResponse({'success': False, 'error': error_msg})
+                        messages.error(request, error_msg)
+                        return redirect('pos:editar_venta', venta_id=venta_id)
+            except json.JSONDecodeError:
+                error_msg = 'Error al procesar los items. Formato JSON inválido.'
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({'success': False, 'error': error_msg})
+                messages.error(request, error_msg)
+                return redirect('pos:editar_venta', venta_id=venta_id)
             except Exception as e:
-                messages.error(request, f'Error al actualizar items: {str(e)}')
+                error_msg = f'Error al actualizar items: {str(e)}'
+                messages.error(request, error_msg)
+                # Si es una petición AJAX, devolver JSON con error
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({'success': False, 'error': error_msg})
+                return redirect('pos:editar_venta', venta_id=venta_id)
+        
+        # Validar monto recibido si es efectivo (validación final)
+        if venta.metodo_pago == 'efectivo' and venta.monto_recibido is not None:
+            if venta.monto_recibido < venta.total:
+                error_msg = f'El monto recibido (${venta.monto_recibido:,}) es menor al total de la venta (${venta.total:,}). Faltan ${(venta.total - venta.monto_recibido):,}'
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({'success': False, 'error': error_msg})
+                messages.error(request, error_msg)
                 return redirect('pos:editar_venta', venta_id=venta_id)
         
         venta.save()
         messages.success(request, f'Venta #{venta.id} actualizada exitosamente')
+        
+        # Si es una petición AJAX, devolver JSON
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': True, 'message': f'Venta #{venta.id} actualizada exitosamente'})
+        
         return redirect('pos:detalle_venta', venta_id=venta_id)
     
     context = {
         'venta': venta,
         'productos': productos,
+        'usuarios': usuarios,
     }
     return render(request, 'pos/editar_venta.html', context)
 
@@ -650,8 +788,14 @@ def imprimir_ticket_view(request, venta_id):
     """Vista para imprimir ticket térmico 80mm"""
     venta = get_object_or_404(Venta, id=venta_id)
     
+    # Calcular cambio si es pago en efectivo
+    cambio = 0
+    if venta.metodo_pago == 'efectivo' and venta.monto_recibido:
+        cambio = venta.monto_recibido - venta.total
+    
     context = {
         'venta': venta,
+        'cambio': cambio,
     }
     return render(request, 'pos/ticket_80mm.html', context)
 
@@ -1381,27 +1525,51 @@ def marketing_view(request):
     else:
         fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
     
-    # Obtener ventas en el rango de fechas
+    # Obtener ventas en el rango de fechas (SOLO NO ANULADAS)
     ventas = Venta.objects.filter(
         fecha__date__gte=fecha_desde,
         fecha__date__lte=fecha_hasta,
         completada=True,
-        anulada=False,
+        anulada=False,  # IMPORTANTE: Excluir ventas anuladas del ranking
         vendedor__isnull=False
     )
     
-    # Calcular ranking por vendedor
-    ranking_vendedores = ventas.values('vendedor').annotate(
-        total_ventas=Sum('total'),
-        cantidad_ventas=Count('id'),
-        promedio_venta=Avg('total')
-    ).order_by('-total_ventas')
+    # Obtener también ventas anuladas para estadísticas
+    ventas_anuladas = Venta.objects.filter(
+        fecha__date__gte=fecha_desde,
+        fecha__date__lte=fecha_hasta,
+        completada=True,
+        anulada=True,  # Solo ventas anuladas
+        vendedor__isnull=False
+    )
     
-    # Enriquecer con información del usuario
+    # Calcular ranking por vendedor (SOLO VENTAS NO ANULADAS)
+    # IMPORTANTE: Ordenar por total_ventas (dinero vendido), NO por cantidad de items
+    ranking_vendedores = ventas.values('vendedor').annotate(
+        total_ventas=Sum('total'),  # Total de dinero vendido
+        cantidad_ventas=Count('id'),  # Cantidad de ventas (solo informativo)
+        promedio_venta=Avg('total')
+    ).order_by('-total_ventas')  # Ordenar por dinero vendido (descendente)
+    
+    # Calcular estadísticas de anulaciones por vendedor
+    anulaciones_por_vendedor = ventas_anuladas.values('vendedor').annotate(
+        total_anuladas=Sum('total'),
+        cantidad_anuladas=Count('id')
+    )
+    
+    # Crear diccionario de anulaciones para fácil acceso
+    anulaciones_dict = {item['vendedor']: item for item in anulaciones_por_vendedor}
+    
+    # Enriquecer con información del usuario y estadísticas de anulaciones
     ranking_completo = []
     for i, item in enumerate(ranking_vendedores, 1):
         try:
             vendedor = User.objects.get(id=item['vendedor'])
+            # Obtener estadísticas de anulaciones para este vendedor
+            anulaciones_vendedor = anulaciones_dict.get(item['vendedor'], {})
+            total_anuladas = anulaciones_vendedor.get('total_anuladas', 0) or 0
+            cantidad_anuladas = anulaciones_vendedor.get('cantidad_anuladas', 0) or 0
+            
             ranking_completo.append({
                 'posicion': i,
                 'vendedor': vendedor,
@@ -1410,14 +1578,20 @@ def marketing_view(request):
                 'total_ventas': item['total_ventas'] or 0,
                 'cantidad_ventas': item['cantidad_ventas'] or 0,
                 'promedio_venta': item['promedio_venta'] or 0,
+                'total_anuladas': int(total_anuladas),
+                'cantidad_anuladas': cantidad_anuladas,
             })
         except User.DoesNotExist:
             continue
     
-    # Estadísticas generales
+    # Estadísticas generales (SOLO VENTAS NO ANULADAS)
     total_general = ventas.aggregate(total=Sum('total'))['total'] or 0
     cantidad_general = ventas.count()
     promedio_general = total_general / cantidad_general if cantidad_general > 0 else 0
+    
+    # Estadísticas de anulaciones generales
+    total_anuladas_general = ventas_anuladas.aggregate(total=Sum('total'))['total'] or 0
+    cantidad_anuladas_general = ventas_anuladas.count()
     
     # Top vendedor
     top_vendedor = ranking_completo[0] if ranking_completo else None
@@ -1428,6 +1602,8 @@ def marketing_view(request):
         'cantidad_general': cantidad_general,
         'promedio_general': promedio_general,
         'top_vendedor': top_vendedor,
+        'total_anuladas_general': int(total_anuladas_general),
+        'cantidad_anuladas_general': cantidad_anuladas_general,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
     }

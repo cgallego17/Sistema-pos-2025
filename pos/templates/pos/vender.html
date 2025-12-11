@@ -1,7 +1,7 @@
 {% extends 'pos/base.html' %}
 {% load humanize %}
 
-{% block title %}POS Dinámico - Sistema POS{% endblock %}
+{% block title %}POS Dinámico - MegaPos By Megadominio.co{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -1080,6 +1080,35 @@ async function procesarVenta() {
             if (window.showNotification) {
                 window.showNotification(data.message, 'success', 'Venta Procesada', 3000);
             }
+            
+            // Preguntar si desea imprimir el ticket
+            const imprimir = confirm('¿Desea imprimir el ticket de la venta?');
+            
+            if (imprimir && data.venta_id) {
+                // Abrir ventana de impresión
+                const urlImprimir = `{% url 'pos:imprimir_ticket' 0 %}`.replace('0', data.venta_id);
+                const ventanaImpresion = window.open(urlImprimir, '_blank');
+                
+                if (ventanaImpresion) {
+                    // Esperar a que la ventana cargue y luego imprimir
+                    ventanaImpresion.onload = function() {
+                        setTimeout(() => {
+                            ventanaImpresion.print();
+                        }, 500);
+                    };
+                    
+                    // Fallback: si onload no funciona, intentar después de un tiempo
+                    setTimeout(() => {
+                        try {
+                            ventanaImpresion.print();
+                        } catch (e) {
+                            console.log('No se pudo imprimir automáticamente');
+                        }
+                    }, 1000);
+                }
+            }
+            
+            // Recargar la página después de un breve delay
             setTimeout(() => {
                 window.location.reload();
             }, 1000);

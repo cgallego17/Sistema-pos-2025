@@ -63,3 +63,5 @@ python manage.py runserver
 - Las imágenes se guardan en la carpeta `media/productos/`
 - El proyecto usa zona horaria `America/Santiago` por defecto
 
+
+

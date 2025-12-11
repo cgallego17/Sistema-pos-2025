@@ -1,7 +1,7 @@
 {% extends 'pos/base.html' %}
 {% load humanize %}
 
-{% block title %}Productos - Sistema POS{% endblock %}
+{% block title %}Productos - MegaPos By Megadominio.co{% endblock %}
 
 {% block content %}
 <div class="page-container">
@@ -44,6 +44,7 @@
                 <table class="table-modern table">
                     <thead>
                         <tr>
+                            <th style="width: 80px;">Imagen</th>
                             <th>Código</th>
                             <th>Nombre</th>
                             <th>Precio</th>
@@ -56,14 +57,18 @@
                 <tbody id="tablaProductos">
                     {% for producto in productos %}
                     <tr data-activo="{{ producto.activo|lower }}" data-stock="{{ producto.stock }}">
-                        <td><strong>{{ producto.codigo }}</strong></td>
-                        <td>
+                        <td class="text-center">
                             {% if producto.imagen %}
                             <img src="{{ producto.imagen.url }}" alt="{{ producto.nombre }}" 
-                                 style="width: 40px; height: 40px; object-fit: cover; margin-right: 10px;">
+                                 style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            {% else %}
+                            <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                                <i class="bi bi-image" style="font-size: 1.5rem; color: #94a3b8;"></i>
+                            </div>
                             {% endif %}
-                            {{ producto.nombre }}
                         </td>
+                        <td><strong>{{ producto.codigo }}</strong></td>
+                        <td>{{ producto.nombre }}</td>
                         <td>${{ producto.precio|intcomma }}</td>
                         <td>
                             {% if producto.stock < 10 %}
@@ -92,7 +97,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center text-muted">No hay productos registrados</td>
+                        <td colspan="8" class="text-center text-muted">No hay productos registrados</td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -1,24 +1,158 @@
 {% extends 'pos/base.html' %}
 
-{% block title %}Iniciar Sesión - Sistema POS{% endblock %}
+{% block title %}Iniciar Sesión - MegaPos By Megadominio.co{% endblock %}
+
+{% block extra_css %}
+<style>
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        overflow: hidden;
+    }
+    
+    .login-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        background-size: 400% 400%;
+        animation: gradientShift 15s ease infinite;
+    }
+    
+    @keyframes gradientShift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    
+    .login-container::before {
+        content: '';
+        position: absolute;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px);
+        background-size: 50px 50px;
+        animation: moveBackground 20s linear infinite;
+        top: -50%;
+        left: -50%;
+    }
+    
+    @keyframes moveBackground {
+        0% { transform: translate(0, 0); }
+        100% { transform: translate(50px, 50px); }
+    }
+    
+    .floating-shapes {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        top: 0;
+        left: 0;
+    }
+    
+    .shape {
+        position: absolute;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.1);
+        animation: float 20s infinite ease-in-out;
+    }
+    
+    .shape:nth-child(1) {
+        width: 300px;
+        height: 300px;
+        top: -100px;
+        left: -100px;
+        animation-delay: 0s;
+    }
+    
+    .shape:nth-child(2) {
+        width: 200px;
+        height: 200px;
+        top: 50%;
+        right: -50px;
+        animation-delay: 5s;
+    }
+    
+    .shape:nth-child(3) {
+        width: 250px;
+        height: 250px;
+        bottom: -50px;
+        left: 20%;
+        animation-delay: 10s;
+    }
+    
+    .shape:nth-child(4) {
+        width: 150px;
+        height: 150px;
+        top: 20%;
+        right: 20%;
+        animation-delay: 15s;
+    }
+    
+    @keyframes float {
+        0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
+        25% { transform: translate(50px, -50px) scale(1.1); opacity: 0.5; }
+        50% { transform: translate(-30px, 30px) scale(0.9); opacity: 0.4; }
+        75% { transform: translate(30px, 50px) scale(1.05); opacity: 0.6; }
+    }
+    
+    .login-card-wrapper {
+        position: relative;
+        z-index: 10;
+        width: 100%;
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .login-card-wrapper .row {
+        margin: 0;
+        height: 100%;
+    }
+    
+    .card-modern {
+        backdrop-filter: blur(10px);
+        background: rgba(255, 255, 255, 0.95) !important;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37) !important;
+    }
+</style>
+{% endblock %}
 
 {% block full_content %}
-<div class="row justify-content-center align-items-center" style="min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-    <div class="col-md-5">
-        <div class="card-modern shadow-lg">
+<div class="login-container">
+    <div class="floating-shapes">
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+    </div>
+    <div class="row justify-content-center align-items-center login-card-wrapper">
+        <div class="col-md-5">
+            <div class="card-modern shadow-lg">
             <div class="card-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); text-align: center; color: white;">
-                <h3><i class="bi bi-shop"></i> Sistema POS</h3>
-                <p class="mb-0" style="color: rgba(255,255,255,0.9);">Iniciar Sesión</p>
+                <h3><i class="bi bi-shop"></i> MegaPos</h3>
+                <p class="mb-1" style="color: rgba(255,255,255,0.8); font-size: 0.85rem;">By Megadominio.co</p>
             </div>
             <div class="card-body p-5">
                 <form method="post">
                     {% csrf_token %}
                     
-                    {% if form.errors %}
-                    <div class="alert alert-danger" style="background: #fee2e2; border-color: #fca5a5; color: #991b1b;">
-                        <i class="bi bi-exclamation-triangle"></i>
-                        Usuario o contraseña incorrectos
-                    </div>
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }}" style="background: #fee2e2; border-color: #fca5a5; color: #991b1b;">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                {{ message }}
+                            </div>
+                        {% endfor %}
                     {% endif %}
                     
                     <div class="form-group-modern">
@@ -30,66 +164,40 @@
                     </div>
                     
                     <div class="form-group-modern">
-                        <label for="password" class="form-label-modern">
-                            <i class="bi bi-lock"></i> Contraseña
+                        <label for="pin" class="form-label-modern">
+                            <i class="bi bi-keypad"></i> PIN
                         </label>
-                        <input type="password" class="form-control form-control-modern form-control-lg" 
-                               id="password" name="password" required>
+                        <input type="password" class="form-control form-control-modern form-control-lg text-center" 
+                               id="pin" name="pin" maxlength="4" pattern="\d{4}" 
+                               placeholder="****" style="font-size: 1.5rem; letter-spacing: 15px;" required>
                     </div>
                     
-                    <div class="mb-4 form-check">
-                        <input type="checkbox" class="form-check-input" id="remember">
-                        <label class="form-check-label" for="remember" style="color: #475569;">
-                            Recordarme
-                        </label>
-                    </div>
-                    
-                    <button type="submit" class="btn btn-primary-pos btn-lg w-100">
+                    <button type="submit" class="btn btn-primary-pos btn-lg w-100 mt-4">
                         <i class="bi bi-box-arrow-in-right"></i> Ingresar
                     </button>
                 </form>
-                
-                <hr class="my-4" style="border-color: #e2e8f0;">
-                
-                <div class="text-center">
-                    <button type="button" class="btn" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;" data-bs-toggle="modal" data-bs-target="#pinModal">
-                        <i class="bi bi-keypad"></i> Acceso Rápido con PIN
-                    </button>
-                </div>
+            </div>
             </div>
         </div>
     </div>
-</div>
-
-<!-- Modal PIN -->
-<div class="modal fade" id="pinModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                <h5 class="modal-title"><i class="bi bi-keypad"></i> Acceso con PIN</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body text-center p-5">
-                <p style="color: #475569; margin-bottom: 1.5rem;">Ingresa tu PIN de 4 dígitos</p>
-                <form method="post" action="{% url 'pos:login_pin' %}">
-                    {% csrf_token %}
-                    <input type="password" class="form-control form-control-modern form-control-lg text-center" 
-                           id="pin" name="pin" maxlength="4" pattern="\d{4}" 
-                           placeholder="****" style="font-size: 2rem; letter-spacing: 20px;">
-                    <button type="submit" class="btn btn-primary-pos btn-lg w-100 mt-4">
-                        <i class="bi bi-check-circle"></i> Ingresar
-                    </button>
-                </form>
-            </div>
-        </div>
+    
+    <!-- Footer -->
+    <div style="position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 1rem; color: rgba(255,255,255,0.8); font-size: 0.85rem; z-index: 5;">
+        <p style="margin: 0;">
+            &copy; {% now "Y" %} MegaPos By Megadominio.co - Todos los derechos reservados
+        </p>
     </div>
 </div>
 
 <script>
 document.getElementById('pin').addEventListener('input', function(e) {
-    if (this.value.length === 4) {
-        this.form.submit();
-    }
+    // Solo permitir números
+    this.value = this.value.replace(/[^0-9]/g, '');
+    
+    // Auto-submit cuando se ingresen 4 dígitos (opcional)
+    // if (this.value.length === 4) {
+    //     this.form.submit();
+    // }
 });
 </script>
 {% endblock %}

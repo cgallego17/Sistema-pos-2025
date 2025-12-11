@@ -1,7 +1,7 @@
 {% extends 'pos/base.html' %}
 {% load humanize %}
 
-{% block title %}Ranking de Vendedores - Sistema POS{% endblock %}
+{% block title %}Ranking de Vendedores - MegaPos By Megadominio.co{% endblock %}
 
 {% block content %}
 <div class="page-container">
@@ -42,12 +42,18 @@
                 <i class="bi bi-currency-dollar"></i> Total General
             </div>
             <div class="stat-card-value">${{ total_general|intcomma }}</div>
+            <div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">
+                <i class="bi bi-info-circle"></i> Solo ventas no anuladas
+            </div>
         </div>
         <div class="stat-card success">
             <div class="stat-card-label">
                 <i class="bi bi-receipt"></i> Total Ventas
             </div>
             <div class="stat-card-value">{{ cantidad_general|intcomma }}</div>
+            <div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">
+                <i class="bi bi-check-circle"></i> Válidas
+            </div>
         </div>
         <div class="stat-card info">
             <div class="stat-card-label">
@@ -55,6 +61,17 @@
             </div>
             <div class="stat-card-value">${{ promedio_general|intcomma }}</div>
         </div>
+        {% if cantidad_anuladas_general > 0 %}
+        <div class="stat-card danger">
+            <div class="stat-card-label">
+                <i class="bi bi-x-circle"></i> Ventas Anuladas
+            </div>
+            <div class="stat-card-value" style="color: #dc2626;">{{ cantidad_anuladas_general|intcomma }}</div>
+            <div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">
+                ${{ total_anuladas_general|intcomma }} (excluidas del ranking)
+            </div>
+        </div>
+        {% endif %}
         {% if top_vendedor %}
         <div class="stat-card warning">
             <div class="stat-card-label">
@@ -72,6 +89,9 @@
     <div class="card-modern">
         <div class="card-header">
             <h5 class="mb-0"><i class="bi bi-trophy-fill"></i> Ranking de Vendedores</h5>
+            <small style="color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                <i class="bi bi-info-circle"></i> Ordenado por dinero vendido (no por cantidad de items)
+            </small>
         </div>
         <div class="card-body">
             {% if ranking_vendedores %}
@@ -81,7 +101,13 @@
                         <tr>
                             <th style="width: 60px;">#</th>
                             <th>Vendedor</th>
-                            <th class="text-end">Total Ventas</th>
+                            <th class="text-end">
+                                Total Ventas
+                                <br>
+                                <small style="font-weight: normal; font-size: 0.75rem; color: rgba(255,255,255,0.8);">
+                                    <i class="bi bi-arrow-down"></i> Ordenado por este valor
+                                </small>
+                            </th>
                             <th class="text-center">Cantidad</th>
                             <th class="text-end">Promedio</th>
                             <th class="text-center">% del Total</th>
@@ -124,6 +150,15 @@
                                 <span class="badge badge-modern badge-success-modern">
                                     {{ item.cantidad_ventas|intcomma }} ventas
                                 </span>
+                                {% if item.cantidad_anuladas > 0 %}
+                                <br>
+                                <small style="color: #dc2626; font-size: 0.75rem;">
+                                    <i class="bi bi-x-circle"></i> {{ item.cantidad_anuladas }} anulada{{ item.cantidad_anuladas|pluralize }}
+                                    {% if item.total_anuladas > 0 %}
+                                    (${{ item.total_anuladas|intcomma }})
+                                    {% endif %}
+                                </small>
+                                {% endif %}
                             </td>
                             <td class="text-end">
                                 <span style="color: #64748b; font-weight: 600;">

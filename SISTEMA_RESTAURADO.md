@@ -263,3 +263,5 @@ git commit -m "Sistema POS restaurado"
 **Sistema:** Django 4.1
 **Estado:** ✅ Completamente funcional
 
+
+

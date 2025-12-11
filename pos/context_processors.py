@@ -9,7 +9,7 @@ def sistema_info(request):
     Agrega información del sistema al contexto de las plantillas
     """
     return {
-        'SISTEMA_NOMBRE': 'Sistema POS',
+        'SISTEMA_NOMBRE': 'MegaPos By Megadominio.co',
         'SISTEMA_VERSION': '1.0',
         'DEBUG': settings.DEBUG,
     }
