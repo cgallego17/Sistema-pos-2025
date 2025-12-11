@@ -3,6 +3,178 @@
 
 {% block title %}Ingreso de Mercancía - MegaPos By Megadominio.co{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Estilos móviles para ingreso de mercancía */
+    @media (max-width: 768px) {
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start !important;
+            gap: 1rem;
+        }
+        
+        .page-header h1 {
+            font-size: 1.5rem;
+        }
+        
+        .page-header .btn {
+            width: 100%;
+            padding: 0.875rem;
+            font-size: 1rem;
+        }
+        
+        /* Ocultar tabla en móvil */
+        .table-responsive {
+            display: none;
+        }
+        
+        /* Cards móviles */
+        .ingreso-mobile-cards {
+            display: block;
+        }
+        
+        .ingreso-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
+        }
+        
+        .ingreso-card:active {
+            transform: scale(0.98);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .ingreso-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid #f1f5f9;
+        }
+        
+        .ingreso-card-id {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .ingreso-card-badge {
+            padding: 0.35rem 0.65rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .ingreso-card-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f8fafc;
+        }
+        
+        .ingreso-card-row:last-child {
+            border-bottom: none;
+        }
+        
+        .ingreso-card-label {
+            font-size: 0.8rem;
+            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .ingreso-card-value {
+            font-size: 0.9rem;
+            color: #1e293b;
+            font-weight: 500;
+            text-align: right;
+            flex: 1;
+            margin-left: 1rem;
+        }
+        
+        .ingreso-card-value strong {
+            color: #667eea;
+            font-weight: 700;
+        }
+        
+        .ingreso-card-actions {
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid #f1f5f9;
+        }
+        
+        .ingreso-card-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        
+        .ingreso-card-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            color: white;
+        }
+        
+        .ingreso-card-btn i {
+            font-size: 1.1rem;
+        }
+        
+        /* Botón nuevo en móvil */
+        .btn-nuevo-mobile {
+            width: 100%;
+            padding: 0.875rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            text-decoration: none;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            transition: all 0.2s ease;
+        }
+        
+        .btn-nuevo-mobile:active {
+            transform: scale(0.98);
+        }
+        
+        .btn-nuevo-mobile i {
+            font-size: 1.2rem;
+        }
+    }
+    
+    /* Desktop: ocultar cards móviles */
+    @media (min-width: 769px) {
+        .ingreso-mobile-cards {
+            display: none;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-container">
     <div class="page-header">
@@ -14,6 +186,12 @@
 
     <div class="card-modern">
         <div class="card-body">
+            <!-- Botón nuevo para móvil -->
+            <a href="{% url 'pos:crear_ingreso' %}" class="btn-nuevo-mobile">
+                <i class="bi bi-plus-circle-fill"></i> Nuevo Ingreso
+            </a>
+            
+            <!-- Tabla Desktop -->
             <div class="table-responsive">
                 <table class="table-modern table">
                     <thead>
@@ -63,6 +241,69 @@
                     {% endfor %}
                 </tbody>
                 </table>
+            </div>
+            
+            <!-- Cards Móvil -->
+            <div class="ingreso-mobile-cards">
+                {% for ingreso in ingresos %}
+                <div class="ingreso-card">
+                    <div class="ingreso-card-header">
+                        <div class="ingreso-card-id">#{{ ingreso.id }}</div>
+                        {% if ingreso.completado %}
+                        <span class="ingreso-card-badge badge-modern badge-success-modern">Completado</span>
+                        {% else %}
+                        <span class="ingreso-card-badge badge-modern badge-warning-modern">Pendiente</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="ingreso-card-row">
+                        <span class="ingreso-card-label"><i class="bi bi-calendar"></i> Fecha</span>
+                        <span class="ingreso-card-value">{{ ingreso.fecha|date:"d/m/Y H:i" }}</span>
+                    </div>
+                    
+                    <div class="ingreso-card-row">
+                        <span class="ingreso-card-label"><i class="bi bi-truck"></i> Proveedor</span>
+                        <span class="ingreso-card-value">{{ ingreso.proveedor }}</span>
+                    </div>
+                    
+                    {% if ingreso.numero_factura %}
+                    <div class="ingreso-card-row">
+                        <span class="ingreso-card-label"><i class="bi bi-receipt"></i> Factura</span>
+                        <span class="ingreso-card-value">{{ ingreso.numero_factura }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="ingreso-card-row">
+                        <span class="ingreso-card-label"><i class="bi bi-cash-coin"></i> Total</span>
+                        <span class="ingreso-card-value"><strong>${{ ingreso.total|intcomma }}</strong></span>
+                    </div>
+                    
+                    <div class="ingreso-card-row">
+                        <span class="ingreso-card-label"><i class="bi bi-person"></i> Usuario</span>
+                        <span class="ingreso-card-value">
+                            {% if ingreso.usuario %}
+                                {{ ingreso.usuario.get_full_name|default:ingreso.usuario.username }}
+                            {% else %}
+                                Sistema
+                            {% endif %}
+                        </span>
+                    </div>
+                    
+                    <div class="ingreso-card-actions">
+                        <a href="{% url 'pos:detalle_ingreso' ingreso.id %}" class="ingreso-card-btn">
+                            <i class="bi bi-eye-fill"></i>
+                            <span>Ver Detalle</span>
+                        </a>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="ingreso-card">
+                    <div class="text-center text-muted" style="padding: 2rem;">
+                        <i class="bi bi-inbox" style="font-size: 3rem; color: #cbd5e1; margin-bottom: 1rem; display: block;"></i>
+                        <p style="margin: 0; font-size: 1rem;">No hay ingresos registrados</p>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
         </div>
     </div>

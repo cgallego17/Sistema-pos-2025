@@ -3,6 +3,298 @@
 
 {% block title %}Detalle Ingreso #{{ ingreso.id }} - MegaPos By Megadominio.co{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Estilos móviles para detalle de ingreso */
+    @media (max-width: 768px) {
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start !important;
+            gap: 1rem;
+        }
+        
+        .page-header h1 {
+            font-size: 1.5rem;
+        }
+        
+        .page-header .btn {
+            width: 100%;
+            padding: 0.75rem;
+        }
+        
+        /* Ocultar tabla en móvil */
+        .table-responsive {
+            display: none;
+        }
+        
+        /* Cards móviles para items */
+        .items-mobile-cards {
+            display: block;
+        }
+        
+        .item-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            border: 2px solid #e2e8f0;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        
+        .item-card.procesado {
+            border-color: #10b981;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.02) 100%);
+        }
+        
+        .item-card.verificado {
+            border-color: #3b82f6;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(59, 130, 246, 0.02) 100%);
+        }
+        
+        .item-card:active {
+            transform: scale(0.98);
+        }
+        
+        .item-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid #f1f5f9;
+        }
+        
+        .item-card-producto {
+            flex: 1;
+        }
+        
+        .item-card-nombre {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 0.25rem;
+        }
+        
+        .item-card-codigo {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+        
+        .item-card-checkbox {
+            width: 32px;
+            height: 32px;
+            min-width: 32px;
+            margin-left: 0.75rem;
+        }
+        
+        .item-card-checkbox input[type="checkbox"] {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+        
+        .item-card-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f8fafc;
+        }
+        
+        .item-card-row:last-child {
+            border-bottom: none;
+        }
+        
+        .item-card-label {
+            font-size: 0.8rem;
+            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .item-card-value {
+            font-size: 0.95rem;
+            color: #1e293b;
+            font-weight: 600;
+            text-align: right;
+        }
+        
+        .item-card-value strong {
+            color: #667eea;
+            font-size: 1.1rem;
+        }
+        
+        .item-card-estado {
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid #f1f5f9;
+        }
+        
+        .item-card-badge {
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        /* Panel de información móvil */
+        .info-card-mobile {
+            background: white;
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e2e8f0;
+        }
+        
+        .info-card-mobile h5 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid #f1f5f9;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f8fafc;
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .info-label {
+            font-size: 0.85rem;
+            color: #64748b;
+            font-weight: 600;
+            flex: 0 0 40%;
+        }
+        
+        .info-value {
+            font-size: 0.9rem;
+            color: #1e293b;
+            font-weight: 500;
+            text-align: right;
+            flex: 1;
+        }
+        
+        /* Botón procesar móvil */
+        .btn-procesar-mobile {
+            width: 100%;
+            padding: 1rem;
+            margin-top: 1rem;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            transition: all 0.2s ease;
+        }
+        
+        .btn-procesar-mobile:active {
+            transform: scale(0.98);
+        }
+        
+        .btn-procesar-mobile:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-procesar-mobile i {
+            font-size: 1.2rem;
+        }
+        
+        /* Checkbox marcar todos móvil */
+        .check-all-mobile {
+            background: white;
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            border: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .check-all-mobile input[type="checkbox"] {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+        
+        .check-all-mobile label {
+            font-weight: 600;
+            color: #1e293b;
+            cursor: pointer;
+            flex: 1;
+        }
+        
+        /* Total móvil */
+        .total-mobile {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-top: 1rem;
+            border: 2px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .total-mobile-label {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+        
+        .total-mobile-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #10b981;
+        }
+    }
+    
+    /* Desktop: ocultar cards móviles */
+    @media (min-width: 769px) {
+        .items-mobile-cards {
+            display: none;
+        }
+        
+        .info-card-mobile {
+            display: none;
+        }
+        
+        .check-all-mobile {
+            display: none;
+        }
+        
+        .total-mobile {
+            display: none;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-container">
     <div class="page-header">
@@ -10,6 +302,43 @@
         <a href="{% url 'pos:ingreso_mercancia' %}" class="btn btn-secondary">
             <i class="bi bi-arrow-left"></i> Volver
         </a>
+    </div>
+
+    <!-- Panel de información móvil -->
+    <div class="info-card-mobile">
+        <h5><i class="bi bi-info-circle"></i> Información del Ingreso</h5>
+        <div class="info-row">
+            <span class="info-label">Proveedor:</span>
+            <span class="info-value">{{ ingreso.proveedor }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Factura:</span>
+            <span class="info-value">{{ ingreso.numero_factura|default:"N/A" }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Fecha:</span>
+            <span class="info-value">{{ ingreso.fecha|date:"d/m/Y H:i" }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Usuario:</span>
+            <span class="info-value">{{ ingreso.usuario.get_full_name|default:ingreso.usuario.username }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Estado:</span>
+            <span class="info-value">
+                {% if ingreso.completado %}
+                <span class="badge badge-modern badge-success-modern">Completado</span>
+                {% else %}
+                <span class="badge badge-modern badge-warning-modern">Pendiente</span>
+                {% endif %}
+            </span>
+        </div>
+        {% if ingreso.observaciones %}
+        <div class="info-row">
+            <span class="info-label">Observaciones:</span>
+            <span class="info-value" style="text-align: left; font-size: 0.85rem;">{{ ingreso.observaciones }}</span>
+        </div>
+        {% endif %}
     </div>
 
     <div class="row">
@@ -23,6 +352,16 @@
                     <form method="post" id="form-verificar-ingreso">
                         {% csrf_token %}
                     {% endif %}
+                    
+                    <!-- Checkbox marcar todos móvil -->
+                    {% if not ingreso.completado %}
+                    <div class="check-all-mobile">
+                        <input type="checkbox" id="check-all-mobile" title="Marcar/Desmarcar todos">
+                        <label for="check-all-mobile">Marcar/Desmarcar todos</label>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Tabla Desktop -->
                     <div class="table-responsive">
                         <table class="table-modern table">
                             <thead>
@@ -94,6 +433,73 @@
                             </tbody>
                         </table>
                     </div>
+                    
+                    <!-- Cards Móvil -->
+                    <div class="items-mobile-cards">
+                        {% for item in ingreso.items.all %}
+                        <div class="item-card {% if item.procesado %}procesado{% elif item.verificado %}verificado{% endif %}">
+                            <div class="item-card-header">
+                                <div class="item-card-producto">
+                                    <div class="item-card-nombre">{{ item.producto.nombre }}</div>
+                                    {% if item.producto.codigo %}
+                                    <div class="item-card-codigo">Código: {{ item.producto.codigo }}</div>
+                                    {% endif %}
+                                </div>
+                                {% if not ingreso.completado and not item.procesado %}
+                                <div class="item-card-checkbox">
+                                    <input type="checkbox" 
+                                           name="items_verificados" 
+                                           value="{{ item.id }}" 
+                                           class="item-checkbox"
+                                           id="item-checkbox-{{ item.id }}"
+                                           {% if item.verificado %}checked{% endif %}
+                                           onchange="actualizarEstadoItem({{ item.id }}, this.checked)">
+                                </div>
+                                {% elif item.procesado %}
+                                <div class="item-card-checkbox">
+                                    <i class="bi bi-check-circle-fill" style="color: #10b981; font-size: 1.5rem;"></i>
+                                </div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="item-card-row">
+                                <span class="item-card-label"><i class="bi bi-box"></i> Cantidad</span>
+                                <span class="item-card-value">{{ item.cantidad|intcomma }}</span>
+                            </div>
+                            
+                            <div class="item-card-row">
+                                <span class="item-card-label"><i class="bi bi-currency-dollar"></i> Precio Compra</span>
+                                <span class="item-card-value">${{ item.precio_compra|intcomma }}</span>
+                            </div>
+                            
+                            <div class="item-card-row">
+                                <span class="item-card-label"><i class="bi bi-calculator"></i> Subtotal</span>
+                                <span class="item-card-value"><strong>${{ item.subtotal|intcomma }}</strong></span>
+                            </div>
+                            
+                            {% if not ingreso.completado %}
+                            <div class="item-card-estado">
+                                <span class="item-card-badge estado-item-mobile badge-modern {% if item.procesado %}badge-success-modern{% elif item.verificado %}badge-info-modern{% else %}badge-warning-modern{% endif %}" data-item-id="{{ item.id }}">
+                                    {% if item.procesado %}
+                                    <i class="bi bi-check-circle-fill"></i> Procesado
+                                    {% elif item.verificado %}
+                                    <i class="bi bi-check-circle"></i> Verificado
+                                    {% else %}
+                                    <i class="bi bi-clock"></i> Pendiente
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                        
+                        <!-- Total móvil -->
+                        <div class="total-mobile">
+                            <span class="total-mobile-label">TOTAL:</span>
+                            <span class="total-mobile-value">${{ ingreso.total|intcomma }}</span>
+                        </div>
+                    </div>
+                    
                     {% if not ingreso.completado %}
                     </form>
                     {% endif %}
@@ -144,14 +550,47 @@
             </div>
         </div>
     </div>
+    
+    <!-- Botón procesar móvil -->
+    {% if not ingreso.completado %}
+    <div class="info-verificacion-mobile" id="info-verificacion-mobile" style="display: none; background: white; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); border: 1px solid #e2e8f0;">
+        <div class="alert alert-info" style="margin: 0;">
+            <i class="bi bi-info-circle"></i> <span id="texto-verificacion-mobile"></span>
+        </div>
+    </div>
+    <form method="post" id="form-completar-ingreso-mobile">
+        {% csrf_token %}
+        <button type="submit" 
+                name="completar" 
+                id="btn-completar-mobile"
+                class="btn-procesar-mobile"
+                onclick="return confirmarCompletar();"
+                disabled>
+            <i class="bi bi-check-circle-fill"></i>
+            <span>Procesar Items Verificados</span>
+        </button>
+    </form>
+    {% endif %}
 </div>
 
 {% if not ingreso.completado %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Checkbox "Marcar todos"
+    // Checkbox "Marcar todos" desktop
     const checkAll = document.getElementById('check-all');
+    // Checkbox "Marcar todos" móvil
+    const checkAllMobile = document.getElementById('check-all-mobile');
     const itemCheckboxes = document.querySelectorAll('.item-checkbox');
+    
+    function syncCheckAll(checkbox) {
+        const allChecked = Array.from(itemCheckboxes).every(cb => cb.checked);
+        const someChecked = Array.from(itemCheckboxes).some(cb => cb.checked);
+        
+        if (checkbox) {
+            checkbox.checked = allChecked;
+            checkbox.indeterminate = someChecked && !allChecked;
+        }
+    }
     
     if (checkAll) {
         checkAll.addEventListener('change', function() {
@@ -160,8 +599,34 @@ document.addEventListener('DOMContentLoaded', function() {
                 const itemId = checkbox.value;
                 actualizarEstadoItem(itemId, this.checked);
             });
+            if (checkAllMobile) {
+                checkAllMobile.checked = this.checked;
+                checkAllMobile.indeterminate = false;
+            }
         });
     }
+    
+    if (checkAllMobile) {
+        checkAllMobile.addEventListener('change', function() {
+            itemCheckboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+                const itemId = checkbox.value;
+                actualizarEstadoItem(itemId, this.checked);
+            });
+            if (checkAll) {
+                checkAll.checked = this.checked;
+                checkAll.indeterminate = false;
+            }
+        });
+    }
+    
+    // Sincronizar checkboxes cuando cambian individualmente
+    itemCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            syncCheckAll(checkAll);
+            syncCheckAll(checkAllMobile);
+        });
+    });
     
     // Actualizar contador inicial
     actualizarContador();
@@ -181,24 +646,47 @@ function actualizarEstadoItem(itemId, verificado) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Actualizar visualmente la fila
+            // Actualizar visualmente la fila de la tabla (desktop)
             const checkbox = document.querySelector(`input[value="${itemId}"]`);
             if (checkbox) {
                 const row = checkbox.closest('tr');
-                const estadoCell = row.querySelector('.estado-item');
-                if (verificado) {
-                    row.classList.remove('table-warning');
-                    row.classList.add('table-info');
-                    if (estadoCell) {
-                        estadoCell.innerHTML = '<span class="badge badge-modern badge-info-modern"><i class="bi bi-check-circle"></i> Verificado</span>';
-                    }
-                } else {
-                    row.classList.remove('table-info', 'table-success');
-                    if (estadoCell) {
-                        estadoCell.innerHTML = '<span class="badge badge-modern badge-warning-modern"><i class="bi bi-clock"></i> Pendiente</span>';
+                if (row) {
+                    const estadoCell = row.querySelector('.estado-item');
+                    if (verificado) {
+                        row.classList.remove('table-warning');
+                        row.classList.add('table-info');
+                        if (estadoCell) {
+                            estadoCell.innerHTML = '<span class="badge badge-modern badge-info-modern"><i class="bi bi-check-circle"></i> Verificado</span>';
+                        }
+                    } else {
+                        row.classList.remove('table-info', 'table-success');
+                        if (estadoCell) {
+                            estadoCell.innerHTML = '<span class="badge badge-modern badge-warning-modern"><i class="bi bi-clock"></i> Pendiente</span>';
+                        }
                     }
                 }
             }
+            
+            // Actualizar visualmente la card móvil
+            const card = document.querySelector(`.item-card input[value="${itemId}"]`)?.closest('.item-card');
+            if (card) {
+                const estadoBadge = card.querySelector('.estado-item-mobile');
+                if (verificado) {
+                    card.classList.remove('procesado');
+                    card.classList.add('verificado');
+                    if (estadoBadge) {
+                        estadoBadge.className = 'item-card-badge estado-item-mobile badge-modern badge-info-modern';
+                        estadoBadge.innerHTML = '<i class="bi bi-check-circle"></i> Verificado';
+                    }
+                } else {
+                    card.classList.remove('verificado', 'procesado');
+                    if (estadoBadge) {
+                        estadoBadge.className = 'item-card-badge estado-item-mobile badge-modern badge-warning-modern';
+                        estadoBadge.innerHTML = '<i class="bi bi-clock"></i> Pendiente';
+                    }
+                }
+            }
+            
             actualizarContador();
         }
     })
@@ -211,19 +699,67 @@ function actualizarEstadoItem(itemId, verificado) {
 function actualizarContador() {
     const checked = document.querySelectorAll('.item-checkbox:checked').length;
     const total = document.querySelectorAll('.item-checkbox').length;
+    
+    // Actualizar contador desktop
     const infoDiv = document.getElementById('info-verificacion');
     const textoDiv = document.getElementById('texto-verificacion');
     
+    // Actualizar contador móvil
+    const infoDivMobile = document.getElementById('info-verificacion-mobile');
+    const textoDivMobile = document.getElementById('texto-verificacion-mobile');
+    const btnCompletarMobile = document.getElementById('btn-completar-mobile');
+    
+    const texto = `${checked} de ${total} items verificados y listos para procesar`;
+    
     if (checked > 0) {
-        textoDiv.textContent = `${checked} de ${total} items verificados y listos para procesar`;
-        infoDiv.style.display = 'block';
-        if (checked === total) {
-            infoDiv.className = 'alert alert-success';
-        } else {
-            infoDiv.className = 'alert alert-info';
+        // Desktop
+        if (textoDiv) {
+            textoDiv.textContent = texto;
+        }
+        if (infoDiv) {
+            infoDiv.style.display = 'block';
+            if (checked === total) {
+                infoDiv.className = 'alert alert-success';
+            } else {
+                infoDiv.className = 'alert alert-info';
+            }
+        }
+        
+        // Móvil
+        if (textoDivMobile) {
+            textoDivMobile.textContent = texto;
+        }
+        if (infoDivMobile) {
+            infoDivMobile.style.display = 'block';
+            const alertDiv = infoDivMobile.querySelector('.alert');
+            if (alertDiv) {
+                if (checked === total) {
+                    alertDiv.className = 'alert alert-success';
+                } else {
+                    alertDiv.className = 'alert alert-info';
+                }
+            }
+        }
+        
+        // Habilitar botón móvil
+        if (btnCompletarMobile) {
+            btnCompletarMobile.disabled = false;
         }
     } else {
-        infoDiv.style.display = 'none';
+        // Desktop
+        if (infoDiv) {
+            infoDiv.style.display = 'none';
+        }
+        
+        // Móvil
+        if (infoDivMobile) {
+            infoDivMobile.style.display = 'none';
+        }
+        
+        // Deshabilitar botón móvil
+        if (btnCompletarMobile) {
+            btnCompletarMobile.disabled = true;
+        }
     }
 }
 
