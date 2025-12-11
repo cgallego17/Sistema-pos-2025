@@ -2277,9 +2277,8 @@ def marketing_view(request):
     return render(request, 'pos/marketing.html', context)
 
 
-@login_required
 def formulario_clientes_view(request):
-    """Vista de formulario de clientes"""
+    """Vista de formulario de clientes (pública)"""
     if request.method == 'POST':
         nombre = request.POST.get('nombre')
         email = request.POST.get('email')
