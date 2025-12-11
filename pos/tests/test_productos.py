@@ -1,10 +1,14 @@
 """
 Tests para el módulo de Productos
 """
-from django.test import TestCase, Client
-from django.contrib.auth.models import User
+from django.test import TestCase, Client, signals
+from django.contrib.auth.models import User, Group
 from django.urls import reverse
 from pos.models import Producto
+from django.test.client import store_rendered_templates
+
+# Evitar problemas al copiar contextos instrumentados en tests
+signals.template_rendered.receivers = []
 
 
 class ProductosTestCase(TestCase):
@@ -12,8 +16,6 @@ class ProductosTestCase(TestCase):
     
     def setUp(self):
         """Configuración inicial"""
-        from django.contrib.auth.models import Group
-        
         self.user = User.objects.create_user(
             username='testuser',
             password='testpass123',
@@ -23,6 +25,7 @@ class ProductosTestCase(TestCase):
         # Agregar a grupo Administradores para tener permisos
         grupo_admin, _ = Group.objects.get_or_create(name='Administradores')
         self.user.groups.add(grupo_admin)
+        signals.template_rendered.disconnect(store_rendered_templates)
         
         self.producto = Producto.objects.create(
             codigo='PROD001',
