@@ -19,6 +19,10 @@
                     <h5 class="mb-0">Items del Ingreso</h5>
                 </div>
                 <div class="card-body">
+                    {% if not ingreso.completado %}
+                    <form method="post" id="form-verificar-ingreso">
+                        {% csrf_token %}
+                    {% endif %}
                     <div class="table-responsive">
                         <table class="table-modern table">
                             <thead>
@@ -27,24 +31,72 @@
                                     <th>Cantidad</th>
                                     <th>Precio Compra</th>
                                     <th>Subtotal</th>
+                                    {% if not ingreso.completado %}
+                                    <th>Estado</th>
+                                    <th style="width: 50px;">
+                                        <input type="checkbox" id="check-all" title="Marcar/Desmarcar todos">
+                                    </th>
+                                    {% endif %}
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for item in ingreso.items.all %}
-                                <tr>
-                                    <td>{{ item.producto.nombre }}</td>
+                                <tr class="{% if item.procesado %}table-success{% elif item.verificado %}table-info{% endif %}">
+                                    <td>
+                                        <strong>{{ item.producto.nombre }}</strong>
+                                        {% if item.producto.codigo %}
+                                        <br><small class="text-muted">Código: {{ item.producto.codigo }}</small>
+                                        {% endif %}
+                                    </td>
                                     <td>{{ item.cantidad|intcomma }}</td>
                                     <td>${{ item.precio_compra|intcomma }}</td>
                                     <td><strong>${{ item.subtotal|intcomma }}</strong></td>
+                                    {% if not ingreso.completado %}
+                                    <td class="estado-item" data-item-id="{{ item.id }}">
+                                        {% if item.procesado %}
+                                        <span class="badge badge-modern badge-success-modern">
+                                            <i class="bi bi-check-circle-fill"></i> Procesado
+                                        </span>
+                                        {% elif item.verificado %}
+                                        <span class="badge badge-modern badge-info-modern">
+                                            <i class="bi bi-check-circle"></i> Verificado
+                                        </span>
+                                        {% else %}
+                                        <span class="badge badge-modern badge-warning-modern">
+                                            <i class="bi bi-clock"></i> Pendiente
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if not item.procesado %}
+                                        <input type="checkbox" 
+                                               name="items_verificados" 
+                                               value="{{ item.id }}" 
+                                               class="item-checkbox"
+                                               {% if item.verificado %}checked{% endif %}
+                                               onchange="actualizarEstadoItem({{ item.id }}, this.checked)">
+                                        {% else %}
+                                        <span class="text-muted" style="font-size: 0.8rem;">
+                                            <i class="bi bi-check-circle-fill"></i>
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    {% endif %}
                                 </tr>
                                 {% endfor %}
                                 <tr style="background: #f8fafc;">
-                                    <td colspan="3" class="text-end"><strong>TOTAL:</strong></td>
+                                    <td colspan="{% if not ingreso.completado %}4{% else %}3{% endif %}" class="text-end"><strong>TOTAL:</strong></td>
                                     <td><strong class="text-success fs-4" style="color: #10b981 !important;">${{ ingreso.total|intcomma }}</strong></td>
+                                    {% if not ingreso.completado %}
+                                    <td colspan="2"></td>
+                                    {% endif %}
                                 </tr>
                             </tbody>
                         </table>
                     </div>
+                    {% if not ingreso.completado %}
+                    </form>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -74,10 +126,17 @@
                     
                     {% if not ingreso.completado %}
                     <hr>
-                    <form method="post">
+                    <div id="info-verificacion" class="alert alert-info" style="display: none;">
+                        <i class="bi bi-info-circle"></i> <span id="texto-verificacion"></span>
+                    </div>
+                    <form method="post" id="form-completar-ingreso">
                         {% csrf_token %}
-                        <button type="submit" name="completar" class="btn btn-success-pos w-100">
-                            <i class="bi bi-check-circle"></i> Completar Ingreso
+                        <button type="submit" 
+                                name="completar" 
+                                id="btn-completar"
+                                class="btn btn-success-pos w-100"
+                                onclick="return confirmarCompletar();">
+                            <i class="bi bi-check-circle"></i> Procesar Items Verificados
                         </button>
                     </form>
                     {% endif %}
@@ -86,5 +145,110 @@
         </div>
     </div>
 </div>
+
+{% if not ingreso.completado %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Checkbox "Marcar todos"
+    const checkAll = document.getElementById('check-all');
+    const itemCheckboxes = document.querySelectorAll('.item-checkbox');
+    
+    if (checkAll) {
+        checkAll.addEventListener('change', function() {
+            itemCheckboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+                const itemId = checkbox.value;
+                actualizarEstadoItem(itemId, this.checked);
+            });
+        });
+    }
+    
+    // Actualizar contador inicial
+    actualizarContador();
+});
+
+function actualizarEstadoItem(itemId, verificado) {
+    // Enviar AJAX para actualizar el estado del item
+    const url = window.location.href;
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: `item_id=${itemId}&verificar=${verificado ? '1' : '0'}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Actualizar visualmente la fila
+            const checkbox = document.querySelector(`input[value="${itemId}"]`);
+            if (checkbox) {
+                const row = checkbox.closest('tr');
+                const estadoCell = row.querySelector('.estado-item');
+                if (verificado) {
+                    row.classList.remove('table-warning');
+                    row.classList.add('table-info');
+                    if (estadoCell) {
+                        estadoCell.innerHTML = '<span class="badge badge-modern badge-info-modern"><i class="bi bi-check-circle"></i> Verificado</span>';
+                    }
+                } else {
+                    row.classList.remove('table-info', 'table-success');
+                    if (estadoCell) {
+                        estadoCell.innerHTML = '<span class="badge badge-modern badge-warning-modern"><i class="bi bi-clock"></i> Pendiente</span>';
+                    }
+                }
+            }
+            actualizarContador();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al actualizar el estado del item');
+    });
+}
+
+function actualizarContador() {
+    const checked = document.querySelectorAll('.item-checkbox:checked').length;
+    const total = document.querySelectorAll('.item-checkbox').length;
+    const infoDiv = document.getElementById('info-verificacion');
+    const textoDiv = document.getElementById('texto-verificacion');
+    
+    if (checked > 0) {
+        textoDiv.textContent = `${checked} de ${total} items verificados y listos para procesar`;
+        infoDiv.style.display = 'block';
+        if (checked === total) {
+            infoDiv.className = 'alert alert-success';
+        } else {
+            infoDiv.className = 'alert alert-info';
+        }
+    } else {
+        infoDiv.style.display = 'none';
+    }
+}
+
+function confirmarCompletar() {
+    const checked = document.querySelectorAll('.item-checkbox:checked').length;
+    const total = document.querySelectorAll('.item-checkbox').length;
+    
+    if (checked === 0) {
+        alert('Debes verificar al menos un item antes de procesar el ingreso');
+        return false;
+    }
+    
+    if (checked < total) {
+        const confirmar = confirm(
+            `Solo ${checked} de ${total} items están verificados.\n\n` +
+            `¿Deseas procesar solo los items verificados?\n\n` +
+            `Los items no verificados quedarán pendientes y podrás procesarlos después.`
+        );
+        return confirmar;
+    }
+    
+    return confirm('¿Estás seguro de procesar estos items verificados?');
+}
+</script>
+{% endif %}
+
 {% endblock %}
 

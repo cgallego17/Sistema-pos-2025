@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
 
 
 class Producto(models.Model):
@@ -23,6 +25,13 @@ class Producto(models.Model):
         max_length=200, 
         verbose_name='Nombre',
         db_index=True
+    )
+    atributo = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        verbose_name='Atributo',
+        help_text='Atributo adicional del producto (ej: color, tamaño, modelo, etc.)'
     )
     precio = models.IntegerField(
         default=0,
@@ -684,6 +693,14 @@ class ItemIngresoMercancia(models.Model):
         default=0,
         verbose_name='Subtotal'
     )
+    verificado = models.BooleanField(
+        default=False,
+        verbose_name='Verificado'
+    )
+    procesado = models.BooleanField(
+        default=False,
+        verbose_name='Procesado'
+    )
 
     class Meta:
         verbose_name = 'Item de Ingreso'
@@ -845,4 +862,24 @@ class CampanaMarketing(models.Model):
 
     def __str__(self):
         return f"{self.nombre} - {self.get_estado_display()}"
+
+
+# ============================================
+# SEÑALES PARA MANTENER INTEGRIDAD DE DATOS
+# ============================================
+
+@receiver(pre_delete, sender=IngresoMercancia)
+def eliminar_movimientos_ingreso(sender, instance, **kwargs):
+    """Eliminar movimientos de stock asociados cuando se elimina un ingreso"""
+    MovimientoStock.objects.filter(
+        motivo__startswith=f'Ingreso #{instance.id}'
+    ).delete()
+
+
+@receiver(pre_delete, sender=SalidaMercancia)
+def eliminar_movimientos_salida(sender, instance, **kwargs):
+    """Eliminar movimientos de stock asociados cuando se elimina una salida"""
+    MovimientoStock.objects.filter(
+        motivo__startswith=f'Salida #{instance.id}'
+    ).delete()
 

@@ -58,14 +58,6 @@ class Migration(migrations.Migration):
             name='usuario',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='ventas', to=settings.AUTH_USER_MODEL, verbose_name='Usuario'),
         ),
-        migrations.AddIndex(
-            model_name='venta',
-            index=models.Index(fields=['caja', 'fecha'], name='pos_venta_caja_id_708460_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='venta',
-            index=models.Index(fields=['usuario', 'fecha'], name='pos_venta_usuario_e23ca8_idx'),
-        ),
         migrations.AddField(
             model_name='cajausuario',
             name='caja',
@@ -80,6 +72,14 @@ class Migration(migrations.Migration):
             model_name='venta',
             name='caja',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='ventas', to='pos.caja', verbose_name='Caja'),
+        ),
+        migrations.AddIndex(
+            model_name='venta',
+            index=models.Index(fields=['caja', 'fecha'], name='pos_venta_caja_id_708460_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='venta',
+            index=models.Index(fields=['usuario', 'fecha'], name='pos_venta_usuario_e23ca8_idx'),
         ),
         migrations.AddIndex(
             model_name='cajausuario',

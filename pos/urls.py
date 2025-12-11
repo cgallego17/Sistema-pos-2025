@@ -33,6 +33,7 @@ urlpatterns = [
     path('ventas/<int:venta_id>/editar/', views.editar_venta_view, name='editar_venta'),
     path('ventas/<int:venta_id>/anular/', views.anular_venta_view, name='anular_venta'),
     path('ventas/<int:venta_id>/imprimir/', views.imprimir_ticket_view, name='imprimir_ticket'),
+    path('ventas/<int:venta_id>/enviar-email/', views.enviar_ticket_email_view, name='enviar_ticket_email'),
     
     # Caja
     path('caja/', views.caja_view, name='caja'),
@@ -46,6 +47,7 @@ urlpatterns = [
     
     # Inventario (Ingreso/Salida Mercancía unificado)
     path('inventario/', views.inventario_view, name='inventario'),
+    path('movimientos-inventario/', views.movimientos_inventario_view, name='movimientos_inventario'),
     path('ingreso-mercancia/', views.ingreso_mercancia_view, name='ingreso_mercancia'),
     path('ingreso-mercancia/nuevo/', views.crear_ingreso_view, name='crear_ingreso'),
     path('ingreso-mercancia/<int:ingreso_id>/', views.detalle_ingreso_view, name='detalle_ingreso'),

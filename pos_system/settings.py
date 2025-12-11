@@ -3,7 +3,6 @@ Django settings for pos_system project.
 """
 
 from pathlib import Path
-import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -124,4 +123,16 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login/'
+
+# Configuracion Correo electronico
+# Usar backend personalizado para evitar problemas con starttls
+EMAIL_BACKEND = 'pos.email_backend.CustomSMTPEmailBackend'
+EMAIL_HOST = 'premium169.web-hosting.com'
+EMAIL_PORT = 587
+EMAIL_HOST_USER = 'noreply@tersacosmeticos.com'
+EMAIL_HOST_PASSWORD = '[7(=~&fq(jES'
+EMAIL_USE_TLS = True  # Enable TLS encryption
+EMAIL_USE_SSL = False  # No usar SSL si se usa TLS
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = 'Ventas Bazar 2025 <noreply@tersacosmeticos.com>'
 

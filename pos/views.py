@@ -466,10 +466,56 @@ def vender_view(request):
         messages.warning(request, 'Debes abrir una caja antes de realizar ventas. Por favor, abre la caja desde el Dashboard.')
         return redirect('pos:home')
     
+    # Limpiar carrito de productos inválidos al entrar al POS
+    carrito = get_carrito(request)
+    if carrito:
+        carrito_limpio = {}
+        productos_activos_ids = set(Producto.objects.filter(activo=True).values_list('id', flat=True))
+        
+        for key, item in carrito.items():
+            producto_id = item.get('producto_id')
+            # Solo mantener productos que existan, estén activos y tengan stock suficiente
+            if producto_id and producto_id in productos_activos_ids:
+                try:
+                    producto = Producto.objects.get(id=producto_id, activo=True)
+                    cantidad_carrito = item.get('cantidad', 0)
+                    if cantidad_carrito > 0 and producto.stock >= cantidad_carrito:
+                        carrito_limpio[key] = item
+                except Producto.DoesNotExist:
+                    pass
+        
+        # Actualizar el carrito en la sesión si se limpió
+        if len(carrito_limpio) != len(carrito):
+            request.session['carrito'] = carrito_limpio
+            request.session.modified = True
+    
     # Si es AJAX para cargar carrito
     if request.GET.get('cargar_carrito'):
         carrito = get_carrito(request)
-        return JsonResponse({'carrito': carrito})
+        # Validar y limpiar productos inválidos del carrito
+        carrito_limpio = {}
+        productos_activos_ids = set(Producto.objects.filter(activo=True).values_list('id', flat=True))
+        
+        for key, item in carrito.items():
+            producto_id = item.get('producto_id')
+            # Solo mantener productos que existan, estén activos y tengan stock
+            if producto_id and producto_id in productos_activos_ids:
+                try:
+                    producto = Producto.objects.get(id=producto_id, activo=True)
+                    # Verificar que el stock sea suficiente
+                    cantidad_carrito = item.get('cantidad', 0)
+                    if cantidad_carrito > 0 and producto.stock >= cantidad_carrito:
+                        carrito_limpio[key] = item
+                except Producto.DoesNotExist:
+                    # Producto no existe o está inactivo, no incluirlo
+                    pass
+        
+        # Actualizar el carrito en la sesión si se limpió
+        if len(carrito_limpio) != len(carrito):
+            request.session['carrito'] = carrito_limpio
+            request.session.modified = True
+        
+        return JsonResponse({'carrito': carrito_limpio})
     
     productos = Producto.objects.filter(activo=True, stock__gt=0).order_by('nombre')
     
@@ -622,8 +668,23 @@ def procesar_venta(request):
 @login_required
 def productos_view(request):
     """Vista de lista de productos"""
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    
     # Todos pueden ver productos, pero solo algunos pueden editarlos
-    productos = Producto.objects.all().order_by('nombre')
+    productos_list = Producto.objects.all().order_by('nombre')
+    
+    # Paginación: 20 productos por página
+    paginator = Paginator(productos_list, 20)
+    page = request.GET.get('page', 1)
+    
+    try:
+        productos = paginator.page(page)
+    except PageNotAnInteger:
+        # Si la página no es un entero, mostrar la primera página
+        productos = paginator.page(1)
+    except EmptyPage:
+        # Si la página está fuera de rango, mostrar la última página
+        productos = paginator.page(paginator.num_pages)
     
     # Verificar si puede editar productos
     puede_editar = puede_gestionar_productos(request.user)
@@ -639,7 +700,20 @@ def productos_view(request):
 @login_required
 def lista_ventas_view(request):
     """Vista de lista de ventas"""
-    ventas = Venta.objects.filter(completada=True).order_by('-fecha')
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    
+    ventas_list = Venta.objects.filter(completada=True).order_by('-fecha')
+    
+    # Paginación: 20 ventas por página
+    paginator = Paginator(ventas_list, 20)
+    page = request.GET.get('page', 1)
+    
+    try:
+        ventas = paginator.page(page)
+    except PageNotAnInteger:
+        ventas = paginator.page(1)
+    except EmptyPage:
+        ventas = paginator.page(paginator.num_pages)
     
     context = {
         'ventas': ventas,
@@ -896,16 +970,131 @@ def imprimir_ticket_view(request, venta_id):
     """Vista para imprimir ticket térmico 80mm"""
     venta = get_object_or_404(Venta, id=venta_id)
     
-    # Calcular cambio si es pago en efectivo
+    # IMPORTANTE: monto_recibido siempre es igual al total (no se guarda el monto pagado mayor)
+    # Por lo tanto, el vuelto siempre será 0 en los tickets
     cambio = 0
-    if venta.metodo_pago == 'efectivo' and venta.monto_recibido:
-        cambio = venta.monto_recibido - venta.total
     
     context = {
         'venta': venta,
         'cambio': cambio,
     }
     return render(request, 'pos/ticket_80mm.html', context)
+
+
+@login_required
+def enviar_ticket_email_view(request, venta_id):
+    """Vista para enviar el ticket por correo electrónico como PDF adjunto"""
+    from django.core.mail import EmailMessage
+    from django.template.loader import render_to_string
+    from django.http import JsonResponse
+    import smtplib
+    import io
+    from xhtml2pdf import pisa
+    
+    venta = get_object_or_404(Venta, id=venta_id)
+    
+    if request.method == 'POST':
+        email_destino = request.POST.get('email', '').strip()
+        
+        if not email_destino:
+            return JsonResponse({'success': False, 'error': 'El correo electrónico es requerido'})
+        
+        # Validar formato de email básico
+        if '@' not in email_destino or '.' not in email_destino.split('@')[1]:
+            return JsonResponse({'success': False, 'error': 'El correo electrónico no es válido'})
+        
+        try:
+            # IMPORTANTE: monto_recibido siempre es igual al total (no se guarda el monto pagado mayor)
+            # Por lo tanto, el vuelto siempre será 0 en los tickets
+            cambio = 0
+            
+            # Renderizar el ticket como HTML (usar template específico para email)
+            context = {
+                'venta': venta,
+                'cambio': cambio,
+            }
+            html_content = render_to_string('pos/ticket_email.html', context)
+            
+            # Generar PDF desde HTML
+            pdf_buffer = io.BytesIO()
+            pisa_status = pisa.CreatePDF(
+                html_content,
+                dest=pdf_buffer,
+                encoding='utf-8'
+            )
+            
+            # Verificar si se generó el PDF correctamente
+            if pisa_status.err:
+                logger.error(f'Error al generar PDF: {pisa_status.err}')
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Error al generar el PDF del ticket'
+                })
+            
+            # Obtener el contenido del PDF
+            pdf_buffer.seek(0)
+            pdf_content = pdf_buffer.getvalue()
+            pdf_buffer.close()
+            
+            # Crear el email con el PDF adjunto
+            subject = f'Ticket de Venta #{venta.id} - MegaPos By Megadominio.co'
+            from_email = 'Ventas Bazar 2025 <noreply@tersacosmeticos.com>'
+            
+            # Mensaje de texto para el cuerpo del email
+            mensaje_texto = f'''
+Estimado cliente,
+
+Adjunto encontrará el ticket de su compra #{venta.id}.
+
+Fecha: {venta.fecha.strftime("%d/%m/%Y %H:%M")}
+Total: ${venta.total:,}
+
+Gracias por su compra.
+
+Atentamente,
+Ventas Bazar 2025
+MegaPos By Megadominio.co
+            '''.strip()
+            
+            email = EmailMessage(
+                subject=subject,
+                body=mensaje_texto,
+                from_email=from_email,
+                to=[email_destino],
+            )
+            
+            # Adjuntar el PDF
+            nombre_archivo = f'Ticket_{venta.id}_{venta.fecha.strftime("%Y%m%d")}.pdf'
+            email.attach(nombre_archivo, pdf_content, 'application/pdf')
+            
+            # Enviar el email
+            email.send()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Ticket enviado exitosamente a {email_destino}'
+            })
+            
+        except ImportError:
+            logger.error('xhtml2pdf no está instalado. Instale con: pip install xhtml2pdf')
+            return JsonResponse({
+                'success': False,
+                'error': 'Error: La librería xhtml2pdf no está instalada. Por favor, instálela con: pip install xhtml2pdf'
+            })
+        except smtplib.SMTPException as e:
+            logger.error(f'Error SMTP al enviar ticket por email: {str(e)}', exc_info=True)
+            return JsonResponse({
+                'success': False,
+                'error': f'Error SMTP al enviar el correo: {str(e)}'
+            })
+        except Exception as e:
+            logger.error(f'Error al enviar ticket por email: {str(e)}', exc_info=True)
+            return JsonResponse({
+                'success': False,
+                'error': f'Error al enviar el correo: {str(e)}'
+            })
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
 
 
 @login_required
@@ -944,16 +1133,17 @@ def anular_venta_view(request, venta_id):
             
             # Manejar el dinero recibido si la venta fue en efectivo
             accion_dinero = request.POST.get('accion_dinero', 'mantener')
-            if accion_dinero == 'devolver' and venta.metodo_pago == 'efectivo' and venta.monto_recibido:
+            if accion_dinero == 'devolver' and venta.metodo_pago == 'efectivo' and venta.total:
                 # Usar la función auxiliar para obtener la caja única global
                 from datetime import date
                 hoy = date.today()
                 caja_asociada = obtener_caja_mostrar(None, hoy)  # None porque es caja única global
                 
                 if caja_asociada:
-                    # Crear un gasto para restar el monto recibido de la caja
+                    # IMPORTANTE: Siempre devolver el total de la factura, no el monto_recibido
+                    # porque monto_recibido siempre es igual al total (no se guarda el monto pagado mayor)
                     from .models import GastoCaja
-                    monto_devolver = int(venta.monto_recibido)
+                    monto_devolver = int(venta.total)
                     
                     # Log para trazabilidad
                     logger.info(f"Anulación venta #{venta.id}: Creando gasto de devolución de ${monto_devolver:,} en caja #{caja_asociada.id} (usuario: {request.user.username})")
@@ -1553,10 +1743,66 @@ def cerrar_caja_view(request):
             monto_final = int(float(request.POST.get('monto_final', 0)))
             dinero_retirar = int(float(request.POST.get('dinero_retirar', 0)))
             
+            # Calcular el saldo actual de la caja antes de permitir el retiro
+            from datetime import date
+            from django.db.models import Sum
+            hoy = date.today()
+            inicio_dia = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            fin_dia = timezone.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+            # Obtener todas las ventas de la caja (válidas y anuladas)
+            if caja_abierta.fecha_cierre:
+                ventas_caja_todas = Venta.objects.filter(
+                    caja=caja_principal,
+                    fecha__gte=caja_abierta.fecha_apertura,
+                    fecha__lte=caja_abierta.fecha_cierre,
+                    completada=True
+                )
+            else:
+                ventas_caja_todas = Venta.objects.filter(
+                    caja=caja_principal,
+                    fecha__gte=inicio_dia,
+                    fecha__lte=fin_dia,
+                    completada=True
+                )
+            
+            # Separar ventas válidas y anuladas
+            ventas_caja = ventas_caja_todas.filter(anulada=False)
+            ventas_anuladas_caja = ventas_caja_todas.filter(anulada=True)
+            
+            # Calcular totales
+            total_ventas = int(ventas_caja.aggregate(total=Sum('total'))['total'] or 0)
+            total_anuladas = int(ventas_anuladas_caja.aggregate(total=Sum('total'))['total'] or 0)
+            
+            # Obtener gastos e ingresos
+            from .models import GastoCaja
+            gastos_todos = GastoCaja.objects.filter(caja_usuario=caja_abierta)
+            total_gastos = int(gastos_todos.filter(tipo='gasto').aggregate(total=Sum('monto'))['total'] or 0)
+            total_ingresos = int(gastos_todos.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0)
+            
+            # Obtener monto inicial
+            monto_inicial = int(caja_abierta.monto_inicial) if caja_abierta.monto_inicial else 0
+            
+            # Verificar si hay gastos de devolución para calcular correctamente el saldo
+            gastos_devolucion_total = gastos_todos.filter(descripcion__icontains='Devolución por anulación').aggregate(total=Sum('monto'))['total'] or 0
+            
+            # Calcular saldo disponible (sin incluir el retiro que se va a hacer)
+            if gastos_devolucion_total > 0:
+                saldo_disponible = monto_inicial + total_ventas + total_anuladas + total_ingresos - total_gastos
+            else:
+                saldo_disponible = monto_inicial + total_ventas + total_ingresos - total_gastos
+            
+            # Validar que el dinero a retirar no sea mayor que el saldo disponible
+            if dinero_retirar > saldo_disponible:
+                messages.error(
+                    request, 
+                    f'No se puede retirar ${dinero_retirar:,}. El saldo disponible en caja es ${saldo_disponible:,}'
+                )
+                return redirect('pos:caja')
+            
             # Si hay dinero a retirar, registrarlo como un gasto antes de cerrar
             # Este gasto se agrega al historial y NO se elimina
             if dinero_retirar > 0:
-                from .models import GastoCaja
                 GastoCaja.objects.create(
                     tipo='gasto',
                     monto=dinero_retirar,
@@ -1782,10 +2028,94 @@ def reportes_view(request):
 
 @login_required
 @requiere_rol('Administradores', 'Inventario')
+def movimientos_inventario_view(request):
+    """Vista de movimientos de inventario (trazabilidad completa)"""
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    
+    # Obtener todos los movimientos de stock
+    movimientos_list = MovimientoStock.objects.select_related('producto', 'usuario').order_by('-fecha')
+    
+    # Filtros
+    producto_id = request.GET.get('producto')
+    tipo_movimiento = request.GET.get('tipo')
+    fecha_desde = request.GET.get('fecha_desde')
+    fecha_hasta = request.GET.get('fecha_hasta')
+    
+    if producto_id:
+        movimientos_list = movimientos_list.filter(producto_id=producto_id)
+    
+    if tipo_movimiento:
+        movimientos_list = movimientos_list.filter(tipo=tipo_movimiento)
+    
+    if fecha_desde:
+        try:
+            from datetime import datetime
+            fecha_desde_obj = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+            movimientos_list = movimientos_list.filter(fecha__date__gte=fecha_desde_obj)
+        except ValueError:
+            pass
+    
+    if fecha_hasta:
+        try:
+            from datetime import datetime
+            fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+            movimientos_list = movimientos_list.filter(fecha__date__lte=fecha_hasta_obj)
+        except ValueError:
+            pass
+    
+    # Paginación: 50 movimientos por página
+    paginator = Paginator(movimientos_list, 50)
+    page = request.GET.get('page', 1)
+    
+    try:
+        movimientos = paginator.page(page)
+    except PageNotAnInteger:
+        movimientos = paginator.page(1)
+    except EmptyPage:
+        movimientos = paginator.page(paginator.num_pages)
+    
+    # Obtener lista de productos para el filtro
+    productos = Producto.objects.filter(activo=True).order_by('nombre')
+    
+    context = {
+        'movimientos': movimientos,
+        'productos': productos,
+        'producto_id': producto_id,
+        'tipo_movimiento': tipo_movimiento,
+        'fecha_desde': fecha_desde,
+        'fecha_hasta': fecha_hasta,
+    }
+    
+    return render(request, 'pos/movimientos_inventario.html', context)
+
+
+@login_required
+@requiere_rol('Administradores', 'Inventario')
 def inventario_view(request):
     """Vista unificada de inventario (Ingreso y Salida de mercancía)"""
-    ingresos = IngresoMercancia.objects.all().order_by('-fecha')
-    salidas = SalidaMercancia.objects.all().order_by('-fecha')
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    
+    ingresos_list = IngresoMercancia.objects.all().order_by('-fecha')
+    salidas_list = SalidaMercancia.objects.all().order_by('-fecha')
+    
+    # Paginación: 20 por página
+    paginator_ingresos = Paginator(ingresos_list, 20)
+    paginator_salidas = Paginator(salidas_list, 20)
+    page = request.GET.get('page', 1)
+    
+    try:
+        ingresos = paginator_ingresos.page(page)
+    except PageNotAnInteger:
+        ingresos = paginator_ingresos.page(1)
+    except EmptyPage:
+        ingresos = paginator_ingresos.page(paginator_ingresos.num_pages)
+    
+    try:
+        salidas = paginator_salidas.page(page)
+    except PageNotAnInteger:
+        salidas = paginator_salidas.page(1)
+    except EmptyPage:
+        salidas = paginator_salidas.page(paginator_salidas.num_pages)
     
     # Obtener el tipo de pestaña activa desde la URL
     tipo_activo = request.GET.get('tipo', 'ingreso')  # 'ingreso' o 'salida'
@@ -1977,7 +2307,20 @@ def formulario_clientes_view(request):
 @login_required
 def clientes_potenciales_view(request):
     """Vista de clientes potenciales"""
-    clientes = ClientePotencial.objects.all().order_by('-fecha_registro')
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    
+    clientes_list = ClientePotencial.objects.all().order_by('-fecha_registro')
+    
+    # Paginación: 20 clientes por página
+    paginator = Paginator(clientes_list, 20)
+    page = request.GET.get('page', 1)
+    
+    try:
+        clientes = paginator.page(page)
+    except PageNotAnInteger:
+        clientes = paginator.page(1)
+    except EmptyPage:
+        clientes = paginator.page(paginator.num_pages)
     
     context = {
         'clientes': clientes,
@@ -1995,7 +2338,20 @@ def usuarios_view(request):
         return redirect('pos:home')
     
     from django.contrib.auth.models import User
-    usuarios = User.objects.all().order_by('username')
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    
+    usuarios_list = User.objects.all().order_by('username')
+    
+    # Paginación: 20 usuarios por página
+    paginator = Paginator(usuarios_list, 20)
+    page = request.GET.get('page', 1)
+    
+    try:
+        usuarios = paginator.page(page)
+    except PageNotAnInteger:
+        usuarios = paginator.page(1)
+    except EmptyPage:
+        usuarios = paginator.page(paginator.num_pages)
     
     context = {
         'usuarios': usuarios,
@@ -2244,17 +2600,25 @@ def procesar_venta_completa_view(request):
             )
             
             # Validar monto recibido si es efectivo
+            # IMPORTANTE: Siempre guardamos el total como monto_recibido, no el monto pagado
+            # El vuelto se calcula y muestra, pero no se guarda
             monto_recibido_float = None
-            if metodo_pago == 'efectivo' and monto_recibido:
-                # Limpiar el monto (quitar puntos y comas)
-                import re
-                monto_limpio = re.sub(r'[^0-9]', '', str(monto_recibido))
-                monto_recibido_float = int(float(monto_limpio)) if monto_limpio else 0
-                if monto_recibido_float < total:
-                    return JsonResponse({
-                        'success': False,
-                        'error': f'Monto insuficiente. Total: ${total:,.0f}, Recibido: ${monto_recibido_float:,.0f}'
-                    })
+            if metodo_pago == 'efectivo':
+                if monto_recibido:
+                    # Limpiar el monto (quitar puntos y comas)
+                    import re
+                    monto_limpio = re.sub(r'[^0-9]', '', str(monto_recibido))
+                    monto_pagado = int(float(monto_limpio)) if monto_limpio else 0
+                    if monto_pagado < total:
+                        return JsonResponse({
+                            'success': False,
+                            'error': f'Monto insuficiente. Total: ${total:,.0f}, Recibido: ${monto_pagado:,.0f}'
+                        })
+                    # Siempre guardar el total como monto_recibido, no el monto pagado
+                    monto_recibido_float = int(total)
+                else:
+                    # Si no se proporciona monto recibido, usar el total como monto recibido (sin vuelto)
+                    monto_recibido_float = int(total)
             
             # Obtener vendedor
             vendedor = None
@@ -2272,6 +2636,7 @@ def procesar_venta_completa_view(request):
                 registradora_id = registradora_seleccionada.get('id')
             
             # Crear la venta
+            # IMPORTANTE: monto_recibido siempre será igual al total (no se guarda el monto pagado mayor)
             venta = Venta.objects.create(
                 usuario=request.user,
                 vendedor=vendedor,
@@ -2377,6 +2742,7 @@ def crear_producto_view(request):
             codigo = request.POST.get('codigo')
             codigo_barras = request.POST.get('codigo_barras') or None
             nombre = request.POST.get('nombre')
+            atributo = request.POST.get('atributo') or None
             precio = int(float(request.POST.get('precio', 0)))
             stock = int(request.POST.get('stock', 0))
             activo = request.POST.get('activo') == 'on'
@@ -2390,6 +2756,7 @@ def crear_producto_view(request):
                 codigo=codigo,
                 codigo_barras=codigo_barras,
                 nombre=nombre,
+                atributo=atributo,
                 precio=precio,
                 stock=stock,
                 activo=activo
@@ -2419,8 +2786,11 @@ def editar_producto_view(request, producto_id):
             producto.codigo = request.POST.get('codigo')
             producto.codigo_barras = request.POST.get('codigo_barras') or None
             producto.nombre = request.POST.get('nombre')
+            producto.atributo = request.POST.get('atributo') or None
             producto.precio = int(float(request.POST.get('precio', 0)))
-            producto.stock = int(request.POST.get('stock', 0))
+            # IMPORTANTE: No actualizar el stock desde aquí
+            # El stock solo se modifica mediante movimientos de inventario (ventas, ingresos, salidas)
+            # producto.stock = int(request.POST.get('stock', 0))  # COMENTADO: No se actualiza el stock
             producto.activo = request.POST.get('activo') == 'on'
             
             # Manejar imagen si se sube
@@ -2510,10 +2880,42 @@ def detalle_ingreso_view(request, ingreso_id):
     """Vista de detalle de ingreso de mercancía"""
     ingreso = get_object_or_404(IngresoMercancia, id=ingreso_id)
     
-    if request.method == 'POST' and 'completar' in request.POST:
-        if not ingreso.completado:
-            # Actualizar stock de productos
-            for item in ingreso.items.all():
+    if request.method == 'POST':
+        # Manejar verificación/desverificación de items (AJAX)
+        if 'item_id' in request.POST:
+            item_id = int(request.POST.get('item_id'))
+            verificar = request.POST.get('verificar') == '1'
+            
+            try:
+                item = ItemIngresoMercancia.objects.get(id=item_id, ingreso=ingreso)
+                item.verificado = verificar
+                item.save()
+                return JsonResponse({'success': True})
+            except ItemIngresoMercancia.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Item no encontrado'})
+        
+        # Manejar completar ingreso (parcial o completo)
+        elif 'completar' in request.POST:
+            # Buscar items verificados que aún no han sido procesados
+            items_a_procesar = ingreso.items.filter(verificado=True, procesado=False)
+            
+            if items_a_procesar.count() == 0:
+                # Verificar si hay items verificados pero ya procesados
+                items_verificados_no_procesados = ingreso.items.filter(verificado=True, procesado=False).count()
+                if items_verificados_no_procesados == 0:
+                    # Verificar si todos están procesados
+                    total_items = ingreso.items.count()
+                    items_procesados_total = ingreso.items.filter(procesado=True).count()
+                    if items_procesados_total == total_items:
+                        messages.info(request, 'Todos los items ya han sido procesados')
+                    else:
+                        messages.error(request, 'Debes verificar al menos un item antes de completar el ingreso')
+                return redirect('pos:detalle_ingreso', ingreso_id=ingreso_id)
+            
+            # Procesar solo los items verificados que no han sido procesados
+            items_procesados = 0
+            for item in items_a_procesar:
+                stock_anterior = item.producto.stock
                 item.producto.stock += item.cantidad
                 item.producto.save()
                 
@@ -2522,17 +2924,39 @@ def detalle_ingreso_view(request, ingreso_id):
                     producto=item.producto,
                     tipo='ingreso',
                     cantidad=item.cantidad,
-                    stock_anterior=item.producto.stock - item.cantidad,
+                    stock_anterior=stock_anterior,
                     stock_nuevo=item.producto.stock,
                     motivo=f'Ingreso #{ingreso.id} - {ingreso.proveedor}',
                     usuario=request.user
                 )
+                
+                # Marcar item como procesado
+                item.procesado = True
+                item.save()
+                items_procesados += 1
             
-            ingreso.completado = True
-            ingreso.save()
-            messages.success(request, 'Ingreso completado y stock actualizado')
-        else:
-            messages.warning(request, 'Este ingreso ya está completado')
+            # Verificar si todos los items están procesados para marcar el ingreso como completado
+            total_items = ingreso.items.count()
+            items_procesados_total = ingreso.items.filter(procesado=True).count()
+            items_pendientes = ingreso.items.filter(verificado=False).count()
+            
+            if items_procesados_total == total_items:
+                # Todos los items están procesados
+                ingreso.completado = True
+                ingreso.save()
+                messages.success(request, f'Ingreso completado totalmente. {items_procesados} items procesados en esta operación. Total: {items_procesados_total} items.')
+            else:
+                # Ingreso parcial - aún hay items pendientes
+                items_no_verificados = ingreso.items.filter(verificado=False).count()
+                items_verificados_no_procesados = ingreso.items.filter(verificado=True, procesado=False).count()
+                
+                mensaje = f'Ingreso parcial completado. {items_procesados} items procesados en esta operación.'
+                if items_verificados_no_procesados > 0:
+                    mensaje += f' {items_verificados_no_procesados} items verificados pendientes de procesar.'
+                if items_no_verificados > 0:
+                    mensaje += f' {items_no_verificados} items aún no verificados.'
+                
+                messages.warning(request, mensaje)
     
     context = {'ingreso': ingreso}
     return render(request, 'pos/detalle_ingreso.html', context)

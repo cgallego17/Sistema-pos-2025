@@ -267,6 +267,33 @@
             background: rgba(255, 255, 255, 0.3);
         }
         
+        .sidebar-vendedor-search {
+            padding: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+        }
+        
+        .sidebar-vendedor-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            background: white;
+            color: #1e293b;
+            transition: all 0.2s ease;
+        }
+        
+        .sidebar-vendedor-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .sidebar-vendedor-input::placeholder {
+            color: #94a3b8;
+        }
+        
         .sidebar-vendedor-content {
             flex: 1;
             overflow-y: auto;
@@ -278,6 +305,17 @@
             padding: 2rem;
             color: #64748b;
             font-size: 0.9rem;
+        }
+        
+        .sidebar-vendedor-empty {
+            text-align: center;
+            padding: 2rem;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        
+        .usuario-btn.hidden {
+            display: none;
         }
         
         .usuario-btn {
@@ -1010,6 +1048,11 @@
             <li class="nav-item">
                 <a href="{% url 'pos:inventario' %}" class="nav-link-custom {% if 'inventario' in request.path or 'ingreso-mercancia' in request.path or 'salida-mercancia' in request.path %}active{% endif %}">
                     <i class="bi bi-box-seam-fill"></i> Inventario
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{% url 'pos:movimientos_inventario' %}" class="nav-link-custom {% if 'movimientos-inventario' in request.path %}active{% endif %}">
+                    <i class="bi bi-arrow-left-right"></i> Movimientos
                 </a>
             </li>
             <li class="nav-item">

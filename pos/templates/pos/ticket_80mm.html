@@ -248,19 +248,6 @@
         </div>
     </div>
     
-    {% if venta.metodo_pago == 'efectivo' and venta.monto_recibido %}
-    <div class="payment-info">
-        <div class="payment-row">
-            <span><strong>Efectivo:</strong></span>
-            <span>{{ venta.monto_recibido|intcomma }}</span>
-        </div>
-        <div class="payment-row">
-            <span><strong>Vuelto:</strong></span>
-            <span>{{ cambio|intcomma }}</span>
-        </div>
-    </div>
-    {% endif %}
-    
     {% if venta.anulada %}
     <div class="anulada">*** ANULADA ***</div>
     {% endif %}

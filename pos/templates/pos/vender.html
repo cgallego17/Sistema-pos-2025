@@ -117,7 +117,7 @@
         margin-bottom: 0.4rem;
         border-radius: 4px;
         overflow: hidden;
-        background: #f1f5f9;
+        background: white;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -127,7 +127,8 @@
     .producto-imagen {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: scale-down;
+        background: white;
     }
     
     .producto-imagen-placeholder {
@@ -746,7 +747,7 @@
     <!-- Columna izquierda: Productos -->
     <div class="pos-left">
         <div class="pos-search-bar">
-            <input type="text" id="pos-search" placeholder="🔍 Buscar producto por nombre o código (Enter para agregar)" autocomplete="off" autofocus>
+            <input type="text" id="pos-search" placeholder="🔍 Buscar producto por nombre, código o código de barras (Enter para agregar)" autocomplete="off" autofocus>
             <div class="search-results-pos" id="search-results-pos"></div>
         </div>
         
@@ -896,6 +897,9 @@
     <div class="sidebar-vendedor-header">
         <h3>👤 Seleccionar Vendedor</h3>
         <button class="sidebar-vendedor-cerrar" onclick="cerrarSidebarVendedor()">✕</button>
+    </div>
+    <div class="sidebar-vendedor-search">
+        <input type="text" id="sidebar-vendedor-buscar" class="sidebar-vendedor-input" placeholder="🔍 Buscar vendedor por nombre, usuario o email..." autocomplete="off">
     </div>
     <div class="sidebar-vendedor-content" id="sidebar-vendedor-content">
         <div class="sidebar-vendedor-loading">Cargando usuarios...</div>
@@ -1055,9 +1059,16 @@ async function procesarVenta() {
     
     const formData = new FormData();
     formData.append('metodo_pago', metodoPago);
-    if (montoRecibido) {
-        formData.append('monto_recibido', montoRecibido.replace(/[^0-9]/g, ''));
+    
+    // Si es efectivo, siempre enviar monto recibido (si no se ingresa, se usará el total en el backend)
+    if (metodoPago === 'efectivo') {
+        const montoRecibidoLimpio = montoRecibido ? montoRecibido.replace(/[^0-9]/g, '') : '';
+        if (montoRecibidoLimpio) {
+            formData.append('monto_recibido', montoRecibidoLimpio);
+        }
+        // Si no se ingresó monto recibido, el backend usará el total como monto recibido (sin vuelto)
     }
+    
     if (vendedorId) {
         formData.append('vendedor_id', vendedorId);
     }
@@ -1157,15 +1168,29 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('pos-search');
     if (searchInput) {
         searchInput.addEventListener('input', function(e) {
-            const query = e.target.value.toLowerCase();
+            const query = e.target.value.toLowerCase().trim();
             const productos = document.querySelectorAll('.producto-card-pos');
             
+            if (query === '') {
+                // Si no hay búsqueda, mostrar todos los productos
+                productos.forEach(producto => {
+                    producto.style.display = '';
+                });
+                return;
+            }
+            
             productos.forEach(producto => {
-                const nombre = producto.dataset.nombre || '';
-                const codigo = producto.dataset.codigo || '';
-                const codigoBarras = producto.dataset.codigoBarras || '';
+                const nombre = (producto.dataset.nombre || '').toLowerCase();
+                const codigo = (producto.dataset.codigo || '').toLowerCase();
+                // Obtener código de barras - data-codigo-barras se convierte a codigoBarras en dataset
+                const codigoBarras = (producto.dataset.codigoBarras || '').toLowerCase();
                 
-                if (nombre.includes(query) || codigo.includes(query) || codigoBarras.includes(query)) {
+                // Buscar en nombre, código y código de barras
+                const coincide = nombre.includes(query) || 
+                                codigo.includes(query) || 
+                                codigoBarras.includes(query);
+                
+                if (coincide) {
                     producto.style.display = '';
                 } else {
                     producto.style.display = 'none';
@@ -1291,6 +1316,14 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Búsqueda de vendedores en el sidebar
+    const buscarVendedorInput = document.getElementById('sidebar-vendedor-buscar');
+    if (buscarVendedorInput) {
+        buscarVendedorInput.addEventListener('input', function(e) {
+            filtrarUsuarios(e.target.value);
+        });
+    }
 });
 
 function cambiarCantidad(productoId, cambio) {
@@ -1362,6 +1395,14 @@ function abrirSidebarVendedor() {
     document.getElementById('sidebar-vendedor').classList.add('active');
     document.getElementById('sidebar-vendedor-overlay').classList.add('active');
     cargarUsuarios();
+    
+    // Enfocar el campo de búsqueda después de un breve delay
+    setTimeout(() => {
+        const buscarInput = document.getElementById('sidebar-vendedor-buscar');
+        if (buscarInput) {
+            buscarInput.focus();
+        }
+    }, 300);
 }
 
 function cerrarSidebarVendedor() {
@@ -1369,37 +1410,83 @@ function cerrarSidebarVendedor() {
     document.getElementById('sidebar-vendedor-overlay').classList.remove('active');
 }
 
+// Variable global para almacenar todos los usuarios
+let todosLosUsuarios = [];
+
 function cargarUsuarios() {
     const content = document.getElementById('sidebar-vendedor-content');
     content.innerHTML = '<div class="sidebar-vendedor-loading">Cargando usuarios...</div>';
     
+    // Limpiar el campo de búsqueda
+    const buscarInput = document.getElementById('sidebar-vendedor-buscar');
+    if (buscarInput) {
+        buscarInput.value = '';
+    }
+    
     fetch('{% url "pos:api_usuarios" %}')
         .then(r => r.json())
         .then(data => {
-            content.innerHTML = '';
-            
-            // Botón "Sin vendedor"
-            const btnSinVendedor = document.createElement('button');
-            btnSinVendedor.className = 'usuario-btn';
-            btnSinVendedor.innerHTML = '<div class="usuario-btn-nombre">Sin vendedor</div>';
-            btnSinVendedor.onclick = () => seleccionarVendedor(null);
-            content.appendChild(btnSinVendedor);
-            
-            data.usuarios.forEach(usuario => {
-                const btn = document.createElement('button');
-                btn.className = 'usuario-btn';
-                btn.innerHTML = `
-                    <div class="usuario-btn-nombre">${usuario.nombre_completo}</div>
-                    <div class="usuario-btn-username">@${usuario.username}</div>
-                    ${usuario.email ? `<div class="usuario-btn-email">${usuario.email}</div>` : ''}
-                `;
-                btn.onclick = () => seleccionarVendedor(usuario);
-                content.appendChild(btn);
-            });
+            todosLosUsuarios = data.usuarios;
+            renderizarUsuarios(todosLosUsuarios);
         })
         .catch(() => {
             content.innerHTML = '<div class="sidebar-vendedor-loading" style="color: #ef4444;">Error al cargar usuarios</div>';
         });
+}
+
+function renderizarUsuarios(usuarios) {
+    const content = document.getElementById('sidebar-vendedor-content');
+    content.innerHTML = '';
+    
+    if (usuarios.length === 0) {
+        content.innerHTML = '<div class="sidebar-vendedor-empty">No se encontraron vendedores</div>';
+        return;
+    }
+    
+    // Botón "Sin vendedor"
+    const btnSinVendedor = document.createElement('button');
+    btnSinVendedor.className = 'usuario-btn';
+    btnSinVendedor.setAttribute('data-nombre', 'Sin vendedor');
+    btnSinVendedor.setAttribute('data-username', '');
+    btnSinVendedor.setAttribute('data-email', '');
+    btnSinVendedor.innerHTML = '<div class="usuario-btn-nombre">Sin vendedor</div>';
+    btnSinVendedor.onclick = () => seleccionarVendedor(null);
+    content.appendChild(btnSinVendedor);
+    
+    usuarios.forEach(usuario => {
+        const btn = document.createElement('button');
+        btn.className = 'usuario-btn';
+        btn.setAttribute('data-nombre', usuario.nombre_completo || '');
+        btn.setAttribute('data-username', usuario.username || '');
+        btn.setAttribute('data-email', usuario.email || '');
+        btn.innerHTML = `
+            <div class="usuario-btn-nombre">${usuario.nombre_completo}</div>
+            <div class="usuario-btn-username">@${usuario.username}</div>
+            ${usuario.email ? `<div class="usuario-btn-email">${usuario.email}</div>` : ''}
+        `;
+        btn.onclick = () => seleccionarVendedor(usuario);
+        content.appendChild(btn);
+    });
+}
+
+function filtrarUsuarios(query) {
+    if (!query || query.trim() === '') {
+        renderizarUsuarios(todosLosUsuarios);
+        return;
+    }
+    
+    const queryLower = query.toLowerCase().trim();
+    const usuariosFiltrados = todosLosUsuarios.filter(usuario => {
+        const nombre = (usuario.nombre_completo || '').toLowerCase();
+        const username = (usuario.username || '').toLowerCase();
+        const email = (usuario.email || '').toLowerCase();
+        
+        return nombre.includes(queryLower) || 
+               username.includes(queryLower) || 
+               email.includes(queryLower);
+    });
+    
+    renderizarUsuarios(usuariosFiltrados);
 }
 
 function seleccionarVendedor(usuario) {

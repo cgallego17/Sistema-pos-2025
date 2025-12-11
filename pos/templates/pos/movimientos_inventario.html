@@ -1,0 +1,191 @@
+{% extends 'pos/base.html' %}
+{% load humanize %}
+
+{% block title %}Movimientos de Inventario - MegaPos By Megadominio.co{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1><i class="bi bi-arrow-left-right"></i> Movimientos de Inventario</h1>
+        <div>
+            <span class="badge badge-modern badge-info-modern" style="font-size: 0.9rem; padding: 0.5rem 1rem;">
+                Total: {{ movimientos.paginator.count|intcomma }} movimientos
+            </span>
+        </div>
+    </div>
+
+    <div class="card-modern">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" action="{% url 'pos:movimientos_inventario' %}" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label-modern">Producto:</label>
+                    <select class="form-select form-control-modern" name="producto" id="filtroProducto">
+                        <option value="">Todos los productos</option>
+                        {% for producto in productos %}
+                        <option value="{{ producto.id }}" {% if producto_id == producto.id|stringformat:"s" %}selected{% endif %}>
+                            {{ producto.codigo }} - {{ producto.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label-modern">Tipo:</label>
+                    <select class="form-select form-control-modern" name="tipo" id="filtroTipo">
+                        <option value="">Todos los tipos</option>
+                        <option value="ingreso" {% if tipo_movimiento == 'ingreso' %}selected{% endif %}>Ingreso</option>
+                        <option value="salida" {% if tipo_movimiento == 'salida' %}selected{% endif %}>Salida</option>
+                        <option value="ajuste" {% if tipo_movimiento == 'ajuste' %}selected{% endif %}>Ajuste</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label-modern">Fecha Desde:</label>
+                    <input type="date" class="form-control form-control-modern" name="fecha_desde" id="fechaDesde" value="{{ fecha_desde }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label-modern">Fecha Hasta:</label>
+                    <input type="date" class="form-control form-control-modern" name="fecha_hasta" id="fechaHasta" value="{{ fecha_hasta }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label-modern">&nbsp;</label>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary-pos w-100">
+                            <i class="bi bi-search"></i> Filtrar
+                        </button>
+                        <a href="{% url 'pos:movimientos_inventario' %}" class="btn btn-secondary w-100">
+                            <i class="bi bi-x-circle"></i> Limpiar
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card-modern mt-3">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table-modern table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Producto</th>
+                            <th>Tipo</th>
+                            <th>Cantidad</th>
+                            <th>Stock Anterior</th>
+                            <th>Stock Nuevo</th>
+                            <th>Motivo</th>
+                            <th>Usuario</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for movimiento in movimientos %}
+                        <tr>
+                            <td>{{ movimiento.fecha|date:"d/m/Y H:i:s" }}</td>
+                            <td>
+                                <strong>{{ movimiento.producto.codigo }}</strong><br>
+                                <small class="text-muted">{{ movimiento.producto.nombre }}</small>
+                            </td>
+                            <td>
+                                {% if movimiento.tipo == 'ingreso' %}
+                                <span class="badge badge-modern badge-success-modern">
+                                    <i class="bi bi-arrow-down-circle"></i> Ingreso
+                                </span>
+                                {% elif movimiento.tipo == 'salida' %}
+                                <span class="badge badge-modern badge-danger-modern">
+                                    <i class="bi bi-arrow-up-circle"></i> Salida
+                                </span>
+                                {% else %}
+                                <span class="badge badge-modern badge-warning-modern">
+                                    <i class="bi bi-arrow-left-right"></i> Ajuste
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong class="{% if movimiento.tipo == 'ingreso' %}text-success{% elif movimiento.tipo == 'salida' %}text-danger{% else %}text-warning{% endif %}">
+                                    {% if movimiento.tipo == 'ingreso' %}+{% elif movimiento.tipo == 'salida' %}-{% endif %}{{ movimiento.cantidad|intcomma }}
+                                </strong>
+                            </td>
+                            <td>{{ movimiento.stock_anterior|intcomma }}</td>
+                            <td><strong>{{ movimiento.stock_nuevo|intcomma }}</strong></td>
+                            <td>
+                                <small>{{ movimiento.motivo|truncatewords:10|default:"-" }}</small>
+                            </td>
+                            <td>
+                                {% if movimiento.usuario %}
+                                {{ movimiento.usuario.get_full_name|default:movimiento.usuario.username }}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted">
+                                <i class="bi bi-inbox" style="font-size: 2rem; opacity: 0.3;"></i><br>
+                                No hay movimientos registrados
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Paginación -->
+            {% if movimientos.has_other_pages %}
+            <nav aria-label="Paginación de movimientos" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if movimientos.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1{% if producto_id %}&producto={{ producto_id }}{% endif %}{% if tipo_movimiento %}&tipo={{ tipo_movimiento }}{% endif %}{% if fecha_desde %}&fecha_desde={{ fecha_desde }}{% endif %}{% if fecha_hasta %}&fecha_hasta={{ fecha_hasta }}{% endif %}" aria-label="Primera">
+                            <span aria-hidden="true">&laquo;&laquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ movimientos.previous_page_number }}{% if producto_id %}&producto={{ producto_id }}{% endif %}{% if tipo_movimiento %}&tipo={{ tipo_movimiento }}{% endif %}{% if fecha_desde %}&fecha_desde={{ fecha_desde }}{% endif %}{% if fecha_hasta %}&fecha_hasta={{ fecha_hasta }}{% endif %}" aria-label="Anterior">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">&laquo;&laquo;</span>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link">&laquo;</span>
+                    </li>
+                    {% endif %}
+                    
+                    <li class="page-item active">
+                        <span class="page-link">
+                            Página {{ movimientos.number }} de {{ movimientos.paginator.num_pages }}
+                        </span>
+                    </li>
+                    
+                    {% if movimientos.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ movimientos.next_page_number }}{% if producto_id %}&producto={{ producto_id }}{% endif %}{% if tipo_movimiento %}&tipo={{ tipo_movimiento }}{% endif %}{% if fecha_desde %}&fecha_desde={{ fecha_desde }}{% endif %}{% if fecha_hasta %}&fecha_hasta={{ fecha_hasta }}{% endif %}" aria-label="Siguiente">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ movimientos.paginator.num_pages }}{% if producto_id %}&producto={{ producto_id }}{% endif %}{% if tipo_movimiento %}&tipo={{ tipo_movimiento }}{% endif %}{% if fecha_desde %}&fecha_desde={{ fecha_desde }}{% endif %}{% if fecha_hasta %}&fecha_hasta={{ fecha_hasta }}{% endif %}" aria-label="Última">
+                            <span aria-hidden="true">&raquo;&raquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">&raquo;</span>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link">&raquo;&raquo;</span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+

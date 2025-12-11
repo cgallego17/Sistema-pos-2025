@@ -103,6 +103,68 @@
                 </tbody>
                 </table>
             </div>
+            
+            <!-- Paginación -->
+            {% if productos.has_other_pages %}
+            <nav aria-label="Paginación de productos" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if productos.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1" aria-label="Primera">
+                            <span aria-hidden="true">&laquo;&laquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ productos.previous_page_number }}" aria-label="Anterior">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">&laquo;&laquo;</span>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link">&laquo;</span>
+                    </li>
+                    {% endif %}
+                    
+                    {% for num in productos.paginator.page_range %}
+                        {% if productos.number == num %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ num }}</span>
+                        </li>
+                        {% elif num > productos.number|add:'-3' and num < productos.number|add:'3' %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if productos.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ productos.next_page_number }}" aria-label="Siguiente">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ productos.paginator.num_pages }}" aria-label="Última">
+                            <span aria-hidden="true">&raquo;&raquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">&raquo;</span>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link">&raquo;&raquo;</span>
+                    </li>
+                    {% endif %}
+                </ul>
+                <div class="text-center mt-2 text-muted">
+                    <small>Mostrando {{ productos.start_index }} - {{ productos.end_index }} de {{ productos.paginator.count }} productos</small>
+                </div>
+            </nav>
+            {% endif %}
         </div>
     </div>
 </div>

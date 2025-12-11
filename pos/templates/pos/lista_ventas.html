@@ -8,7 +8,7 @@
     <div class="page-header">
         <h1><i class="bi bi-receipt"></i> Historial de Ventas</h1>
         <div>
-            <span class="badge badge-modern badge-info-modern" style="font-size: 0.9rem; padding: 0.5rem 1rem;">Total: {{ ventas|length|intcomma }} ventas</span>
+            <span class="badge badge-modern badge-info-modern" style="font-size: 0.9rem; padding: 0.5rem 1rem;">Total: {{ ventas.paginator.count|intcomma }} ventas</span>
         </div>
     </div>
 
@@ -102,6 +102,9 @@
                                 <button type="button" class="btn btn-sm btn-primary-pos" onclick="imprimirTicket({{ venta.id }})" title="Imprimir ticket 80mm" style="padding: 0.25rem 0.5rem;">
                                     <i class="bi bi-printer"></i>
                                 </button>
+                                <button type="button" class="btn btn-sm" onclick="enviarTicketEmail({{ venta.id }})" title="Enviar ticket por correo" style="background: #10b981; color: white; border: none; padding: 0.25rem 0.5rem;">
+                                    <i class="bi bi-envelope"></i>
+                                </button>
                                 <a href="{% url 'pos:editar_venta' venta.id %}" class="btn btn-sm btn-warning" title="Editar venta" style="padding: 0.25rem 0.5rem;">
                                     <i class="bi bi-pencil"></i>
                                 </a>
@@ -130,7 +133,58 @@
             </table>
         </div>
         
-            <!-- Paginación aquí si es necesario -->
+        <!-- Paginación -->
+        {% if ventas.has_other_pages %}
+        <nav aria-label="Paginación de ventas" class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if ventas.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1" aria-label="Primera">
+                        <span aria-hidden="true">&laquo;&laquo;</span>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ ventas.previous_page_number }}" aria-label="Anterior">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">&laquo;&laquo;</span>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link">&laquo;</span>
+                </li>
+                {% endif %}
+                
+                <li class="page-item active">
+                    <span class="page-link">
+                        Página {{ ventas.number }} de {{ ventas.paginator.num_pages }}
+                    </span>
+                </li>
+                
+                {% if ventas.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ ventas.next_page_number }}" aria-label="Siguiente">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ ventas.paginator.num_pages }}" aria-label="Última">
+                        <span aria-hidden="true">&raquo;&raquo;</span>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">&raquo;</span>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link">&raquo;&raquo;</span>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
         </div>
     </div>
 </div>
@@ -164,6 +218,36 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                     <button type="submit" class="btn btn-danger">Anular Venta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para enviar ticket por email -->
+<div class="modal fade" id="modalEnviarEmail" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-envelope"></i> Enviar Ticket por Correo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formEnviarEmail">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p>Ingrese el correo electrónico del cliente para enviar el ticket de la venta:</p>
+                    <div class="mb-3">
+                        <label class="form-label">Correo Electrónico:</label>
+                        <input type="email" class="form-control" name="email" id="emailDestino" required placeholder="cliente@ejemplo.com">
+                        <small class="text-muted">El ticket se enviará a este correo electrónico</small>
+                    </div>
+                    <div id="mensajeEnvio" class="alert" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success-pos" id="btnEnviarEmail">
+                        <i class="bi bi-send"></i> Enviar Ticket
+                    </button>
                 </div>
             </form>
         </div>
@@ -217,6 +301,83 @@ function anularVenta(ventaId, metodoPago, montoRecibido) {
     }
     
     modal.show();
+}
+
+function enviarTicketEmail(ventaId) {
+    const modal = new bootstrap.Modal(document.getElementById('modalEnviarEmail'));
+    const form = document.getElementById('formEnviarEmail');
+    const emailInput = document.getElementById('emailDestino');
+    const mensajeDiv = document.getElementById('mensajeEnvio');
+    const btnEnviar = document.getElementById('btnEnviarEmail');
+    
+    // Limpiar formulario
+    emailInput.value = '';
+    mensajeDiv.style.display = 'none';
+    btnEnviar.disabled = false;
+    
+    // Manejar envío del formulario
+    form.onsubmit = function(e) {
+        e.preventDefault();
+        
+        const email = emailInput.value.trim();
+        if (!email) {
+            mensajeDiv.className = 'alert alert-danger';
+            mensajeDiv.textContent = 'Por favor ingrese un correo electrónico';
+            mensajeDiv.style.display = 'block';
+            return;
+        }
+        
+        // Deshabilitar botón mientras se envía
+        btnEnviar.disabled = true;
+        btnEnviar.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando...';
+        mensajeDiv.style.display = 'none';
+        
+        // Enviar petición AJAX
+        const formData = new FormData();
+        formData.append('email', email);
+        formData.append('csrfmiddlewaretoken', form.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        fetch(`/ventas/${ventaId}/enviar-email/`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mensajeDiv.className = 'alert alert-success';
+                mensajeDiv.textContent = data.message || 'Ticket enviado exitosamente';
+                mensajeDiv.style.display = 'block';
+                emailInput.value = '';
+                
+                // Cerrar modal después de 2 segundos
+                setTimeout(() => {
+                    modal.hide();
+                }, 2000);
+            } else {
+                mensajeDiv.className = 'alert alert-danger';
+                mensajeDiv.textContent = data.error || 'Error al enviar el correo';
+                mensajeDiv.style.display = 'block';
+                btnEnviar.disabled = false;
+                btnEnviar.innerHTML = '<i class="bi bi-send"></i> Enviar Ticket';
+            }
+        })
+        .catch(error => {
+            mensajeDiv.className = 'alert alert-danger';
+            mensajeDiv.textContent = 'Error de conexión. Por favor intente nuevamente.';
+            mensajeDiv.style.display = 'block';
+            btnEnviar.disabled = false;
+            btnEnviar.innerHTML = '<i class="bi bi-send"></i> Enviar Ticket';
+        });
+    };
+    
+    modal.show();
+    // Enfocar el campo de email
+    setTimeout(() => {
+        emailInput.focus();
+    }, 300);
 }
 
 // Filtros
