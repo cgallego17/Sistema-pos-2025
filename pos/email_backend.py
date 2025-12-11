@@ -46,3 +46,4 @@ class CustomSMTPEmailBackend(SMTPEmailBackend):
             if not self.fail_silently:
                 raise
 
+

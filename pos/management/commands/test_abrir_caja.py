@@ -173,3 +173,4 @@ class Command(BaseCommand):
             estado = "Abierta" if caja.fecha_cierre is None else "Cerrada"
             self.stdout.write(f'  - ID: {caja.id}, Usuario: {caja.usuario.username}, Estado: {estado}, Monto: ${caja.monto_inicial:,}')
 
+

@@ -260,3 +260,4 @@ class Command(BaseCommand):
             return None
         return cell.value
 
+

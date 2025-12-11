@@ -12,3 +12,4 @@ export default defineConfig({
   reporter: [['list'], ['html', { outputFolder: 'e2e-report' }]],
 });
 
+
