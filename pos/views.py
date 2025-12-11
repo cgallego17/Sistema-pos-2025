@@ -419,6 +419,12 @@ def procesar_venta(request):
                 except User.DoesNotExist:
                     pass
             
+            # Obtener registradora de la sesión
+            registradora_seleccionada = request.session.get('registradora_seleccionada', None)
+            registradora_id = None
+            if registradora_seleccionada:
+                registradora_id = registradora_seleccionada.get('id')
+            
             # Crear la venta
             venta = Venta.objects.create(
                 usuario=request.user,
@@ -426,6 +432,7 @@ def procesar_venta(request):
                 metodo_pago=metodo_pago,
                 monto_recibido=monto_recibido if monto_recibido else None,
                 email_cliente=email_cliente if email_cliente else None,
+                registradora_id=registradora_id,
                 completada=True
             )
             
@@ -753,10 +760,59 @@ def caja_view(request):
         
         messages.info(request, f'Se cerraron automáticamente {cajas_anteriores_abiertas.count()} caja(s) de días anteriores.')
     
-    historial_cajas = CajaUsuario.objects.filter(
+    # Obtener historial de cajas con estadísticas calculadas
+    historial_cajas_raw = CajaUsuario.objects.filter(
         usuario=request.user,
         caja=caja_principal
-    ).order_by('-fecha_apertura')[:10]
+    ).order_by('-fecha_apertura')[:20]
+    
+    # Enriquecer cada caja con estadísticas
+    historial_cajas = []
+    for caja_item in historial_cajas_raw:
+        # Calcular ventas de esta caja
+        if caja_item.fecha_cierre:
+            ventas_caja_item = Venta.objects.filter(
+                caja=caja_principal,
+                fecha__gte=caja_item.fecha_apertura,
+                fecha__lte=caja_item.fecha_cierre,
+                completada=True,
+                anulada=False
+            )
+        else:
+            # Si está abierta, calcular hasta ahora
+            ventas_caja_item = Venta.objects.filter(
+                caja=caja_principal,
+                fecha__gte=caja_item.fecha_apertura,
+                completada=True,
+                anulada=False
+            )
+        
+        total_ventas_caja = ventas_caja_item.aggregate(total=Sum('total'))['total'] or 0
+        cantidad_ventas_caja = ventas_caja_item.count()
+        
+        # Calcular gastos e ingresos
+        from .models import GastoCaja
+        gastos_caja_item = GastoCaja.objects.filter(caja_usuario=caja_item)
+        total_gastos_caja = gastos_caja_item.filter(tipo='gasto').aggregate(total=Sum('monto'))['total'] or 0
+        total_ingresos_caja = gastos_caja_item.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0
+        
+        # Calcular saldo esperado
+        monto_inicial_caja = int(caja_item.monto_inicial) if caja_item.monto_inicial else 0
+        saldo_esperado = monto_inicial_caja + int(total_ventas_caja) + int(total_ingresos_caja) - int(total_gastos_caja)
+        
+        historial_cajas.append({
+            'caja': caja_item,
+            'fecha_apertura': caja_item.fecha_apertura,
+            'fecha_cierre': caja_item.fecha_cierre,
+            'monto_inicial': monto_inicial_caja,
+            'monto_final': int(caja_item.monto_final) if caja_item.monto_final else None,
+            'total_ventas': int(total_ventas_caja),
+            'cantidad_ventas': cantidad_ventas_caja,
+            'total_gastos': int(total_gastos_caja),
+            'total_ingresos': int(total_ingresos_caja),
+            'saldo_esperado': saldo_esperado,
+            'diferencia': int(caja_item.monto_final) - saldo_esperado if caja_item.monto_final else None,
+        })
     
     # Si no hay caja abierta, buscar la última caja cerrada del día actual
     # Priorizar mostrar la caja cerrada más reciente si existe
@@ -777,13 +833,26 @@ def caja_view(request):
     total_gastos = 0
     total_ingresos = 0
     saldo_caja = 0
+    ventas_efectivo = 0
+    ventas_tarjeta = 0
+    ventas_transferencia = 0
+    dinero_fisico_caja = 0
+    porcentaje_efectivo = 0
+    porcentaje_tarjeta = 0
+    porcentaje_transferencia = 0
+    cantidad_ventas = 0
+    promedio_venta = 0
+    cantidad_gastos = 0
+    cantidad_ingresos = 0
+    tiempo_transcurrido = None
     
     if caja_mostrar:
         # Filtrar ventas del período de la caja (desde apertura hasta cierre, o del día si está abierta)
+        # Incluir todas las ventas del período, independientemente de si tienen caja asignada
+        # (ya que todas las ventas deberían estar asociadas a la caja principal)
         if caja_mostrar.fecha_cierre:
             # Si la caja está cerrada, filtrar ventas entre apertura y cierre
             ventas_caja = Venta.objects.filter(
-                caja=caja_principal,
                 fecha__gte=caja_mostrar.fecha_apertura,
                 fecha__lte=caja_mostrar.fecha_cierre,
                 completada=True,
@@ -792,7 +861,6 @@ def caja_view(request):
         else:
             # Si la caja está abierta, filtrar ventas del día actual
             ventas_caja = Venta.objects.filter(
-                caja=caja_principal,
                 fecha__gte=inicio_dia,
                 fecha__lte=fin_dia,
                 completada=True,
@@ -817,6 +885,44 @@ def caja_view(request):
         total_gastos = int(total_gastos_raw) if total_gastos_raw else 0
         total_ingresos = int(total_ingresos_raw) if total_ingresos_raw else 0
         
+        # Obtener monto inicial de la caja
+        monto_inicial = int(caja_mostrar.monto_inicial) if caja_mostrar.monto_inicial else 0
+        
+        # Calcular ventas por método de pago
+        ventas_efectivo = ventas_caja.filter(metodo_pago='efectivo').aggregate(total=Sum('total'))['total'] or 0
+        ventas_tarjeta = ventas_caja.filter(metodo_pago='tarjeta').aggregate(total=Sum('total'))['total'] or 0
+        ventas_transferencia = ventas_caja.filter(metodo_pago='transferencia').aggregate(total=Sum('total'))['total'] or 0
+        
+        # Convertir a enteros
+        ventas_efectivo = int(ventas_efectivo)
+        ventas_tarjeta = int(ventas_tarjeta)
+        ventas_transferencia = int(ventas_transferencia)
+        
+        # Calcular dinero físico en caja (solo efectivo + monto inicial + ingresos - gastos)
+        # Los otros métodos de pago van a cuentas bancarias
+        dinero_fisico_caja = monto_inicial + ventas_efectivo + total_ingresos - total_gastos
+        
+        # Calcular porcentajes
+        porcentaje_efectivo = (ventas_efectivo * 100 / total_ventas) if total_ventas > 0 else 0
+        porcentaje_tarjeta = (ventas_tarjeta * 100 / total_ventas) if total_ventas > 0 else 0
+        porcentaje_transferencia = (ventas_transferencia * 100 / total_ventas) if total_ventas > 0 else 0
+        
+        # Calcular estadísticas adicionales
+        cantidad_ventas = ventas_caja.count()
+        promedio_venta = (total_ventas / cantidad_ventas) if cantidad_ventas > 0 else 0
+        cantidad_gastos = gastos_todos.filter(tipo='gasto').count()
+        cantidad_ingresos = gastos_todos.filter(tipo='ingreso').count()
+        
+        # Calcular tiempo transcurrido desde apertura
+        from datetime import timedelta
+        tiempo_transcurrido = None
+        if caja_mostrar.fecha_apertura:
+            ahora = timezone.now()
+            diferencia = ahora - caja_mostrar.fecha_apertura
+            horas = int(diferencia.total_seconds() / 3600)
+            minutos = int((diferencia.total_seconds() % 3600) / 60)
+            tiempo_transcurrido = f"{horas}h {minutos}m"
+        
         # Para mostrar en la tabla, incluir TODOS los gastos de la caja
         # (no solo los del día actual) para incluir retiros registrados al cerrar
         gastos_caja = gastos_todos.order_by('-fecha')
@@ -825,7 +931,7 @@ def caja_view(request):
         movimientos_unificados = []
         
         # Agregar apertura de caja como primer movimiento
-        monto_inicial = int(caja_mostrar.monto_inicial) if caja_mostrar.monto_inicial else 0
+        # (monto_inicial ya está definido arriba)
         movimientos_unificados.append({
             'tipo': 'apertura',
             'fecha': caja_mostrar.fecha_apertura,
@@ -838,7 +944,19 @@ def caja_view(request):
         })
         
         # Agregar ventas como movimientos
-        for venta in ventas_caja.order_by('fecha'):
+        # Convertir a lista para asegurar que se itere correctamente
+        ventas_lista = list(ventas_caja.order_by('fecha'))
+        for venta in ventas_lista:
+            # Obtener nombre de la registradora si existe
+            registradora_nombre = None
+            if venta.registradora_id:
+                registradoras = {
+                    1: 'Registradora 1',
+                    2: 'Registradora 2',
+                    3: 'Registradora 3',
+                }
+                registradora_nombre = registradoras.get(venta.registradora_id, f'Registradora {venta.registradora_id}')
+            
             movimientos_unificados.append({
                 'tipo': 'venta',
                 'fecha': venta.fecha,
@@ -848,12 +966,18 @@ def caja_view(request):
                 'metodo_pago': venta.get_metodo_pago_display(),
                 'vendedor': venta.vendedor,
                 'venta_id': venta.id,
+                'registradora_id': venta.registradora_id,
+                'registradora_nombre': registradora_nombre,
             })
         
         # Agregar gastos e ingresos como movimientos
         for movimiento in gastos_caja.order_by('fecha'):
+            # Identificar si es un retiro por la descripción
+            es_retiro = 'Retiro de dinero al cerrar caja' in movimiento.descripcion
+            tipo_movimiento = 'retiro' if es_retiro else movimiento.tipo
+            
             movimientos_unificados.append({
-                'tipo': movimiento.tipo,
+                'tipo': tipo_movimiento,
                 'fecha': movimiento.fecha,
                 'monto': movimiento.monto,
                 'descripcion': movimiento.descripcion,
@@ -879,8 +1003,12 @@ def caja_view(request):
                 saldo_despues = saldo_antes + monto
             elif movimiento['tipo'] == 'venta' or movimiento['tipo'] == 'ingreso':
                 saldo_despues = saldo_antes + monto
-            else:  # gasto
+            elif movimiento['tipo'] == 'retiro' or movimiento['tipo'] == 'gasto':
+                # Retiros y gastos restan del saldo
                 saldo_despues = saldo_antes - monto
+            else:
+                # Por defecto, no afecta el saldo
+                saldo_despues = saldo_antes
             
             # Agregar saldo antes y después al movimiento
             movimiento['saldo_antes'] = saldo_antes
@@ -892,10 +1020,8 @@ def caja_view(request):
         # Ordenar por fecha descendente para mostrar (más recientes primero)
         movimientos_unificados.sort(key=lambda x: x['fecha'], reverse=True)
         
-        # Asegurar que todos los valores sean enteros
-        monto_inicial = int(caja_mostrar.monto_inicial) if caja_mostrar.monto_inicial else 0
-        
         # Calcular saldo en caja: Monto Inicial + Ventas + Ingresos - Gastos
+        # (monto_inicial ya está definido arriba)
         # Los gastos incluyen todos los retiros registrados
         # Este es el dinero físico que debería haber en la caja
         saldo_caja = monto_inicial + total_ventas + total_ingresos - total_gastos
@@ -915,6 +1041,18 @@ def caja_view(request):
         'total_gastos': total_gastos,
         'total_ingresos': total_ingresos,
         'saldo_caja': saldo_caja,
+        'ventas_efectivo': ventas_efectivo,
+        'ventas_tarjeta': ventas_tarjeta,
+        'ventas_transferencia': ventas_transferencia,
+        'dinero_fisico_caja': dinero_fisico_caja,
+        'porcentaje_efectivo': porcentaje_efectivo,
+        'porcentaje_tarjeta': porcentaje_tarjeta,
+        'porcentaje_transferencia': porcentaje_transferencia,
+        'cantidad_ventas': cantidad_ventas,
+        'promedio_venta': int(promedio_venta),
+        'cantidad_gastos': cantidad_gastos,
+        'cantidad_ingresos': cantidad_ingresos,
+        'tiempo_transcurrido': tiempo_transcurrido,
         'hoy': hoy,
     }
     
@@ -1210,14 +1348,16 @@ def inventario_view(request):
 @requiere_rol('Administradores', 'Inventario')
 def ingreso_mercancia_view(request):
     """Vista de ingreso de mercancía (redirige a inventario)"""
-    return redirect('pos:inventario?tipo=ingreso')
+    from django.urls import reverse
+    return redirect('{}?tipo=ingreso'.format(reverse('pos:inventario')))
 
 
 @login_required
 @requiere_rol('Administradores', 'Inventario')
 def salida_mercancia_view(request):
     """Vista de salida de mercancía (redirige a inventario)"""
-    return redirect('pos:inventario?tipo=salida')
+    from django.urls import reverse
+    return redirect('{}?tipo=salida'.format(reverse('pos:inventario')))
 
 
 @login_required
@@ -1618,6 +1758,9 @@ def procesar_venta_completa_view(request):
             
             # Obtener registradora de la sesión
             registradora_seleccionada = request.session.get('registradora_seleccionada', None)
+            registradora_id = None
+            if registradora_seleccionada:
+                registradora_id = registradora_seleccionada.get('id')
             
             # Crear la venta
             venta = Venta.objects.create(
@@ -1625,15 +1768,9 @@ def procesar_venta_completa_view(request):
                 vendedor=vendedor,
                 metodo_pago=metodo_pago,
                 monto_recibido=monto_recibido_float if monto_recibido_float else None,
+                registradora_id=registradora_id,
                 completada=True
             )
-            
-            # Guardar registradora en el campo observaciones o crear un campo nuevo
-            # Por ahora lo guardamos en observaciones si existe, sino lo agregamos al motivo
-            if registradora_seleccionada:
-                # Guardar en un campo de texto si existe, sino usar el campo motivo_anulacion temporalmente
-                # Nota: En el futuro se puede agregar un campo registradora al modelo Venta
-                pass  # Por ahora solo lo mostramos en la sesión
             
             # Agregar items y actualizar stock
             for item_data in carrito.values():
@@ -1830,7 +1967,7 @@ def crear_ingreso_view(request):
             for item_data in items_data:
                 producto_id = int(item_data['producto_id'])
                 cantidad = int(item_data['cantidad'])
-                precio_compra = int(float(item_data['precio_compra']))
+                precio_compra = int(float(item_data.get('precio_compra', 0)))
                 
                 producto = Producto.objects.get(id=producto_id)
                 subtotal = cantidad * precio_compra

@@ -41,6 +41,7 @@ class Command(BaseCommand):
                 self.stdout.write('  - Todas las ventas')
                 self.stdout.write('  - Todos los gastos')
                 self.stdout.write('  - Todos los ingresos')
+                self.stdout.write('  - Todas las aperturas de caja')
             
             self.stdout.write('\n' + self.style.ERROR('Esta acción NO se puede deshacer'))
             self.stdout.write('\nPara confirmar, ejecuta el comando con --confirmar')
@@ -90,8 +91,14 @@ class Command(BaseCommand):
                 fecha__lte=fin_dia
             ).delete()[0]
             
+            # Eliminar aperturas de caja del día
+            cajas_eliminadas = CajaUsuario.objects.filter(
+                fecha_apertura__date=hoy
+            ).delete()[0]
+            
             self.stdout.write(f'\n[OK] Eliminadas {ventas_eliminadas} ventas del día')
             self.stdout.write(f'[OK] Eliminados {gastos_eliminados} gastos/ingresos del día')
+            self.stdout.write(f'[OK] Eliminadas {cajas_eliminadas} aperturas de caja del día')
             
         else:
             self.stdout.write('\nEliminando TODOS los movimientos de la caja...')
@@ -111,6 +118,10 @@ class Command(BaseCommand):
             # Eliminar gastos e ingresos
             gastos_eliminados = GastoCaja.objects.all().delete()[0]
             self.stdout.write(f'[OK] Eliminados {gastos_eliminados} gastos/ingresos')
+            
+            # Eliminar todas las aperturas de caja
+            cajas_eliminadas = CajaUsuario.objects.all().delete()[0]
+            self.stdout.write(f'[OK] Eliminadas {cajas_eliminadas} aperturas de caja')
         
         self.stdout.write('\n' + '=' * 70)
         self.stdout.write(self.style.SUCCESS('LIMPIEZA COMPLETADA'))
@@ -119,8 +130,10 @@ class Command(BaseCommand):
         # Mostrar estado actual
         ventas_restantes = Venta.objects.count()
         gastos_restantes = GastoCaja.objects.count()
+        cajas_restantes = CajaUsuario.objects.count()
         
         self.stdout.write(f'\nEstado actual:')
         self.stdout.write(f'  Ventas restantes: {ventas_restantes}')
         self.stdout.write(f'  Gastos/Ingresos restantes: {gastos_restantes}')
+        self.stdout.write(f'  Aperturas de caja restantes: {cajas_restantes}')
 

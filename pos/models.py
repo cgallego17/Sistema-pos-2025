@@ -178,6 +178,13 @@ class Venta(models.Model):
         verbose_name='Vendedor',
         help_text='Vendedor asociado a la venta'
     )
+    registradora_id = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Registradora',
+        help_text='ID de la registradora (1, 2 o 3) desde donde se realizó la venta',
+        db_index=True
+    )
     
     # Campos de anulación
     anulada = models.BooleanField(

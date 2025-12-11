@@ -38,8 +38,8 @@
         {% endif %}
     </div>
 
-    {% if caja_abierta %}
-    <!-- Resumen Financiero -->
+    {% if caja_mostrar %}
+    <!-- Resumen Financiero Mejorado -->
     <div class="row mb-4">
         <div class="col-md-3">
             <div class="stat-card success">
@@ -47,6 +47,12 @@
                     <i class="bi bi-currency-dollar"></i> Total Ventas
                 </div>
                 <div class="stat-card-value" id="totalVentasDisplay">${{ total_ventas|intcomma|default:"0" }}</div>
+                <div class="stat-card-subtitle" style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">
+                    {{ cantidad_ventas|intcomma|default:"0" }} venta{{ cantidad_ventas|pluralize }}
+                    {% if cantidad_ventas > 0 %}
+                    • Promedio: ${{ promedio_venta|intcomma|default:"0" }}
+                    {% endif %}
+                </div>
             </div>
         </div>
         <div class="col-md-3">
@@ -55,6 +61,9 @@
                     <i class="bi bi-arrow-down-circle"></i> Total Gastos
                 </div>
                 <div class="stat-card-value" id="totalGastosDisplay">${{ total_gastos|intcomma|default:"0" }}</div>
+                <div class="stat-card-subtitle" style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">
+                    {{ cantidad_gastos|intcomma|default:"0" }} registro{{ cantidad_gastos|pluralize }}
+                </div>
             </div>
         </div>
         <div class="col-md-3">
@@ -63,6 +72,9 @@
                     <i class="bi bi-arrow-up-circle"></i> Total Ingresos
                 </div>
                 <div class="stat-card-value" id="totalIngresosDisplay">${{ total_ingresos|intcomma|default:"0" }}</div>
+                <div class="stat-card-subtitle" style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">
+                    {{ cantidad_ingresos|intcomma|default:"0" }} registro{{ cantidad_ingresos|pluralize }}
+                </div>
             </div>
         </div>
         <div class="col-md-3">
@@ -71,6 +83,13 @@
                     <i class="bi bi-calculator"></i> Saldo en Caja
                 </div>
                 <div class="stat-card-value" id="saldoCajaDisplay">${{ saldo_caja|intcomma|default:"0" }}</div>
+                <div class="stat-card-subtitle" style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">
+                    {% if tiempo_transcurrido %}
+                    <i class="bi bi-clock"></i> {{ tiempo_transcurrido }}
+                    {% else %}
+                    Caja cerrada
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
@@ -100,69 +119,305 @@
             <div class="tab-content" id="cajaTabsContent">
                 <!-- Tab Resumen -->
                 <div class="tab-pane fade show active" id="resumen" role="tabpanel" aria-labelledby="resumen-tab">
+                    <!-- Información General de Caja -->
                     <div class="row mb-4">
                         <div class="col-md-12">
                             <h5 class="mb-3" style="color: #1e293b; font-weight: 600;">
-                                <i class="bi bi-info-circle"></i> Información de Caja
+                                <i class="bi bi-info-circle"></i> Información General
                             </h5>
-                            <div class="table-responsive">
-                                <table class="table table-modern">
-                                    <thead>
-                                        <tr>
-                                            <th style="width: 200px;">Campo</th>
-                                            <th>Valor</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr>
-                                            <td><strong>Caja</strong></td>
-                                            <td>{{ caja_mostrar.caja }}</td>
-                                            <td></td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Fecha Apertura</strong></td>
-                                            <td>{{ caja_mostrar.fecha_apertura|date:"d/m/Y H:i" }}</td>
-                                            <td></td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Monto Inicial</strong></td>
-                                            <td><strong style="color: #10b981; font-size: 1.1rem;">${{ caja_mostrar.monto_inicial|intcomma }}</strong></td>
-                                            <td></td>
-                                        </tr>
-                                        {% if caja_mostrar.fecha_cierre %}
-                                        <tr>
-                                            <td><strong>Fecha Cierre</strong></td>
-                                            <td>{{ caja_mostrar.fecha_cierre|date:"d/m/Y H:i" }}</td>
-                                            <td></td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Monto Final</strong></td>
-                                            <td><strong style="color: #0ea5e9; font-size: 1.1rem;">${{ caja_mostrar.monto_final|intcomma|default:"0" }}</strong></td>
-                                            <td></td>
-                                        </tr>
-                                        {% endif %}
-                                        <tr>
-                                            <td><strong>Total Ventas</strong></td>
-                                            <td><strong style="color: #10b981;">${{ total_ventas|intcomma|default:"0" }}</strong></td>
-                                            <td></td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Total Ingresos</strong></td>
-                                            <td><strong style="color: #10b981;">${{ total_ingresos|intcomma|default:"0" }}</strong></td>
-                                            <td></td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Total Gastos</strong></td>
-                                            <td><strong style="color: #ef4444;">${{ total_gastos|intcomma|default:"0" }}</strong></td>
-                                            <td></td>
-                                        </tr>
-                                        <tr style="background: #f8fafc;">
-                                            <td><strong style="font-size: 1.1rem;">Saldo en Caja</strong></td>
-                                            <td><strong style="color: #0ea5e9; font-size: 1.3rem;">${{ saldo_caja|intcomma|default:"0" }}</strong></td>
-                                            <td></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="card-modern" style="border-left: 4px solid #0ea5e9; background: #f0f9ff;">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div style="flex: 1;">
+                                                    <h6 style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.75rem; font-weight: 500;">
+                                                        <i class="bi bi-cash-stack" style="color: #0ea5e9;"></i> Caja
+                                                    </h6>
+                                                    <div style="font-size: 1.3rem; font-weight: 700; color: #1e293b; margin-bottom: 0.5rem;">
+                                                        {{ caja_mostrar.caja }}
+                                                    </div>
+                                                    <div style="font-size: 0.9rem; color: #64748b;">
+                                                        <i class="bi bi-calendar"></i> Apertura: {{ caja_mostrar.fecha_apertura|date:"d/m/Y H:i" }}
+                                                        {% if tiempo_transcurrido %}
+                                                        <br><i class="bi bi-clock"></i> Tiempo: {{ tiempo_transcurrido }}
+                                                        {% endif %}
+                                                        {% if caja_mostrar.fecha_cierre %}
+                                                        <br><i class="bi bi-x-circle"></i> Cierre: {{ caja_mostrar.fecha_cierre|date:"d/m/Y H:i" }}
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                                <div style="font-size: 2.5rem; opacity: 0.2; color: #0ea5e9;">
+                                                    <i class="bi bi-cash-stack"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card-modern" style="border-left: 4px solid #10b981; background: #f0fdf4;">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div style="flex: 1;">
+                                                    <h6 style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.75rem; font-weight: 500;">
+                                                        <i class="bi bi-wallet2" style="color: #10b981;"></i> Montos
+                                                    </h6>
+                                                    <div style="margin-bottom: 0.75rem;">
+                                                        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem;">Monto Inicial</div>
+                                                        <div style="font-size: 1.2rem; font-weight: 700; color: #10b981;">
+                                                            ${{ caja_mostrar.monto_inicial|intcomma }}
+                                                        </div>
+                                                    </div>
+                                                    {% if caja_mostrar.fecha_cierre %}
+                                                    <div>
+                                                        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem;">Monto Final</div>
+                                                        <div style="font-size: 1.2rem; font-weight: 700; color: #0ea5e9;">
+                                                            ${{ caja_mostrar.monto_final|intcomma|default:"0" }}
+                                                        </div>
+                                                    </div>
+                                                    {% endif %}
+                                                </div>
+                                                <div style="font-size: 2.5rem; opacity: 0.2; color: #10b981;">
+                                                    <i class="bi bi-wallet2"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Resumen de Movimientos -->
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <h5 class="mb-3" style="color: #1e293b; font-weight: 600;">
+                                <i class="bi bi-bar-chart"></i> Resumen de Movimientos
+                            </h5>
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <div class="card-modern" style="border-left: 4px solid #3b82f6; background: #eff6ff;">
+                                        <div class="card-body text-center">
+                                            <div style="font-size: 2rem; color: #3b82f6; margin-bottom: 0.5rem;">
+                                                <i class="bi bi-receipt"></i>
+                                            </div>
+                                            <div style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 0.25rem;">
+                                                ${{ total_ventas|intcomma|default:"0" }}
+                                            </div>
+                                            <div style="font-size: 0.9rem; color: #64748b;">
+                                                Total Ventas
+                                            </div>
+                                            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.5rem;">
+                                                {{ cantidad_ventas|intcomma|default:"0" }} venta{{ cantidad_ventas|pluralize }}
+                                                {% if cantidad_ventas > 0 %}
+                                                <br>Promedio: ${{ promedio_venta|intcomma|default:"0" }}
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card-modern" style="border-left: 4px solid #10b981; background: #f0fdf4;">
+                                        <div class="card-body text-center">
+                                            <div style="font-size: 2rem; color: #10b981; margin-bottom: 0.5rem;">
+                                                <i class="bi bi-arrow-up-circle"></i>
+                                            </div>
+                                            <div style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 0.25rem;">
+                                                ${{ total_ingresos|intcomma|default:"0" }}
+                                            </div>
+                                            <div style="font-size: 0.9rem; color: #64748b;">
+                                                Total Ingresos
+                                            </div>
+                                            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.5rem;">
+                                                {{ cantidad_ingresos|intcomma|default:"0" }} registro{{ cantidad_ingresos|pluralize }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card-modern" style="border-left: 4px solid #ef4444; background: #fef2f2;">
+                                        <div class="card-body text-center">
+                                            <div style="font-size: 2rem; color: #ef4444; margin-bottom: 0.5rem;">
+                                                <i class="bi bi-arrow-down-circle"></i>
+                                            </div>
+                                            <div style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-bottom: 0.25rem;">
+                                                ${{ total_gastos|intcomma|default:"0" }}
+                                            </div>
+                                            <div style="font-size: 0.9rem; color: #64748b;">
+                                                Total Gastos
+                                            </div>
+                                            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.5rem;">
+                                                {{ cantidad_gastos|intcomma|default:"0" }} registro{{ cantidad_gastos|pluralize }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card-modern" style="border-left: 4px solid #0ea5e9; background: #f0f9ff;">
+                                        <div class="card-body text-center">
+                                            <div style="font-size: 2rem; color: #0ea5e9; margin-bottom: 0.5rem;">
+                                                <i class="bi bi-calculator"></i>
+                                            </div>
+                                            <div style="font-size: 1.5rem; font-weight: 700; color: #0ea5e9; margin-bottom: 0.25rem;">
+                                                ${{ saldo_caja|intcomma|default:"0" }}
+                                            </div>
+                                            <div style="font-size: 0.9rem; color: #64748b;">
+                                                Saldo en Caja
+                                            </div>
+                                            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.5rem;">
+                                                {% if tiempo_transcurrido %}
+                                                <i class="bi bi-clock"></i> {{ tiempo_transcurrido }}
+                                                {% else %}
+                                                Caja cerrada
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Desglose de Ventas por Método de Pago -->
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <h5 class="mb-3" style="color: #1e293b; font-weight: 600;">
+                                <i class="bi bi-credit-card"></i> Desglose de Ventas por Método de Pago
+                            </h5>
+                            <div class="row g-3">
+                                <!-- Efectivo -->
+                                <div class="col-md-4">
+                                    <div class="card-modern" style="border-left: 4px solid #10b981; background: #f0fdf4;">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <h6 style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 500;">
+                                                        <i class="bi bi-cash-coin" style="color: #10b981;"></i> Efectivo
+                                                    </h6>
+                                                    <div style="font-size: 1.5rem; font-weight: 700; color: #10b981;">
+                                                        ${{ ventas_efectivo|intcomma|default:"0" }}
+                                                    </div>
+                                                    <small style="color: #94a3b8;">
+                                                        {{ porcentaje_efectivo|floatformat:1|default:"0" }}% del total
+                                                    </small>
+                                                </div>
+                                                <div style="font-size: 2.5rem; opacity: 0.2; color: #10b981;">
+                                                    <i class="bi bi-cash-coin"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Tarjeta -->
+                                <div class="col-md-4">
+                                    <div class="card-modern" style="border-left: 4px solid #3b82f6; background: #eff6ff;">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <h6 style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 500;">
+                                                        <i class="bi bi-credit-card" style="color: #3b82f6;"></i> Tarjeta
+                                                    </h6>
+                                                    <div style="font-size: 1.5rem; font-weight: 700; color: #3b82f6;">
+                                                        ${{ ventas_tarjeta|intcomma|default:"0" }}
+                                                    </div>
+                                                    <small style="color: #94a3b8;">
+                                                        {{ porcentaje_tarjeta|floatformat:1|default:"0" }}% del total
+                                                    </small>
+                                                </div>
+                                                <div style="font-size: 2.5rem; opacity: 0.2; color: #3b82f6;">
+                                                    <i class="bi bi-credit-card"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Transferencia -->
+                                <div class="col-md-4">
+                                    <div class="card-modern" style="border-left: 4px solid #8b5cf6; background: #f5f3ff;">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <h6 style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 500;">
+                                                        <i class="bi bi-bank" style="color: #8b5cf6;"></i> Transferencia
+                                                    </h6>
+                                                    <div style="font-size: 1.5rem; font-weight: 700; color: #8b5cf6;">
+                                                        ${{ ventas_transferencia|intcomma|default:"0" }}
+                                                    </div>
+                                                    <small style="color: #94a3b8;">
+                                                        {{ porcentaje_transferencia|floatformat:1|default:"0" }}% del total
+                                                    </small>
+                                                </div>
+                                                <div style="font-size: 2.5rem; opacity: 0.2; color: #8b5cf6;">
+                                                    <i class="bi bi-bank"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Dinero Físico vs Bancario -->
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h5 class="mb-3" style="color: #1e293b; font-weight: 600;">
+                                <i class="bi bi-wallet2"></i> Desglose de Dinero
+                            </h5>
+                            <div class="row g-3">
+                                <!-- Dinero Físico en Caja -->
+                                <div class="col-md-6">
+                                    <div class="card-modern" style="border-left: 4px solid #f59e0b; background: #fffbeb;">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <h6 style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 500;">
+                                                        <i class="bi bi-cash-stack" style="color: #f59e0b;"></i> Dinero Físico en Caja
+                                                    </h6>
+                                                    <div style="font-size: 1.8rem; font-weight: 700; color: #f59e0b;">
+                                                        ${{ dinero_fisico_caja|intcomma|default:"0" }}
+                                                    </div>
+                                                    <small style="color: #94a3b8; display: block; margin-top: 0.5rem;">
+                                                        Monto Inicial (${{ caja_mostrar.monto_inicial|intcomma|default:"0" }}) + 
+                                                        Ventas Efectivo (${{ ventas_efectivo|intcomma|default:"0" }}) + 
+                                                        Ingresos (${{ total_ingresos|intcomma|default:"0" }}) - 
+                                                        Gastos (${{ total_gastos|intcomma|default:"0" }})
+                                                    </small>
+                                                </div>
+                                                <div style="font-size: 3rem; opacity: 0.2; color: #f59e0b;">
+                                                    <i class="bi bi-cash-stack"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Dinero en Bancos -->
+                                <div class="col-md-6">
+                                    <div class="card-modern" style="border-left: 4px solid #6366f1; background: #eef2ff;">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <h6 style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 500;">
+                                                        <i class="bi bi-bank2" style="color: #6366f1;"></i> Dinero en Bancos
+                                                    </h6>
+                                                    <div style="font-size: 1.8rem; font-weight: 700; color: #6366f1;">
+                                                        ${{ ventas_tarjeta|add:ventas_transferencia|intcomma|default:"0" }}
+                                                    </div>
+                                                    <small style="color: #94a3b8; display: block; margin-top: 0.5rem;">
+                                                        Tarjeta (${{ ventas_tarjeta|intcomma|default:"0" }}) + 
+                                                        Transferencia (${{ ventas_transferencia|intcomma|default:"0" }})
+                                                    </small>
+                                                </div>
+                                                <div style="font-size: 3rem; opacity: 0.2; color: #6366f1;">
+                                                    <i class="bi bi-bank2"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -209,6 +464,10 @@
                                         <span class="badge badge-modern" style="background: #3b82f6; color: white;">
                                             <i class="bi bi-receipt"></i> Venta
                                         </span>
+                                        {% elif movimiento.tipo == 'retiro' %}
+                                        <span class="badge badge-modern" style="background: #f59e0b; color: white;">
+                                            <i class="bi bi-cash-coin"></i> Retiro
+                                        </span>
                                         {% elif movimiento.tipo == 'gasto' %}
                                         <span class="badge badge-modern badge-danger-modern">
                                             <i class="bi bi-arrow-down-circle"></i> Gasto
@@ -223,6 +482,9 @@
                                         {% if movimiento.tipo == 'apertura' %}<strong>{% endif %}
                                         {{ movimiento.descripcion }}
                                         {% if movimiento.tipo == 'apertura' %}</strong>{% endif %}
+                                        {% if movimiento.registradora_nombre %}
+                                        <br><small style="color: #64748b;"><i class="bi bi-cash-register"></i> {{ movimiento.registradora_nombre }}</small>
+                                        {% endif %}
                                         {% if movimiento.vendedor %}
                                         <br><small style="color: #64748b;">Vendedor: {{ movimiento.vendedor.get_full_name|default:movimiento.vendedor.username }}</small>
                                         {% endif %}
@@ -232,6 +494,8 @@
                                         <strong style="color: #10b981;">+${{ movimiento.monto|intcomma }}</strong>
                                         {% elif movimiento.tipo == 'venta' %}
                                         <strong style="color: #3b82f6;">+${{ movimiento.monto|intcomma }}</strong>
+                                        {% elif movimiento.tipo == 'retiro' %}
+                                        <strong style="color: #f59e0b;">-${{ movimiento.monto|intcomma }}</strong>
                                         {% elif movimiento.tipo == 'gasto' %}
                                         <strong style="color: #ef4444;">-${{ movimiento.monto|intcomma }}</strong>
                                         {% else %}
@@ -281,73 +545,154 @@
 
                 <!-- Tab Historial -->
                 <div class="tab-pane fade" id="historial" role="tabpanel" aria-labelledby="historial-tab">
-                    <h5 class="mb-3" style="color: #1e293b; font-weight: 600;">
-                        <i class="bi bi-clock-history"></i> Historial de Cajas
-                    </h5>
-                    <div class="table-responsive">
-                        <table class="table-modern table">
-                            <thead>
-                                <tr>
-                                    <th>Caja</th>
-                                    <th>Fecha Apertura</th>
-                                    <th>Fecha Cierre</th>
-                                    <th>Monto Inicial</th>
-                                    <th>Monto Final</th>
-                                    <th>Diferencia</th>
-                                    <th>Estado</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for caja in historial_cajas %}
-                                <tr>
-                                    <td><strong>{{ caja.caja }}</strong></td>
-                                    <td>{{ caja.fecha_apertura|date:"d/m/Y H:i" }}</td>
-                                    <td>
-                                        {% if caja.fecha_cierre %}
-                                        {{ caja.fecha_cierre|date:"d/m/Y H:i" }}
-                                        {% else %}
-                                        <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>${{ caja.monto_inicial|intcomma }}</td>
-                                    <td>
-                                        {% if caja.monto_final %}
-                                        ${{ caja.monto_final|intcomma }}
-                                        {% else %}
-                                        <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if caja.fecha_cierre %}
-                                        {% with diferencia=caja.monto_final|add:"-"|add:caja.monto_inicial %}
-                                        {% if diferencia >= 0 %}
-                                        <strong style="color: #10b981;">+${{ diferencia|intcomma }}</strong>
-                                        {% else %}
-                                        <strong style="color: #ef4444;">${{ diferencia|intcomma }}</strong>
-                                        {% endif %}
-                                        {% endwith %}
-                                        {% else %}
-                                        <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if caja.fecha_cierre %}
-                                        <span class="badge badge-modern" style="background: #e2e8f0; color: #64748b;">Cerrada</span>
-                                        {% else %}
-                                        <span class="badge badge-modern badge-success-modern">Abierta</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="7" class="text-center text-muted py-5">
-                                        <i class="bi bi-inbox" style="font-size: 3rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>
-                                        No hay historial de cajas
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h5 class="mb-0" style="color: #1e293b; font-weight: 600;">
+                            <i class="bi bi-clock-history"></i> Historial de Cajas
+                        </h5>
+                        <span class="badge badge-modern badge-info-modern" style="font-size: 0.9rem; padding: 0.5rem 1rem;">
+                            Total: {{ historial_cajas|length|intcomma }} registros
+                        </span>
+                    </div>
+                    
+                    <div class="row g-4">
+                        {% for item in historial_cajas %}
+                        <div class="col-12">
+                            <div class="card-modern" style="border-left: 4px solid {% if item.fecha_cierre %}#64748b{% else %}#10b981{% endif %};">
+                                <div class="card-header" style="background: {% if item.fecha_cierre %}linear-gradient(135deg, #64748b 0%, #475569 100%){% else %}linear-gradient(135deg, #10b981 0%, #059669 100%){% endif %}; color: white; padding: 1rem 1.5rem;">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-0" style="font-weight: 600;">
+                                                <i class="bi bi-cash-stack"></i> {{ item.caja.caja }}
+                                            </h6>
+                                            <small style="opacity: 0.9;">
+                                                <i class="bi bi-calendar"></i> {{ item.fecha_apertura|date:"d/m/Y" }}
+                                                {% if item.fecha_cierre %}
+                                                - {{ item.fecha_cierre|date:"d/m/Y" }}
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                        <div>
+                                            {% if item.fecha_cierre %}
+                                            <span class="badge" style="background: rgba(255,255,255,0.2); color: white; padding: 0.5rem 1rem;">
+                                                <i class="bi bi-check-circle"></i> Cerrada
+                                            </span>
+                                            {% else %}
+                                            <span class="badge" style="background: rgba(255,255,255,0.2); color: white; padding: 0.5rem 1rem;">
+                                                <i class="bi bi-circle-fill"></i> Abierta
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-body" style="padding: 1.5rem;">
+                                    <div class="row g-3">
+                                        <!-- Información Principal -->
+                                        <div class="col-md-6">
+                                            <h6 style="color: #1e293b; font-weight: 600; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem;">
+                                                <i class="bi bi-info-circle"></i> Información General
+                                            </h6>
+                                            <table class="table table-sm" style="margin-bottom: 0;">
+                                                <tbody>
+                                                    <tr>
+                                                        <td style="color: #64748b; width: 40%; border: none; padding: 0.5rem 0;"><strong>Apertura:</strong></td>
+                                                        <td style="border: none; padding: 0.5rem 0;">{{ item.fecha_apertura|date:"d/m/Y H:i" }}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="color: #64748b; border: none; padding: 0.5rem 0;"><strong>Cierre:</strong></td>
+                                                        <td style="border: none; padding: 0.5rem 0;">
+                                                            {% if item.fecha_cierre %}
+                                                            {{ item.fecha_cierre|date:"d/m/Y H:i" }}
+                                                            {% else %}
+                                                            <span class="text-muted">-</span>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="color: #64748b; border: none; padding: 0.5rem 0;"><strong>Monto Inicial:</strong></td>
+                                                        <td style="border: none; padding: 0.5rem 0;">
+                                                            <strong style="color: #0ea5e9;">${{ item.monto_inicial|intcomma }}</strong>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="color: #64748b; border: none; padding: 0.5rem 0;"><strong>Monto Final:</strong></td>
+                                                        <td style="border: none; padding: 0.5rem 0;">
+                                                            {% if item.monto_final is not None %}
+                                                            <strong style="color: #10b981;">${{ item.monto_final|intcomma }}</strong>
+                                                            {% else %}
+                                                            <span class="text-muted">-</span>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        
+                                        <!-- Movimientos -->
+                                        <div class="col-md-6">
+                                            <h6 style="color: #1e293b; font-weight: 600; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem;">
+                                                <i class="bi bi-arrow-left-right"></i> Movimientos
+                                            </h6>
+                                            <table class="table table-sm" style="margin-bottom: 0;">
+                                                <tbody>
+                                                    <tr>
+                                                        <td style="color: #64748b; width: 40%; border: none; padding: 0.5rem 0;"><strong>Ventas:</strong></td>
+                                                        <td style="border: none; padding: 0.5rem 0;">
+                                                            <strong style="color: #3b82f6;">${{ item.total_ventas|intcomma }}</strong>
+                                                            <small style="color: #94a3b8;">({{ item.cantidad_ventas }} venta{{ item.cantidad_ventas|pluralize }})</small>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="color: #64748b; border: none; padding: 0.5rem 0;"><strong>Ingresos:</strong></td>
+                                                        <td style="border: none; padding: 0.5rem 0;">
+                                                            <strong style="color: #10b981;">+${{ item.total_ingresos|intcomma }}</strong>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="color: #64748b; border: none; padding: 0.5rem 0;"><strong>Gastos:</strong></td>
+                                                        <td style="border: none; padding: 0.5rem 0;">
+                                                            <strong style="color: #ef4444;">-${{ item.total_gastos|intcomma }}</strong>
+                                                        </td>
+                                                    </tr>
+                                                    <tr style="background: #f8fafc; border-top: 2px solid #e2e8f0;">
+                                                        <td style="color: #1e293b; border: none; padding: 0.75rem 0;"><strong>Saldo Esperado:</strong></td>
+                                                        <td style="border: none; padding: 0.75rem 0;">
+                                                            <strong style="color: #0ea5e9; font-size: 1.1rem;">${{ item.saldo_esperado|intcomma }}</strong>
+                                                        </td>
+                                                    </tr>
+                                                    {% if item.diferencia is not None %}
+                                                    <tr>
+                                                        <td style="color: #64748b; border: none; padding: 0.5rem 0;"><strong>Diferencia:</strong></td>
+                                                        <td style="border: none; padding: 0.5rem 0;">
+                                                            {% if item.diferencia == 0 %}
+                                                            <span class="badge badge-modern badge-success-modern">
+                                                                <i class="bi bi-check-circle"></i> Cuadra
+                                                            </span>
+                                                            {% elif item.diferencia > 0 %}
+                                                            <strong style="color: #10b981;">+${{ item.diferencia|intcomma }}</strong>
+                                                            <small style="color: #94a3b8;">(Sobra)</small>
+                                                            {% else %}
+                                                            <strong style="color: #ef4444;">${{ item.diferencia|intcomma }}</strong>
+                                                            <small style="color: #94a3b8;">(Falta)</small>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                    {% endif %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="col-12">
+                            <div class="text-center text-muted py-5">
+                                <i class="bi bi-inbox" style="font-size: 3rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>
+                                <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">No hay historial de cajas</p>
+                                <small>Las cajas abiertas y cerradas aparecerán aquí</small>
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>

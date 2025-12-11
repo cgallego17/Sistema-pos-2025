@@ -6,7 +6,7 @@
 <div class="page-container">
     <div class="page-header">
         <h1><i class="bi bi-plus-circle"></i> Nuevo Ingreso de Mercancía</h1>
-        <a href="{% url 'pos:ingreso_mercancia' %}" class="btn btn-secondary">
+        <a href="{% url 'pos:inventario' %}?tipo=ingreso" class="btn btn-secondary">
             <i class="bi bi-arrow-left"></i> Volver
         </a>
     </div>
@@ -57,15 +57,11 @@
                                             <div class="autocomplete-dropdown" style="display: none; position: absolute; z-index: 1000; width: 100%; background: white; border: 1px solid #e2e8f0; border-radius: 4px; max-height: 200px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
                                         </div>
                                     </div>
-                                    <div class="col-md-2">
+                                    <div class="col-md-3">
                                         <label class="form-label-modern">Cantidad *</label>
                                         <input type="number" class="form-control form-control-modern cantidad-input" name="cantidad" min="1" value="1" required>
                                     </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label-modern">Precio Compra *</label>
-                                        <input type="number" class="form-control form-control-modern precio-input" name="precio_compra" step="1" min="0" required>
-                                    </div>
-                                    <div class="col-md-2 d-flex align-items-end">
+                                    <div class="col-md-4 d-flex align-items-end">
                                         <button type="button" class="btn btn-danger w-100 eliminar-item" style="display: none;">
                                             <i class="bi bi-trash"></i>
                                         </button>
@@ -86,7 +82,7 @@
                             <button type="submit" class="btn btn-primary-pos">
                                 <i class="bi bi-check-circle"></i> Crear Ingreso
                             </button>
-                            <a href="{% url 'pos:ingreso_mercancia' %}" class="btn" style="background: #6c757d; color: white; border: none;">
+                            <a href="{% url 'pos:inventario' %}?tipo=ingreso" class="btn" style="background: #6c757d; color: white; border: none;">
                                 <i class="bi bi-x"></i> Cancelar
                             </a>
                         </div>
@@ -103,7 +99,6 @@ function initAutocomplete(input) {
     const wrapper = input.closest('.autocomplete-wrapper');
     const dropdown = wrapper.querySelector('.autocomplete-dropdown');
     const hiddenInput = wrapper.querySelector('.producto-id');
-    const precioInput = input.closest('.item-row').querySelector('.precio-input');
     let searchTimeout;
     
     input.addEventListener('input', function() {
@@ -142,9 +137,6 @@ function initAutocomplete(input) {
                                 
                                 input.value = productoNombre;
                                 hiddenInput.value = productoId;
-                                if (precioInput) {
-                                    precioInput.value = productoPrecio;
-                                }
                                 dropdown.style.display = 'none';
                             });
                             
@@ -184,13 +176,12 @@ document.getElementById('formIngreso').addEventListener('submit', function(e) {
     document.querySelectorAll('.item-row').forEach(row => {
         const producto = row.querySelector('.producto-id').value;
         const cantidad = row.querySelector('.cantidad-input').value;
-        const precio = row.querySelector('.precio-input').value;
         
-        if (producto && cantidad && precio) {
+        if (producto && cantidad) {
             items.push({
                 producto_id: producto,
                 cantidad: cantidad,
-                precio_compra: precio
+                precio_compra: 0
             });
         }
     });
@@ -216,15 +207,11 @@ document.getElementById('btn-agregar-item').addEventListener('click', function()
                     <div class="autocomplete-dropdown" style="display: none; position: absolute; z-index: 1000; width: 100%; background: white; border: 1px solid #e2e8f0; border-radius: 4px; max-height: 200px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
                 </div>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
                 <label class="form-label-modern">Cantidad *</label>
                 <input type="number" class="form-control form-control-modern cantidad-input" name="cantidad" min="1" value="1" required>
             </div>
-            <div class="col-md-3">
-                <label class="form-label-modern">Precio Compra *</label>
-                                        <input type="number" class="form-control form-control-modern precio-input" name="precio_compra" step="1" min="0" required>
-            </div>
-            <div class="col-md-2 d-flex align-items-end">
+            <div class="col-md-4 d-flex align-items-end">
                 <button type="button" class="btn btn-danger w-100 eliminar-item">
                     <i class="bi bi-trash"></i>
                 </button>
