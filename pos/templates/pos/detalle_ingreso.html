@@ -66,8 +66,35 @@
             border-bottom: 2px solid #f1f5f9;
         }
         
+        .item-card-imagen {
+            width: 70px;
+            height: 70px;
+            min-width: 70px;
+            margin-right: 0.75rem;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .item-card-imagen img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .item-card-imagen-placeholder {
+            font-size: 2rem;
+            color: #94a3b8;
+        }
+        
         .item-card-producto {
             flex: 1;
+            display: flex;
+            flex-direction: column;
         }
         
         .item-card-nombre {
@@ -366,6 +393,7 @@
                         <table class="table-modern table">
                             <thead>
                                 <tr>
+                                    <th style="width: 80px;">Imagen</th>
                                     <th>Producto</th>
                                     <th>Cantidad</th>
                                     <th>Precio Compra</th>
@@ -381,6 +409,17 @@
                             <tbody>
                                 {% for item in ingreso.items.all %}
                                 <tr class="{% if item.procesado %}table-success{% elif item.verificado %}table-info{% endif %}">
+                                    <td>
+                                        {% if item.producto.imagen %}
+                                        <img src="{{ item.producto.imagen.url }}" 
+                                             alt="{{ item.producto.nombre }}" 
+                                             style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                        {% else %}
+                                        <div style="width: 60px; height: 60px; background: #f1f5f9; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 1.5rem;">
+                                            📦
+                                        </div>
+                                        {% endif %}
+                                    </td>
                                     <td>
                                         <strong>{{ item.producto.nombre }}</strong>
                                         {% if item.producto.atributo %}
@@ -427,7 +466,7 @@
                                 </tr>
                                 {% endfor %}
                                 <tr style="background: #f8fafc;">
-                                    <td colspan="{% if not ingreso.completado %}4{% else %}3{% endif %}" class="text-end"><strong>TOTAL:</strong></td>
+                                    <td colspan="{% if not ingreso.completado %}6{% else %}5{% endif %}" class="text-end"><strong>TOTAL:</strong></td>
                                     <td><strong class="text-success fs-4" style="color: #10b981 !important;">${{ ingreso.total|intcomma }}</strong></td>
                                     {% if not ingreso.completado %}
                                     <td colspan="2"></td>
@@ -442,6 +481,13 @@
                         {% for item in ingreso.items.all %}
                         <div class="item-card {% if item.procesado %}procesado{% elif item.verificado %}verificado{% endif %}">
                             <div class="item-card-header">
+                                <div class="item-card-imagen">
+                                    {% if item.producto.imagen %}
+                                    <img src="{{ item.producto.imagen.url }}" alt="{{ item.producto.nombre }}">
+                                    {% else %}
+                                    <div class="item-card-imagen-placeholder">📦</div>
+                                    {% endif %}
+                                </div>
                                 <div class="item-card-producto">
                                     <div class="item-card-nombre">{{ item.producto.nombre }}</div>
                                     {% if item.producto.atributo %}
