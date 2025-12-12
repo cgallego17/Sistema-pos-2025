@@ -22,15 +22,20 @@
             <!-- Búsqueda y Filtros -->
             <div class="row g-3 mb-3">
                 <div class="col-md-6">
-                    <input type="text" class="form-control form-control-modern" id="buscarProducto" 
-                           placeholder="🔍 Buscar por código o nombre...">
+                    <form method="get" action="{% url 'pos:productos' %}" id="form-busqueda">
+                        <input type="text" class="form-control form-control-modern" id="buscarProducto" 
+                               name="buscar" 
+                               value="{{ busqueda_actual }}"
+                               placeholder="🔍 Buscar por código, nombre o código de barras...">
+                        <input type="hidden" name="estado" id="filtroEstadoHidden" value="{{ filtro_estado_actual }}">
+                    </form>
                 </div>
                 <div class="col-md-3">
                     <select class="form-select form-control-modern" id="filtroEstado">
-                        <option value="">Todos los productos</option>
-                        <option value="activo">Solo activos</option>
-                        <option value="inactivo">Solo inactivos</option>
-                        <option value="bajo-stock">Stock bajo (&lt;10)</option>
+                        <option value="" {% if filtro_estado_actual == '' %}selected{% endif %}>Todos los productos</option>
+                        <option value="activo" {% if filtro_estado_actual == 'activo' %}selected{% endif %}>Solo activos</option>
+                        <option value="inactivo" {% if filtro_estado_actual == 'inactivo' %}selected{% endif %}>Solo inactivos</option>
+                        <option value="bajo-stock" {% if filtro_estado_actual == 'bajo-stock' %}selected{% endif %}>Stock bajo (&lt;10)</option>
                     </select>
                 </div>
             </div>
@@ -56,7 +61,12 @@
                     </thead>
                 <tbody id="tablaProductos">
                     {% for producto in productos %}
-                    <tr data-activo="{{ producto.activo|lower }}" data-stock="{{ producto.stock }}">
+                    <tr data-activo="{{ producto.activo|lower }}" 
+                        data-stock="{{ producto.stock }}" 
+                        data-atributo="{{ producto.atributo|default:''|lower }}"
+                        data-codigo="{{ producto.codigo|lower }}"
+                        data-nombre="{{ producto.nombre|lower }}"
+                        data-codigo-barras="{{ producto.codigo_barras|default:''|lower }}">
                         <td class="text-center">
                             {% if producto.imagen %}
                             <img src="{{ producto.imagen.url }}" alt="{{ producto.nombre }}" 
@@ -68,7 +78,14 @@
                             {% endif %}
                         </td>
                         <td><strong>{{ producto.codigo }}</strong></td>
-                        <td>{{ producto.nombre }}</td>
+                        <td>
+                            {{ producto.nombre }}
+                            {% if producto.atributo %}
+                            <span class="badge badge-modern badge-info-modern" style="margin-left: 0.5rem; font-size: 0.75rem;">
+                                <i class="bi bi-tag-fill"></i> {{ producto.atributo }}
+                            </span>
+                            {% endif %}
+                        </td>
                         <td>${{ producto.precio|intcomma }}</td>
                         <td>
                             {% if producto.stock < 10 %}
@@ -106,16 +123,16 @@
             
             <!-- Paginación -->
             {% if productos.has_other_pages %}
-            <nav aria-label="Paginación de productos" class="mt-4">
+            <nav aria-label="Paginación de productos" class="mt-4" id="paginacion-productos">
                 <ul class="pagination justify-content-center">
                     {% if productos.has_previous %}
                     <li class="page-item">
-                        <a class="page-link" href="?page=1" aria-label="Primera">
+                        <a class="page-link" href="?page=1{% if busqueda_actual %}&buscar={{ busqueda_actual }}{% endif %}{% if filtro_estado_actual %}&estado={{ filtro_estado_actual }}{% endif %}" aria-label="Primera">
                             <span aria-hidden="true">&laquo;&laquo;</span>
                         </a>
                     </li>
                     <li class="page-item">
-                        <a class="page-link" href="?page={{ productos.previous_page_number }}" aria-label="Anterior">
+                        <a class="page-link" href="?page={{ productos.previous_page_number }}{% if busqueda_actual %}&buscar={{ busqueda_actual }}{% endif %}{% if filtro_estado_actual %}&estado={{ filtro_estado_actual }}{% endif %}" aria-label="Anterior">
                             <span aria-hidden="true">&laquo;</span>
                         </a>
                     </li>
@@ -135,19 +152,19 @@
                         </li>
                         {% elif num > productos.number|add:'-3' and num < productos.number|add:'3' %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                            <a class="page-link" href="?page={{ num }}{% if busqueda_actual %}&buscar={{ busqueda_actual }}{% endif %}{% if filtro_estado_actual %}&estado={{ filtro_estado_actual }}{% endif %}">{{ num }}</a>
                         </li>
                         {% endif %}
                     {% endfor %}
                     
                     {% if productos.has_next %}
                     <li class="page-item">
-                        <a class="page-link" href="?page={{ productos.next_page_number }}" aria-label="Siguiente">
+                        <a class="page-link" href="?page={{ productos.next_page_number }}{% if busqueda_actual %}&buscar={{ busqueda_actual }}{% endif %}{% if filtro_estado_actual %}&estado={{ filtro_estado_actual }}{% endif %}" aria-label="Siguiente">
                             <span aria-hidden="true">&raquo;</span>
                         </a>
                     </li>
                     <li class="page-item">
-                        <a class="page-link" href="?page={{ productos.paginator.num_pages }}" aria-label="Última">
+                        <a class="page-link" href="?page={{ productos.paginator.num_pages }}{% if busqueda_actual %}&buscar={{ busqueda_actual }}{% endif %}{% if filtro_estado_actual %}&estado={{ filtro_estado_actual }}{% endif %}" aria-label="Última">
                             <span aria-hidden="true">&raquo;&raquo;</span>
                         </a>
                     </li>
@@ -170,31 +187,30 @@
 </div>
 
 <script>
-// Búsqueda
-document.getElementById('buscarProducto').addEventListener('input', filtrarProductos);
-document.getElementById('filtroEstado').addEventListener('change', filtrarProductos);
+// Búsqueda del lado del servidor
+let timeoutBusqueda;
+document.getElementById('buscarProducto').addEventListener('input', function() {
+    clearTimeout(timeoutBusqueda);
+    timeoutBusqueda = setTimeout(function() {
+        document.getElementById('filtroEstadoHidden').value = document.getElementById('filtroEstado').value;
+        document.getElementById('form-busqueda').submit();
+    }, 500); // Esperar 500ms después de que el usuario deje de escribir
+});
 
-function filtrarProductos() {
-    let busqueda = document.getElementById('buscarProducto').value.toLowerCase();
-    let filtroEstado = document.getElementById('filtroEstado').value;
-    let filas = document.querySelectorAll('#tablaProductos tr');
-    
-    filas.forEach(fila => {
-        let texto = fila.textContent.toLowerCase();
-        let activo = fila.dataset.activo === 'true';
-        let stock = parseInt(fila.dataset.stock);
-        
-        let mostrar = texto.includes(busqueda);
-        
-        if (mostrar && filtroEstado) {
-            if (filtroEstado === 'activo') mostrar = activo;
-            else if (filtroEstado === 'inactivo') mostrar = !activo;
-            else if (filtroEstado === 'bajo-stock') mostrar = stock < 10;
-        }
-        
-        fila.style.display = mostrar ? '' : 'none';
-    });
-}
+document.getElementById('filtroEstado').addEventListener('change', function() {
+    document.getElementById('filtroEstadoHidden').value = this.value;
+    document.getElementById('form-busqueda').submit();
+});
+
+// Permitir búsqueda con Enter
+document.getElementById('buscarProducto').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        clearTimeout(timeoutBusqueda);
+        document.getElementById('filtroEstadoHidden').value = document.getElementById('filtroEstado').value;
+        document.getElementById('form-busqueda').submit();
+    }
+});
 </script>
 {% endblock %}
 

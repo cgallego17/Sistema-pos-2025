@@ -4,6 +4,7 @@ Comando para crear un ingreso de mercancía desde un archivo Excel
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.db.models import Q
 from django.contrib.auth.models import User
 from django.utils import timezone
 from pos.models import (
@@ -95,10 +96,23 @@ class Command(BaseCommand):
                     header_lower = str(header).lower().strip()
                     if 'codigo' in header_lower and 'barra' not in header_lower:
                         col_indices['codigo'] = idx
+                    elif 'nombre' in header_lower and 'atributo' not in header_lower:
+                        col_indices['nombre'] = idx
                     elif 'existencia' in header_lower or 'stock' in header_lower or 'cantidad' in header_lower:
                         col_indices['cantidad'] = idx
-                    elif 'precio' in header_lower and 'compra' in header_lower:
-                        col_indices['precio_compra'] = idx
+                    elif 'precio' in header_lower:
+                        if 'compra' in header_lower:
+                            col_indices['precio_compra'] = idx
+                        elif 'precio_compra' not in col_indices:
+                            # Si no hay precio_compra específico, usar precio como precio_compra
+                            col_indices['precio_compra'] = idx
+                        # También mapear precio para crear productos
+                        if 'precio' not in col_indices or col_indices.get('precio') != col_indices.get('precio_compra'):
+                            col_indices['precio'] = idx
+                    elif 'atributo' in header_lower or 'nombreatributo' in header_lower:
+                        col_indices['atributo'] = idx
+                    elif 'barra' in header_lower or 'codigo_barra' in header_lower:
+                        col_indices['codigo_barras'] = idx
             
             self.stdout.write(f'Columnas mapeadas: {col_indices}')
             self.stdout.write('')
@@ -112,7 +126,8 @@ class Command(BaseCommand):
                 return
             
             # Leer todas las filas de datos
-            items_a_procesar = []
+            # Usar un diccionario para consolidar productos duplicados (mismo código y atributo)
+            items_dict = {}  # clave: (codigo, atributo) -> {producto, cantidad_total, precio_compra, filas}
             productos_no_encontrados = []
             filas_con_error = []
             
@@ -122,6 +137,7 @@ class Command(BaseCommand):
                     codigo = self._get_cell_value(row, col_indices.get('codigo'))
                     cantidad = self._get_cell_value(row, col_indices.get('cantidad'))
                     precio_compra = self._get_cell_value(row, col_indices.get('precio_compra'))
+                    atributo = self._get_cell_value(row, col_indices.get('atributo'))
                     
                     # Validar campos requeridos
                     if not codigo:
@@ -129,6 +145,14 @@ class Command(BaseCommand):
                     
                     # Limpiar y convertir valores
                     codigo = str(codigo).strip()
+                    
+                    # Atributo - mantener tal cual está en el Excel
+                    if atributo:
+                        atributo = str(atributo).strip()
+                        if atributo.upper() == 'SIN ATRIBUTO' or atributo == '':
+                            atributo = None
+                    else:
+                        atributo = None
                     
                     # Cantidad
                     if cantidad is None:
@@ -152,21 +176,86 @@ class Command(BaseCommand):
                         except (ValueError, TypeError):
                             precio_compra = 0
                     
-                    # Buscar producto por código
-                    try:
-                        producto = Producto.objects.get(codigo=codigo)
-                        items_a_procesar.append({
+                    # Buscar producto por código Y atributo
+                    producto = None
+                    if atributo:
+                        producto = Producto.objects.filter(codigo=codigo, atributo=atributo).first()
+                    else:
+                        # Si no hay atributo, buscar por código sin atributo (atributo=None o atributo='')
+                        producto = Producto.objects.filter(codigo=codigo).filter(
+                            Q(atributo__isnull=True) | Q(atributo='')
+                        ).first()
+                    
+                    # Si no existe, crear el producto
+                    if not producto:
+                        # Obtener nombre del producto desde el Excel si está disponible
+                        nombre = self._get_cell_value(row, col_indices.get('nombre'))
+                        if nombre:
+                            nombre = str(nombre).strip()
+                        else:
+                            nombre = f'Producto {codigo}'  # Nombre por defecto
+                        
+                        # Obtener precio de venta desde el Excel si está disponible
+                        precio_venta = self._get_cell_value(row, col_indices.get('precio'))
+                        if precio_venta:
+                            try:
+                                precio_venta = int(float(precio_venta))
+                                if precio_venta < 0:
+                                    precio_venta = 0
+                            except (ValueError, TypeError):
+                                precio_venta = 0
+                        else:
+                            precio_venta = 0
+                        
+                        # Obtener código de barras si está disponible
+                        codigo_barras = self._get_cell_value(row, col_indices.get('codigo_barras'))
+                        if codigo_barras:
+                            try:
+                                codigo_barras = str(int(float(codigo_barras))).strip()
+                                if codigo_barras == '0' or codigo_barras == '':
+                                    codigo_barras = None
+                                # Verificar si el código de barras ya existe
+                                if codigo_barras and Producto.objects.filter(codigo_barras=codigo_barras).exists():
+                                    codigo_barras = None  # No asignar si ya existe
+                            except (ValueError, TypeError):
+                                codigo_barras = None
+                        else:
+                            codigo_barras = None
+                        
+                        # Crear el producto
+                        producto = Producto.objects.create(
+                            codigo=codigo,
+                            nombre=nombre,
+                            atributo=atributo,
+                            precio=precio_venta,
+                            stock=0,  # Stock inicial en 0
+                            codigo_barras=codigo_barras,
+                            activo=True
+                        )
+                        self.stdout.write(f'  [CREADO] Producto: {codigo} - {nombre}')
+                    
+                    # Consolidar productos duplicados (mismo código y atributo) - usar solo la primera ocurrencia
+                    clave = (codigo, atributo)
+                    if clave in items_dict:
+                        # Si ya existe, NO sumar - solo registrar que hay duplicado
+                        items_dict[clave]['filas'].append(row_num)
+                        items_dict[clave]['duplicado'] = True
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f'  [DUPLICADO OMITIDO] {codigo} - Atributo: {atributo or "SIN ATRIBUTO"} - '
+                                f'Fila {row_num} (cantidad: {cantidad}) omitida. '
+                                f'Ya existe en fila {items_dict[clave]["filas"][0]} (cantidad: {items_dict[clave]["cantidad"]})'
+                            )
+                        )
+                    else:
+                        items_dict[clave] = {
                             'producto': producto,
                             'cantidad': cantidad,
                             'precio_compra': precio_compra,
-                            'fila': row_num
-                        })
-                    except Producto.DoesNotExist:
-                        productos_no_encontrados.append({
-                            'codigo': codigo,
-                            'cantidad': cantidad,
-                            'fila': row_num
-                        })
+                            'filas': [row_num],
+                            'atributo_excel': atributo,
+                            'duplicado': False
+                        }
                     
                 except Exception as e:
                     filas_con_error.append({
@@ -174,7 +263,23 @@ class Command(BaseCommand):
                         'error': str(e)
                     })
             
-            self.stdout.write(f'Items encontrados en el archivo: {len(items_a_procesar)}')
+            # Identificar productos duplicados (solo para mostrar información)
+            productos_duplicados_info = []
+            for clave, datos in items_dict.items():
+                if datos.get('duplicado', False) or len(datos['filas']) > 1:
+                    productos_duplicados_info.append({
+                        'codigo': datos['producto'].codigo,
+                        'atributo': datos['atributo_excel'],
+                        'filas': datos['filas'],
+                        'cantidad_usada': datos['cantidad']  # Solo la primera cantidad
+                    })
+            
+            # Convertir diccionario a lista
+            items_a_procesar = list(items_dict.values())
+            
+            self.stdout.write(f'Items únicos encontrados en el archivo: {len(items_a_procesar)}')
+            if productos_duplicados_info:
+                self.stdout.write(self.style.WARNING(f'Productos duplicados consolidados: {len(productos_duplicados_info)}'))
             if productos_no_encontrados:
                 self.stdout.write(self.style.WARNING(f'Productos no encontrados: {len(productos_no_encontrados)}'))
             if filas_con_error:
@@ -187,7 +292,8 @@ class Command(BaseCommand):
                     self.stdout.write('')
                     self.stdout.write('Productos no encontrados:')
                     for prod in productos_no_encontrados[:10]:
-                        self.stdout.write(f'  Fila {prod["fila"]}: Código {prod["codigo"]} (Cantidad: {prod["cantidad"]})')
+                        atributo_str = f" - Atributo: {prod.get('atributo', 'N/A')}" if prod.get('atributo') else ""
+                        self.stdout.write(f'  Fila {prod["fila"]}: Código {prod["codigo"]}{atributo_str} (Cantidad: {prod["cantidad"]})')
                     if len(productos_no_encontrados) > 10:
                         self.stdout.write(f'  ... y {len(productos_no_encontrados) - 10} más')
                 return
@@ -195,20 +301,35 @@ class Command(BaseCommand):
             # Mostrar muestra de items
             self.stdout.write('Muestra de items a procesar:')
             for i, item in enumerate(items_a_procesar[:10], 1):
+                atributo_str = f" - Atributo: {item['producto'].atributo}" if item['producto'].atributo else ""
+                filas_str = ', '.join(map(str, item['filas']))
                 self.stdout.write(
-                    f'  {i}. {item["producto"].codigo} - {item["producto"].nombre} '
-                    f'(Cantidad: {item["cantidad"]}, Precio Compra: ${item["precio_compra"]:,})'
+                    f'  {i}. {item["producto"].codigo} - {item["producto"].nombre}{atributo_str} '
+                    f'(Cantidad: {item["cantidad"]}, Precio Compra: ${item["precio_compra"]:,}, Filas: {filas_str})'
                 )
             if len(items_a_procesar) > 10:
                 self.stdout.write(f'  ... y {len(items_a_procesar) - 10} más')
             self.stdout.write('')
+            
+            # Mostrar productos duplicados (solo información)
+            if productos_duplicados_info:
+                self.stdout.write('')
+                self.stdout.write(self.style.WARNING('Productos duplicados en Excel (solo se usó la primera ocurrencia):'))
+                for dup in productos_duplicados_info:
+                    atributo_str = dup['atributo'] if dup['atributo'] else 'SIN ATRIBUTO'
+                    filas_str = ', '.join(map(str, dup['filas']))
+                    self.stdout.write(
+                        f'  {dup["codigo"]} - Atributo: {atributo_str} - Filas: {filas_str} - Cantidad usada (primera fila): {dup["cantidad_usada"]}'
+                    )
+                self.stdout.write('')
             
             # Mostrar productos no encontrados
             if productos_no_encontrados:
                 self.stdout.write('')
                 self.stdout.write(self.style.WARNING('Productos no encontrados (serán omitidos):'))
                 for prod in productos_no_encontrados[:10]:
-                    self.stdout.write(f'  Fila {prod["fila"]}: Código {prod["codigo"]} (Cantidad: {prod["cantidad"]})')
+                    atributo_str = f" - Atributo: {prod.get('atributo', 'N/A')}" if prod.get('atributo') else ""
+                    self.stdout.write(f'  Fila {prod["fila"]}: Código {prod["codigo"]}{atributo_str} (Cantidad: {prod["cantidad"]})')
                 if len(productos_no_encontrados) > 10:
                     self.stdout.write(f'  ... y {len(productos_no_encontrados) - 10} más')
                 self.stdout.write('')

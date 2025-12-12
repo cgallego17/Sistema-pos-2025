@@ -9,7 +9,6 @@ class Producto(models.Model):
     """Modelo para productos del sistema POS"""
     codigo = models.CharField(
         max_length=50, 
-        unique=True, 
         verbose_name='Código',
         db_index=True
     )
@@ -58,6 +57,13 @@ class Producto(models.Model):
         verbose_name = 'Producto'
         verbose_name_plural = 'Productos'
         ordering = ['nombre']
+        constraints = [
+            # Restricción única: código + atributo (permitir múltiples productos con mismo código si tienen atributos diferentes)
+            models.UniqueConstraint(
+                fields=['codigo', 'atributo'],
+                name='unique_codigo_atributo'
+            ),
+        ]
         indexes = [
             models.Index(fields=['activo', 'stock']),
             models.Index(fields=['codigo', 'activo']),

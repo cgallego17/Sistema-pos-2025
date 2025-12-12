@@ -767,7 +767,14 @@
                             <div class="producto-imagen-placeholder">📦</div>
                             {% endif %}
                         </div>
-                        <h4>{{ producto.nombre }}</h4>
+                        <h4>
+                            {{ producto.nombre }}
+                            {% if producto.atributo %}
+                            <span style="display: inline-block; font-size: 0.6rem; background: #dbeafe; color: #2563eb; padding: 0.15rem 0.35rem; border-radius: 4px; margin-left: 0.3rem; font-weight: 600; vertical-align: middle;">
+                                <i class="bi bi-tag-fill" style="font-size: 0.55rem;"></i> {{ producto.atributo }}
+                            </span>
+                            {% endif %}
+                        </h4>
                         <div class="precio-mv">${{ producto.precio|intcomma }}</div>
                         <div class="info-mv">
                             <span class="stock-badge">Stock: {{ producto.stock|intcomma }}</span>
@@ -783,7 +790,7 @@
         <div class="productos-scroll">
             <div class="productos-grid" id="productos-grid">
                 {% for producto in productos %}
-                <div class="producto-card-pos" data-id="{{ producto.id }}" data-nombre="{{ producto.nombre|lower }}" data-codigo="{{ producto.codigo|lower }}" data-codigo-barras="{{ producto.codigo_barras|default:''|lower }}" data-precio="{{ producto.precio }}" data-stock="{{ producto.stock }}" onclick="agregarProductoRapido({{ producto.id }}, 1)">
+                <div class="producto-card-pos" data-id="{{ producto.id }}" data-nombre="{{ producto.nombre|lower }}" data-codigo="{{ producto.codigo|lower }}" data-codigo-barras="{{ producto.codigo_barras|default:''|lower }}" data-atributo="{{ producto.atributo|default:''|lower }}" data-precio="{{ producto.precio }}" data-stock="{{ producto.stock }}" onclick="agregarProductoRapido({{ producto.id }}, 1)">
                     <div class="producto-imagen-container">
                         {% if producto.imagen %}
                         <img src="{{ producto.imagen.url }}" alt="{{ producto.nombre }}" class="producto-imagen">
@@ -791,7 +798,14 @@
                         <div class="producto-imagen-placeholder">📦</div>
                         {% endif %}
                     </div>
-                    <h4>{{ producto.nombre }}</h4>
+                    <h4>
+                        {{ producto.nombre }}
+                        {% if producto.atributo %}
+                        <span style="display: inline-block; font-size: 0.65rem; background: #dbeafe; color: #2563eb; padding: 0.15rem 0.4rem; border-radius: 4px; margin-left: 0.3rem; font-weight: 600; vertical-align: middle;">
+                            <i class="bi bi-tag-fill" style="font-size: 0.6rem;"></i> {{ producto.atributo }}
+                        </span>
+                        {% endif %}
+                    </h4>
                     <div class="precio-pos">${{ producto.precio|intcomma }}</div>
                     <div class="stock-pos">
                         <span class="stock-badge">Stock: {{ producto.stock }}</span>
@@ -948,12 +962,14 @@ function renderizarCarrito(carritoData) {
         total += subtotal;
         cantidadTotal += item.cantidad;
         
+        const atributoHtml = item.atributo ? `<span style="display: inline-block; font-size: 0.65rem; background: #dbeafe; color: #2563eb; padding: 0.15rem 0.35rem; border-radius: 4px; margin-left: 0.3rem; font-weight: 600; vertical-align: middle;"><i class="bi bi-tag-fill" style="font-size: 0.6rem;"></i> ${item.atributo}</span>` : '';
+        
         html += `
             <div class="carrito-item" data-producto-id="${item.producto_id}">
                 <div class="carrito-item-numero">#${itemNum++}</div>
                 <div class="carrito-item-header">
                     <div class="carrito-item-info">
-                        <div class="carrito-item-nombre">${item.nombre} <span class="carrito-item-codigo">(${item.codigo})</span></div>
+                        <div class="carrito-item-nombre">${item.nombre}${atributoHtml} <span class="carrito-item-codigo">(${item.codigo})</span></div>
                     </div>
                 </div>
                 <div class="carrito-item-controls">
@@ -1184,11 +1200,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 const codigo = (producto.dataset.codigo || '').toLowerCase();
                 // Obtener código de barras - data-codigo-barras se convierte a codigoBarras en dataset
                 const codigoBarras = (producto.dataset.codigoBarras || '').toLowerCase();
+                // Obtener atributo - data-atributo se convierte a atributo en dataset
+                const atributo = (producto.dataset.atributo || '').toLowerCase();
                 
-                // Buscar en nombre, código y código de barras
+                // Buscar en nombre, código, código de barras y atributo
                 const coincide = nombre.includes(query) || 
                                 codigo.includes(query) || 
-                                codigoBarras.includes(query);
+                                codigoBarras.includes(query) ||
+                                atributo.includes(query);
                 
                 if (coincide) {
                     producto.style.display = '';

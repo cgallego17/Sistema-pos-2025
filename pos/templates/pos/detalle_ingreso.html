@@ -383,6 +383,9 @@
                                 <tr class="{% if item.procesado %}table-success{% elif item.verificado %}table-info{% endif %}">
                                     <td>
                                         <strong>{{ item.producto.nombre }}</strong>
+                                        {% if item.producto.atributo %}
+                                        <br><small class="text-info" style="font-weight: 600;">Atributo: {{ item.producto.atributo }}</small>
+                                        {% endif %}
                                         {% if item.producto.codigo %}
                                         <br><small class="text-muted">Código: {{ item.producto.codigo }}</small>
                                         {% endif %}
@@ -441,6 +444,11 @@
                             <div class="item-card-header">
                                 <div class="item-card-producto">
                                     <div class="item-card-nombre">{{ item.producto.nombre }}</div>
+                                    {% if item.producto.atributo %}
+                                    <div class="item-card-atributo" style="font-size: 0.85rem; color: #3b82f6; font-weight: 600; margin-top: 0.25rem;">
+                                        <i class="bi bi-tag-fill"></i> {{ item.producto.atributo }}
+                                    </div>
+                                    {% endif %}
                                     {% if item.producto.codigo %}
                                     <div class="item-card-codigo">Código: {{ item.producto.codigo }}</div>
                                     {% endif %}

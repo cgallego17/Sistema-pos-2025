@@ -480,7 +480,10 @@ def vender_view(request):
                     producto = Producto.objects.get(id=producto_id, activo=True)
                     cantidad_carrito = item.get('cantidad', 0)
                     if cantidad_carrito > 0 and producto.stock >= cantidad_carrito:
-                        carrito_limpio[key] = item
+                        # Actualizar atributo si falta o cambió
+                        item_actualizado = item.copy()
+                        item_actualizado['atributo'] = producto.atributo or ''
+                        carrito_limpio[key] = item_actualizado
                 except Producto.DoesNotExist:
                     pass
         
@@ -505,7 +508,10 @@ def vender_view(request):
                     # Verificar que el stock sea suficiente
                     cantidad_carrito = item.get('cantidad', 0)
                     if cantidad_carrito > 0 and producto.stock >= cantidad_carrito:
-                        carrito_limpio[key] = item
+                        # Actualizar atributo si falta o cambió
+                        item_actualizado = item.copy()
+                        item_actualizado['atributo'] = producto.atributo or ''
+                        carrito_limpio[key] = item_actualizado
                 except Producto.DoesNotExist:
                     # Producto no existe o está inactivo, no incluirlo
                     pass
@@ -669,9 +675,32 @@ def procesar_venta(request):
 def productos_view(request):
     """Vista de lista de productos"""
     from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    from django.db.models import Q
     
     # Todos pueden ver productos, pero solo algunos pueden editarlos
-    productos_list = Producto.objects.all().order_by('nombre')
+    productos_list = Producto.objects.all()
+    
+    # Búsqueda
+    busqueda = request.GET.get('buscar', '').strip()
+    if busqueda:
+        productos_list = productos_list.filter(
+            Q(codigo__icontains=busqueda) |
+            Q(nombre__icontains=busqueda) |
+            Q(codigo_barras__icontains=busqueda) |
+            Q(atributo__icontains=busqueda)
+        )
+    
+    # Filtro de estado
+    filtro_estado = request.GET.get('estado', '')
+    if filtro_estado == 'activo':
+        productos_list = productos_list.filter(activo=True)
+    elif filtro_estado == 'inactivo':
+        productos_list = productos_list.filter(activo=False)
+    elif filtro_estado == 'bajo-stock':
+        productos_list = productos_list.filter(stock__lt=10)
+    
+    # Ordenar
+    productos_list = productos_list.order_by('nombre')
     
     # Paginación: 20 productos por página
     paginator = Paginator(productos_list, 20)
@@ -692,6 +721,8 @@ def productos_view(request):
     context = {
         'productos': productos,
         'puede_editar': puede_editar,
+        'busqueda_actual': busqueda,
+        'filtro_estado_actual': filtro_estado,
     }
     
     return render(request, 'pos/productos.html', context)
@@ -2468,6 +2499,7 @@ def agregar_al_carrito_view(request):
                     'producto_id': producto_id,
                     'nombre': producto.nombre,
                     'codigo': producto.codigo,
+                    'atributo': producto.atributo or '',
                     'precio': int(producto.precio),
                     'cantidad': cantidad,
                     'stock': producto.stock,
