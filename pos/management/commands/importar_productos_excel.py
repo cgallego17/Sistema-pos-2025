@@ -273,7 +273,7 @@ class Command(BaseCommand):
                                                 parsed_url = urlparse(imagen_url)
                                                 path = parsed_url.path
                                                 ext = os.path.splitext(path)[1] or '.jpg'
-                                                filename = f"productos/{producto.codigo}{ext}"
+                                                filename = f"{producto.codigo}{ext}"
                                                 producto.imagen.save(
                                                     filename,
                                                     ContentFile(img_response.content),
@@ -312,7 +312,7 @@ class Command(BaseCommand):
                                             parsed_url = urlparse(imagen_url)
                                             path = parsed_url.path
                                             ext = os.path.splitext(path)[1] or '.jpg'
-                                            filename = f"productos/{producto.codigo}{ext}"
+                                            filename = f"{producto.codigo}{ext}"
                                             producto.imagen.save(
                                                 filename,
                                                 ContentFile(img_response.content),

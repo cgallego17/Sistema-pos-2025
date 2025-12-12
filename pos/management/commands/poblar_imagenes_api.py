@@ -210,8 +210,8 @@ class Command(BaseCommand):
                             self.stdout.write(self.style.ERROR('No es una imagen válida'))
                             continue
                         
-                        # Crear nombre de archivo
-                        filename = f"productos/{producto.codigo}{ext}"
+                        # Crear nombre de archivo (sin la carpeta, Django usa upload_to automáticamente)
+                        filename = f"{producto.codigo}{ext}"
                         
                         # Guardar la imagen
                         producto.imagen.save(
