@@ -169,7 +169,11 @@
         font-size: 0.75rem;
         color: #1e293b;
         font-weight: 600;
-        line-height: 1.2;
+        line-height: 1.4;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.2rem;
     }
     
     .producto-card-pos .precio-pos {
@@ -768,10 +772,10 @@
                             {% endif %}
                         </div>
                         <h4>
-                            {{ producto.nombre }}
+                            <span>{{ producto.nombre }}</span>
                             {% if producto.atributo %}
-                            <span style="display: inline-block; font-size: 0.6rem; background: #dbeafe; color: #2563eb; padding: 0.15rem 0.35rem; border-radius: 4px; margin-left: 0.3rem; font-weight: 600; vertical-align: middle;">
-                                <i class="bi bi-tag-fill" style="font-size: 0.55rem;"></i> {{ producto.atributo }}
+                            <span style="display: inline-flex; align-items: center; font-size: 0.6rem; background: #dbeafe; color: #2563eb; padding: 0.15rem 0.35rem; border-radius: 4px; font-weight: 600; white-space: nowrap;">
+                                <i class="bi bi-tag-fill" style="font-size: 0.55rem; margin-right: 0.2rem;"></i> {{ producto.atributo }}
                             </span>
                             {% endif %}
                         </h4>
@@ -799,10 +803,10 @@
                         {% endif %}
                     </div>
                     <h4>
-                        {{ producto.nombre }}
+                        <span>{{ producto.nombre }}</span>
                         {% if producto.atributo %}
-                        <span style="display: inline-block; font-size: 0.65rem; background: #dbeafe; color: #2563eb; padding: 0.15rem 0.4rem; border-radius: 4px; margin-left: 0.3rem; font-weight: 600; vertical-align: middle;">
-                            <i class="bi bi-tag-fill" style="font-size: 0.6rem;"></i> {{ producto.atributo }}
+                        <span style="display: inline-flex; align-items: center; font-size: 0.65rem; background: #dbeafe; color: #2563eb; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600; white-space: nowrap;">
+                            <i class="bi bi-tag-fill" style="font-size: 0.6rem; margin-right: 0.2rem;"></i> {{ producto.atributo }}
                         </span>
                         {% endif %}
                     </h4>
