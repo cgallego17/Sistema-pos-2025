@@ -79,3 +79,4 @@ El sistema de movimientos de inventario funciona correctamente para operaciones 
 **Recomendación**: Limpiar movimientos huérfanos y agregar señales Django para mantener la integridad automáticamente.
 
 
+

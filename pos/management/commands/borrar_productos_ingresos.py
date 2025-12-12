@@ -91,3 +91,4 @@ class Command(BaseCommand):
         self.stdout.write(f'Total de movimientos eliminados: {movimientos_eliminados[0]:,}')
         self.stdout.write('')
 
+

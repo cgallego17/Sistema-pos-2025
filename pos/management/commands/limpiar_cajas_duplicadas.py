@@ -153,3 +153,4 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f'[INFO] Quedan {total_final} cajas (algunas tienen datos historicos asociados)'))
 
 
+

@@ -32,6 +32,12 @@ class Command(BaseCommand):
             action='store_true',
             help='Confirmar sin preguntar',
         )
+        parser.add_argument(
+            '--codigos',
+            type=str,
+            nargs='+',
+            help='Lista de códigos de productos a importar (solo estos)',
+        )
 
     def handle(self, *args, **options):
         archivo = options['archivo']
@@ -67,8 +73,12 @@ class Command(BaseCommand):
                         col_indices['codigo'] = idx
                     elif 'nombre' in header_lower and 'atributo' not in header_lower:
                         col_indices['nombre'] = idx
-                    elif 'atributo' in header_lower or 'nombreatributo' in header_lower:
+                    elif 'nombreatributo' in header_lower:
                         col_indices['atributo'] = idx
+                    elif 'atributo' in header_lower and 'id' not in header_lower and 'nombre' not in header_lower:
+                        # Solo usar 'atributo' si no hay 'nombreAtributo'
+                        if 'atributo' not in col_indices:
+                            col_indices['atributo'] = idx
                     elif 'existencia' in header_lower or 'stock' in header_lower:
                         col_indices['stock'] = idx
                     elif 'precio' in header_lower:
@@ -87,6 +97,13 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR('ERROR: No se encontraron las columnas requeridas (codigo, nombre)'))
                 return
             
+            # Obtener lista de códigos a filtrar (si se especifica)
+            codigos_filtro = None
+            if options.get('codigos'):
+                codigos_filtro = [c.strip().upper() for c in options['codigos']]
+                self.stdout.write(f'Filtrando solo estos códigos: {codigos_filtro}')
+                self.stdout.write('')
+            
             # Leer todas las filas de datos
             productos_a_importar = []
             filas_con_error = []
@@ -104,6 +121,10 @@ class Command(BaseCommand):
                     # Validar campos requeridos
                     if not producto_id or not codigo or not nombre:
                         continue  # Saltar filas vacías
+                    
+                    # Filtrar por códigos si se especificó
+                    if codigos_filtro and codigo.strip().upper() not in codigos_filtro:
+                        continue  # Saltar productos que no están en la lista
                     
                     # Limpiar y convertir valores
                     producto_id = str(producto_id).strip()

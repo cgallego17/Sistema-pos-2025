@@ -38,3 +38,4 @@ class Command(BaseCommand):
         self.stdout.write(f'Productos actualizados: {productos_actualizados}')
         self.stdout.write('')
 
+

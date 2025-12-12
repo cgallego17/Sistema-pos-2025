@@ -65,3 +65,4 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('[OK] No hay productos duplicados en el ingreso'))
             self.stdout.write('')
 
+

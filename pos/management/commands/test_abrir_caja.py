@@ -174,3 +174,4 @@ class Command(BaseCommand):
             self.stdout.write(f'  - ID: {caja.id}, Usuario: {caja.usuario.username}, Estado: {estado}, Monto: ${caja.monto_inicial:,}')
 
 
+

@@ -51,8 +51,12 @@ class Command(BaseCommand):
                         col_indices['codigo'] = idx
                     elif 'nombre' in header_lower and 'atributo' not in header_lower:
                         col_indices['nombre'] = idx
-                    elif 'atributo' in header_lower or 'nombreatributo' in header_lower:
+                    elif 'nombreatributo' in header_lower:
                         col_indices['atributo'] = idx
+                    elif 'atributo' in header_lower and 'id' not in header_lower and 'nombre' not in header_lower:
+                        # Solo usar 'atributo' si no hay 'nombreAtributo'
+                        if 'atributo' not in col_indices:
+                            col_indices['atributo'] = idx
                     elif 'existencia' in header_lower or 'stock' in header_lower or 'cantidad' in header_lower:
                         col_indices['cantidad'] = idx
                     elif 'precio' in header_lower and 'compra' not in header_lower:

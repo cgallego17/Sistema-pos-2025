@@ -694,8 +694,19 @@
     }
     
     .precio-display.editing .precio-valor,
-    .precio-display.editing .precio-moneda {
+    .precio-display.editing .precio-moneda,
+    .precio-display.editing .precio-icono {
         display: none;
+    }
+    
+    .precio-icono {
+        font-size: 0.7rem;
+        opacity: 0.6;
+        transition: opacity 0.2s ease;
+    }
+    
+    .precio-display:hover .precio-icono {
+        opacity: 1;
     }
     
     .btn-precio-accion {
@@ -1327,6 +1338,59 @@ document.addEventListener('DOMContentLoaded', function() {
     const carritoItems = document.getElementById('carrito-items');
     if (carritoItems) {
         carritoItems.addEventListener('click', function(e) {
+            // Click en el display de precio para editar
+            if (e.target.closest('.precio-display') && !e.target.closest('.precio-display').classList.contains('editing')) {
+                const precioDisplay = e.target.closest('.precio-display');
+                if (!precioDisplay || e.target.classList.contains('btn-precio-accion')) return;
+                
+                precioDisplay.classList.add('editing');
+                const input = precioDisplay.querySelector('.input-precio');
+                if (input) {
+                    setTimeout(() => {
+                        input.focus();
+                        input.select();
+                    }, 10);
+                }
+                e.stopPropagation();
+                return false;
+            }
+            
+            // Click en botón confirmar precio
+            if (e.target.classList.contains('confirmar') || e.target.closest('.confirmar')) {
+                const btn = e.target.classList.contains('confirmar') ? e.target : e.target.closest('.confirmar');
+                const precioDisplay = btn.closest('.precio-display');
+                if (!precioDisplay) return;
+                
+                const productoId = parseInt(precioDisplay.getAttribute('data-producto-id'));
+                const input = precioDisplay.querySelector('.input-precio');
+                const nuevoPrecio = parseFloat(input.value) || 0;
+                
+                if (nuevoPrecio < 0) {
+                    if (window.showNotification) {
+                        window.showNotification('El precio no puede ser negativo', 'error', 'Error', 3000);
+                    } else {
+                        alert('El precio no puede ser negativo');
+                    }
+                    cancelarEdicionPrecio(precioDisplay);
+                    return;
+                }
+                
+                confirmarEdicionPrecio(precioDisplay, productoId, nuevoPrecio);
+                e.stopPropagation();
+                return false;
+            }
+            
+            // Click en botón cancelar precio
+            if (e.target.classList.contains('cancelar') || e.target.closest('.cancelar')) {
+                const btn = e.target.classList.contains('cancelar') ? e.target : e.target.closest('.cancelar');
+                const precioDisplay = btn.closest('.precio-display');
+                if (precioDisplay) {
+                    cancelarEdicionPrecio(precioDisplay);
+                }
+                e.stopPropagation();
+                return false;
+            }
+            
             const productoId = parseInt(e.target.getAttribute('data-producto-id'));
             if (!productoId) return;
             
@@ -1336,6 +1400,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 cambiarCantidad(productoId, -1);
             } else if (e.target.classList.contains('btn-eliminar-item')) {
                 eliminarItem(productoId);
+            }
+        });
+        
+        // Manejar Enter y Escape en el input de precio
+        carritoItems.addEventListener('keypress', function(e) {
+            if (e.target.classList.contains('input-precio')) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const precioDisplay = e.target.closest('.precio-display');
+                    if (precioDisplay) {
+                        const productoId = parseInt(precioDisplay.getAttribute('data-producto-id'));
+                        const nuevoPrecio = parseFloat(e.target.value) || 0;
+                        
+                        if (nuevoPrecio < 0) {
+                            if (window.showNotification) {
+                                window.showNotification('El precio no puede ser negativo', 'error', 'Error', 3000);
+                            } else {
+                                alert('El precio no puede ser negativo');
+                            }
+                            cancelarEdicionPrecio(precioDisplay);
+                            return;
+                        }
+                        
+                        confirmarEdicionPrecio(precioDisplay, productoId, nuevoPrecio);
+                    }
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    const precioDisplay = e.target.closest('.precio-display');
+                    if (precioDisplay) {
+                        cancelarEdicionPrecio(precioDisplay);
+                    }
+                }
             }
         });
     }
@@ -1410,6 +1506,79 @@ async function eliminarItem(productoId) {
         if (window.showNotification) {
             window.showNotification('Error al eliminar', 'error', 'Error', 3000);
         }
+    });
+}
+
+// Funciones para edición de precios
+function confirmarEdicionPrecio(precioDisplay, productoId, nuevoPrecio) {
+    const precioOriginal = parseFloat(precioDisplay.getAttribute('data-precio-original')) || 0;
+    
+    if (nuevoPrecio === precioOriginal) {
+        precioDisplay.classList.remove('editing');
+        return;
+    }
+    
+    // Actualizar visualmente primero
+    const precioValor = precioDisplay.querySelector('.precio-valor');
+    if (precioValor) {
+        precioValor.textContent = '$' + nuevoPrecio.toLocaleString('es-CO', {minimumFractionDigits: 0});
+    }
+    precioDisplay.setAttribute('data-precio-original', nuevoPrecio);
+    precioDisplay.classList.remove('editing');
+    
+    // Actualizar en servidor
+    actualizarPrecio(productoId, nuevoPrecio);
+}
+
+function cancelarEdicionPrecio(precioDisplay) {
+    const precioOriginal = parseFloat(precioDisplay.getAttribute('data-precio-original')) || 0;
+    const input = precioDisplay.querySelector('.input-precio');
+    if (input) {
+        input.value = precioOriginal;
+    }
+    precioDisplay.classList.remove('editing');
+}
+
+function actualizarPrecio(productoId, nuevoPrecio) {
+    if (nuevoPrecio < 0) {
+        if (window.showNotification) {
+            window.showNotification('El precio no puede ser negativo', 'error', 'Error', 3000);
+        } else {
+            alert('El precio no puede ser negativo');
+        }
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('precio', nuevoPrecio);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    
+    fetch(`{% url "pos:actualizar_precio" 999 %}`.replace('999', productoId), {
+        method: 'POST',
+        body: formData,
+        headers: {'X-Requested-With': 'XMLHttpRequest'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            cargarCarritoDesdeSesion();
+            if (window.showNotification) {
+                window.showNotification('Precio actualizado', 'success', 'Carrito', 2000);
+            }
+        } else {
+            if (window.showNotification) {
+                window.showNotification(data.error || 'Error al actualizar precio', 'error', 'Error', 3000);
+            }
+            // Revertir visualmente
+            cargarCarritoDesdeSesion();
+        }
+    })
+    .catch(() => {
+        if (window.showNotification) {
+            window.showNotification('Error de conexión', 'error', 'Error', 3000);
+        }
+        // Revertir visualmente
+        cargarCarritoDesdeSesion();
     });
 }
 
