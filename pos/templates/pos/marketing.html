@@ -1,5 +1,6 @@
 {% extends 'pos/base.html' %}
 {% load humanize %}
+{% load currency_filters %}
 
 {% block title %}Ranking de Vendedores - MegaPos By Megadominio.co{% endblock %}
 
@@ -41,7 +42,7 @@
             <div class="stat-card-label">
                 <i class="bi bi-currency-dollar"></i> Total General Neto
             </div>
-            <div class="stat-card-value">${{ total_general|intcomma }}</div>
+            <div class="stat-card-value">${{ total_general|currency }}</div>
             <div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">
                 <i class="bi bi-info-circle"></i> Ventas - Anulaciones
             </div>
@@ -59,7 +60,7 @@
             <div class="stat-card-label">
                 <i class="bi bi-graph-up"></i> Promedio General
             </div>
-            <div class="stat-card-value">${{ promedio_general|intcomma }}</div>
+            <div class="stat-card-value">${{ promedio_general|currency }}</div>
         </div>
         {% if cantidad_anuladas_general > 0 %}
         <div class="stat-card danger">
@@ -68,7 +69,7 @@
             </div>
             <div class="stat-card-value" style="color: #dc2626;">{{ cantidad_anuladas_general|intcomma }}</div>
             <div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">
-                ${{ total_anuladas_general|intcomma }} (excluidas del ranking)
+                ${{ total_anuladas_general|currency }} (excluidas del ranking)
             </div>
         </div>
         {% endif %}
@@ -79,7 +80,7 @@
             </div>
             <div class="stat-card-value" style="font-size: 1.2rem;">{{ top_vendedor.nombre_completo }}</div>
             <div style="color: #64748b; font-size: 0.85rem; margin-top: 0.5rem;">
-                ${{ top_vendedor.total_ventas|intcomma }}
+                ${{ top_vendedor.total_ventas|currency }}
             </div>
         </div>
         {% endif %}
@@ -143,12 +144,12 @@
                             </td>
                             <td class="text-end">
                                 <strong style="font-size: 1.1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-                                    ${{ item.total_ventas|intcomma }}
+                                    ${{ item.total_ventas|currency }}
                                 </strong>
                                 {% if item.total_anuladas > 0 %}
                                 <br>
                                 <small style="color: #dc2626; font-size: 0.7rem;">
-                                    <i class="bi bi-dash-circle"></i> -${{ item.total_anuladas|intcomma }} (anuladas)
+                                    <i class="bi bi-dash-circle"></i> -${{ item.total_anuladas|currency }} (anuladas)
                                 </small>
                                 {% endif %}
                             </td>
@@ -161,14 +162,14 @@
                                 <small style="color: #dc2626; font-size: 0.75rem;">
                                     <i class="bi bi-x-circle"></i> {{ item.cantidad_anuladas }} anulada{{ item.cantidad_anuladas|pluralize }}
                                     {% if item.total_anuladas > 0 %}
-                                    (${{ item.total_anuladas|intcomma }})
+                                    (${{ item.total_anuladas|currency }})
                                     {% endif %}
                                 </small>
                                 {% endif %}
                             </td>
                             <td class="text-end">
                                 <span style="color: #64748b; font-weight: 600;">
-                                    ${{ item.promedio_venta|intcomma }}
+                                    ${{ item.promedio_venta|currency }}
                                 </span>
                             </td>
                             <td class="text-center">

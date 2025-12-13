@@ -2250,19 +2250,19 @@ def marketing_view(request):
             promedio_venta = ventas_validas_vendedor.get('promedio_venta', 0) or 0
             
             # Calcular total neto (ventas brutas - anulaciones)
-            total_ventas_bruto = item['total_ventas_bruto'] or 0
-            total_anuladas_decimal = int(total_anuladas)
-            total_ventas_neto = total_ventas_bruto - total_anuladas_decimal
+            total_ventas_bruto = float(item['total_ventas_bruto'] or 0)
+            total_anuladas_decimal = float(total_anuladas or 0)
+            total_ventas_neto = round(total_ventas_bruto - total_anuladas_decimal, 2)
             
             ranking_completo.append({
                 'vendedor': vendedor,
                 'nombre_completo': vendedor.get_full_name() or vendedor.username,
                 'username': vendedor.username,
                 'total_ventas': total_ventas_neto,  # Total neto después de restar anulaciones
-                'total_ventas_bruto': total_ventas_bruto,  # Total bruto (sin restar anulaciones)
+                'total_ventas_bruto': round(total_ventas_bruto, 2),  # Total bruto (sin restar anulaciones)
                 'cantidad_ventas': cantidad_ventas,
-                'promedio_venta': promedio_venta,
-                'total_anuladas': total_anuladas_decimal,
+                'promedio_venta': round(float(promedio_venta or 0), 2),
+                'total_anuladas': round(total_anuladas_decimal, 2),
                 'cantidad_anuladas': cantidad_anuladas,
             })
         except User.DoesNotExist:
@@ -2279,9 +2279,9 @@ def marketing_view(request):
     cantidad_anuladas_general = ventas_anuladas.count()
     
     # Calcular total neto general (ventas brutas - anulaciones)
-    total_anuladas_general_decimal = int(total_anuladas_general)
-    total_general = total_general_bruto - total_anuladas_general_decimal
-    promedio_general = total_general / cantidad_general if cantidad_general > 0 else 0
+    total_anuladas_general_decimal = float(total_anuladas_general or 0)
+    total_general = round(float(total_general_bruto or 0) - total_anuladas_general_decimal, 2)
+    promedio_general = round(total_general / cantidad_general, 2) if cantidad_general > 0 else 0
     
     # Reordenar ranking por total_ventas neto (después de restar anulaciones)
     ranking_completo = sorted(ranking_completo, key=lambda x: x['total_ventas'], reverse=True)
@@ -2299,7 +2299,7 @@ def marketing_view(request):
         'cantidad_general': cantidad_general,
         'promedio_general': promedio_general,
         'top_vendedor': top_vendedor,
-        'total_anuladas_general': int(total_anuladas_general),
+        'total_anuladas_general': round(total_anuladas_general_decimal, 2),
         'cantidad_anuladas_general': cantidad_anuladas_general,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
