@@ -1356,10 +1356,10 @@ def caja_view(request):
                 completada=True
             )
         else:
-            # Si la caja está abierta, filtrar ventas del día actual
+            # Si la caja está abierta, filtrar ventas desde la fecha de apertura de la caja
             ventas_caja_todas = Venta.objects.filter(
-                fecha__gte=inicio_dia,
-                fecha__lte=fin_dia,
+                caja=caja_principal,
+                fecha__gte=caja_mostrar.fecha_apertura,
                 completada=True
             )
         
@@ -2494,7 +2494,10 @@ def agregar_al_carrito_view(request):
                         'error': f'Stock insuficiente. Disponible: {producto.stock}'
                     })
                 carrito[producto_key]['cantidad'] = nueva_cantidad
+                # Mantener el timestamp original para preservar el orden
             else:
+                # Agregar timestamp para mantener el orden de inserción
+                from time import time
                 carrito[producto_key] = {
                     'producto_id': producto_id,
                     'nombre': producto.nombre,
@@ -2503,6 +2506,7 @@ def agregar_al_carrito_view(request):
                     'precio': int(producto.precio),
                     'cantidad': cantidad,
                     'stock': producto.stock,
+                    'orden': time(),  # Timestamp para mantener el orden
                 }
             
             request.session.modified = True
@@ -2632,10 +2636,14 @@ def procesar_venta_completa_view(request):
             monto_recibido = request.POST.get('monto_recibido')
             vendedor_id = request.POST.get('vendedor_id')
             
-            # Calcular total
+            # Calcular total (ordenado por orden de inserción)
+            items_ordenados = sorted(
+                carrito.items(),
+                key=lambda x: x[1].get('orden', 0)
+            )
             total = sum(
-                item['precio'] * item['cantidad']
-                for item in carrito.values()
+                item_data['precio'] * item_data['cantidad']
+                for key, item_data in items_ordenados
             )
             
             # Validar monto recibido si es efectivo
@@ -2685,8 +2693,12 @@ def procesar_venta_completa_view(request):
                 completada=True
             )
             
-            # Agregar items y actualizar stock
-            for item_data in carrito.values():
+            # Agregar items y actualizar stock (ordenados por orden de inserción)
+            items_ordenados = sorted(
+                carrito.items(),
+                key=lambda x: x[1].get('orden', 0)
+            )
+            for key, item_data in items_ordenados:
                 producto = Producto.objects.get(id=item_data['producto_id'])
                 cantidad = item_data['cantidad']
                 precio = item_data['precio']
