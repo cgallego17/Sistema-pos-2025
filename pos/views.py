@@ -419,10 +419,10 @@ def home_view(request):
         anulada=False
     ).aggregate(total=Sum('total'))
     
-    ventas_totales_mes = ventas_mes['total'] or 0
+    ventas_totales_mes = float(ventas_mes['total'] or 0)
     meta_ventas = 100000000  # 100 millones
     porcentaje_meta = (ventas_totales_mes / meta_ventas * 100) if meta_ventas > 0 else 0
-    porcentaje_meta = min(porcentaje_meta, 100)  # Limitar al 100%
+    porcentaje_meta = float(min(porcentaje_meta, 100))  # Limitar al 100% y convertir a float
     faltan_para_meta = max(0, meta_ventas - ventas_totales_mes)  # No mostrar negativo
     
     context = {

@@ -129,25 +129,39 @@
             
             <script>
                 document.addEventListener('DOMContentLoaded', function() {
-                    const porcentajeMeta = {{ porcentaje_meta|floatformat:2 }};
+                    const porcentajeMeta = parseFloat({{ porcentaje_meta|default:0|floatformat:2 }}) || 0;
                     const barraProgreso = document.getElementById('barra-progreso');
                     const porcentajeDisplay = document.getElementById('porcentaje-display');
                     
+                    // Validar que los elementos existan
+                    if (!barraProgreso || !porcentajeDisplay) {
+                        console.error('Elementos de la barra de progreso no encontrados');
+                        return;
+                    }
+                    
+                    // Asegurar que el porcentaje esté entre 0 y 100
+                    const porcentajeFinal = Math.max(0, Math.min(100, porcentajeMeta));
+                    
                     // Animar la barra
                     setTimeout(function() {
-                        barraProgreso.style.width = porcentajeMeta + '%';
+                        barraProgreso.style.width = porcentajeFinal + '%';
                         
                         // Animar el porcentaje
                         let porcentajeActual = 0;
-                        const incremento = porcentajeMeta / 60; // 60 frames para la animación
-                        const intervalo = setInterval(function() {
-                            porcentajeActual += incremento;
-                            if (porcentajeActual >= porcentajeMeta) {
-                                porcentajeActual = porcentajeMeta;
-                                clearInterval(intervalo);
-                            }
-                            porcentajeDisplay.textContent = porcentajeActual.toFixed(2) + '%';
-                        }, 25); // ~60fps
+                        const incremento = porcentajeFinal / 60; // 60 frames para la animación
+                        
+                        if (porcentajeFinal > 0) {
+                            const intervalo = setInterval(function() {
+                                porcentajeActual += incremento;
+                                if (porcentajeActual >= porcentajeFinal) {
+                                    porcentajeActual = porcentajeFinal;
+                                    clearInterval(intervalo);
+                                }
+                                porcentajeDisplay.textContent = porcentajeActual.toFixed(2) + '%';
+                            }, 25); // ~60fps
+                        } else {
+                            porcentajeDisplay.textContent = '0.00%';
+                        }
                     }, 300);
                 });
             </script>
