@@ -2407,7 +2407,7 @@ def reportes_view(request):
         
         total_ventas_cantidad = items_venta_qs.aggregate(total=Sum('cantidad'))['total'] or 0
         total_ventas_registros = items_venta_qs.count()
-        total_ventas_valor = items_venta_qs.aggregate(total=Sum('precio_total'))['total'] or 0
+        total_ventas_valor = items_venta_qs.aggregate(total=Sum('subtotal'))['total'] or 0
         
         # 3. SALIDAS DE MERCANCÍA (MovimientoStock tipo='salida')
         salidas_qs = MovimientoStock.objects.filter(tipo='salida')
@@ -2454,7 +2454,7 @@ def reportes_view(request):
                     venta__in=ventas_qs
                 )
                 cant_ventas = items_venta_prod.aggregate(total=Sum('cantidad'))['total'] or 0
-                valor_ventas = items_venta_prod.aggregate(total=Sum('precio_total'))['total'] or 0
+                valor_ventas = items_venta_prod.aggregate(total=Sum('subtotal'))['total'] or 0
                 
                 # Salidas de mercancía del producto
                 salidas_prod = MovimientoStock.objects.filter(
