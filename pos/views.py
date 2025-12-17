@@ -2504,208 +2504,159 @@ def reportes_view(request):
         }
         return render(request, 'pos/reportes.html', context)
     
-    # Vista AJAX para guardar conteo físico de inventario
-@login_required
-@requiere_rol('Administradores')
-def guardar_conteo_fisico_view(request):
-    """Vista AJAX para guardar conteo físico de inventario"""
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
-    
-    try:
-        codigo = request.POST.get('codigo')
-        atributo = request.POST.get('atributo')
-        cantidad = request.POST.get('cantidad')
+    # Si es caja, continuar con el código existente
+    elif tipo_reporte == 'caja':
+        # Obtener fechas del filtro
+        fecha_desde = request.GET.get('fecha_desde')
+        fecha_hasta = request.GET.get('fecha_hasta')
         
-        if not codigo:
-            return JsonResponse({'success': False, 'error': 'Código requerido'}, status=400)
-        
-        if cantidad is None or cantidad == '':
-            return JsonResponse({'success': False, 'error': 'Cantidad requerida'}, status=400)
+        # Ventas del mes actual por defecto
+        try:
+            if not fecha_desde:
+                fecha_desde = timezone.now().replace(day=1).date()
+            else:
+                fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+        except Exception:
+            fecha_desde = timezone.now().replace(day=1).date()
         
         try:
-            cantidad = int(cantidad)
-        except ValueError:
-            return JsonResponse({'success': False, 'error': 'Cantidad debe ser un número'}, status=400)
-        
-        # Normalizar atributo (None si es vacío o '-')
-        if atributo in ('', '-', None):
-            atributo = None
-        
-        # Buscar si ya existe un conteo para este código+atributo
-        from .models import ConteoFisico
-        conteo, created = ConteoFisico.objects.update_or_create(
-            codigo=codigo,
-            atributo=atributo,
-            defaults={
-                'cantidad_contada': cantidad,
-                'usuario': request.user,
-                'fecha_conteo': timezone.now()
-            }
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Conteo guardado correctamente',
-            'cantidad': cantidad,
-            'created': created
-        })
-        
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
-    
-    # Si es caja, continuar con el código existente
-    # Obtener fechas del filtro
-    fecha_desde = request.GET.get('fecha_desde')
-    fecha_hasta = request.GET.get('fecha_hasta')
-    
-    # Ventas del mes actual por defecto
-    try:
-        if not fecha_desde:
-            fecha_desde = timezone.now().replace(day=1).date()
-        else:
-            fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
-    except Exception:
-        fecha_desde = timezone.now().replace(day=1).date()
-    
-    try:
-        if not fecha_hasta:
+            if not fecha_hasta:
+                fecha_hasta = timezone.now().date()
+            else:
+                fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+        except Exception:
             fecha_hasta = timezone.now().date()
-        else:
-            fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
-    except Exception:
-        fecha_hasta = timezone.now().date()
 
-    if fecha_hasta < fecha_desde:
-        fecha_desde, fecha_hasta = fecha_hasta, fecha_desde
+        if fecha_hasta < fecha_desde:
+            fecha_desde, fecha_hasta = fecha_hasta, fecha_desde
 
-    # Rango datetime (timezone-aware): por fecha calendario
-    from datetime import time, timedelta
-    tz = timezone.get_current_timezone()
-    inicio_dt = timezone.make_aware(datetime.combine(fecha_desde, time.min), tz)
-    fin_dt = timezone.make_aware(datetime.combine(fecha_hasta, time.max), tz)
+        # Rango datetime (timezone-aware): por fecha calendario
+        from datetime import time, timedelta
+        tz = timezone.get_current_timezone()
+        inicio_dt = timezone.make_aware(datetime.combine(fecha_desde, time.min), tz)
+        fin_dt = timezone.make_aware(datetime.combine(fecha_hasta, time.max), tz)
 
-    # En modo web simplificado: siempre todas las cajas del rango (sin forzar CajaUsuario)
-    caja_usuario_id = ''
-    caja_usuario_sel = None
+        # En modo web simplificado: siempre todas las cajas del rango (sin forzar CajaUsuario)
+        caja_usuario_id = ''
+        caja_usuario_sel = None
 
-    def _display_user(u):
-        if not u:
-            return ''
-        return (u.get_full_name() or u.username)
+        def _display_user(u):
+            if not u:
+                return ''
+            return (u.get_full_name() or u.username)
 
-    def _build_movimientos_caja():
-        """
-        Reporte estilo "Todos los Movimientos" (Caja):
-        Apertura + Ventas + Gastos/Ingresos/Retiros con saldo antes/después.
-        """
-        items = []
+        def _build_movimientos_caja():
+            """
+            Reporte estilo "Todos los Movimientos" (Caja):
+            Apertura + Ventas + Gastos/Ingresos/Retiros con saldo antes/después.
+            """
+            items = []
 
-        # Apertura(s)
-        aperturas_qs = CajaUsuario.objects.none()
-        aperturas_qs = CajaUsuario.objects.filter(
-            fecha_apertura__gte=inicio_dt,
-            fecha_apertura__lte=fin_dt
-        ).select_related('usuario', 'caja')
+            # Apertura(s)
+            aperturas_qs = CajaUsuario.objects.none()
+            aperturas_qs = CajaUsuario.objects.filter(
+                fecha_apertura__gte=inicio_dt,
+                fecha_apertura__lte=fin_dt
+            ).select_related('usuario', 'caja')
 
-        for cu in aperturas_qs:
-            items.append({
-                'fecha': cu.fecha_apertura,
-                'tipo': 'Apertura',
-                'descripcion': f'Apertura de Caja (CajaUsuario #{cu.id})',
-                'delta': int(cu.monto_inicial or 0),
-                'monto_abs': int(cu.monto_inicial or 0),
-                'metodo_pago': '-',
-                'usuario': _display_user(cu.usuario),
-                'venta_id': None,
-            })
+            for cu in aperturas_qs:
+                items.append({
+                    'fecha': cu.fecha_apertura,
+                    'tipo': 'Apertura',
+                    'descripcion': f'Apertura de Caja (CajaUsuario #{cu.id})',
+                    'delta': int(cu.monto_inicial or 0),
+                    'monto_abs': int(cu.monto_inicial or 0),
+                    'metodo_pago': '-',
+                    'usuario': _display_user(cu.usuario),
+                    'venta_id': None,
+                })
 
-        # Ventas
-        for v in Venta.objects.filter(
-            fecha__gte=inicio_dt,
-            fecha__lte=fin_dt,
-            completada=True
-        ).select_related('usuario', 'vendedor').order_by('fecha'):
-            vendedor = v.vendedor if v.vendedor else v.usuario
-            desc = f'Venta #{v.id}'
-            if v.registradora_id:
-                desc = f'{desc} - Registradora {v.registradora_id}'
-            delta = int(v.total or 0)
-            tipo = 'Venta'
-            if v.anulada:
-                tipo = 'Venta Anulada'
-                delta = -delta
-            items.append({
-                'fecha': v.fecha,
-                'tipo': tipo,
-                'descripcion': desc,
-                'delta': delta,
-                'monto_abs': int(v.total or 0),
-                'metodo_pago': v.get_metodo_pago_display(),
-                'usuario': _display_user(vendedor),
-                'venta_id': v.id,
-            })
+            # Ventas
+            for v in Venta.objects.filter(
+                fecha__gte=inicio_dt,
+                fecha__lte=fin_dt,
+                completada=True
+            ).select_related('usuario', 'vendedor').order_by('fecha'):
+                vendedor = v.vendedor if v.vendedor else v.usuario
+                desc = f'Venta #{v.id}'
+                if v.registradora_id:
+                    desc = f'{desc} - Registradora {v.registradora_id}'
+                delta = int(v.total or 0)
+                tipo = 'Venta'
+                if v.anulada:
+                    tipo = 'Venta Anulada'
+                    delta = -delta
+                items.append({
+                    'fecha': v.fecha,
+                    'tipo': tipo,
+                    'descripcion': desc,
+                    'delta': delta,
+                    'monto_abs': int(v.total or 0),
+                    'metodo_pago': v.get_metodo_pago_display(),
+                    'usuario': _display_user(vendedor),
+                    'venta_id': v.id,
+                })
 
-        # Gastos / Ingresos (y retiros)
-        gastos_qs = GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario')
+            # Gastos / Ingresos (y retiros)
+            gastos_qs = GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario')
 
-        for g in gastos_qs.order_by('fecha'):
-            es_retiro = bool(g.descripcion and 'Retiro de dinero al cerrar caja' in g.descripcion)
-            tipo = 'Retiro' if es_retiro else ('Gasto' if g.tipo == 'gasto' else 'Ingreso')
-            delta = int(g.monto or 0)
-            if g.tipo == 'gasto':
-                delta = -delta
-            items.append({
-                'fecha': g.fecha,
-                'tipo': tipo,
-                'descripcion': g.descripcion,
-                'delta': delta,
-                'monto_abs': int(g.monto or 0),
-                'metodo_pago': '-',
-                'usuario': _display_user(g.usuario),
-                'venta_id': None,
-            })
+            for g in gastos_qs.order_by('fecha'):
+                es_retiro = bool(g.descripcion and 'Retiro de dinero al cerrar caja' in g.descripcion)
+                tipo = 'Retiro' if es_retiro else ('Gasto' if g.tipo == 'gasto' else 'Ingreso')
+                delta = int(g.monto or 0)
+                if g.tipo == 'gasto':
+                    delta = -delta
+                items.append({
+                    'fecha': g.fecha,
+                    'tipo': tipo,
+                    'descripcion': g.descripcion,
+                    'delta': delta,
+                    'monto_abs': int(g.monto or 0),
+                    'metodo_pago': '-',
+                    'usuario': _display_user(g.usuario),
+                    'venta_id': None,
+                })
 
-        def _orden_tipo(t):
-            if t == 'Apertura':
-                return 0
-            if t.startswith('Venta'):
-                return 1
-            return 2
+            def _orden_tipo(t):
+                if t == 'Apertura':
+                    return 0
+                if t.startswith('Venta'):
+                    return 1
+                return 2
 
-        items.sort(key=lambda x: (x['fecha'], _orden_tipo(x['tipo'])))
+            items.sort(key=lambda x: (x['fecha'], _orden_tipo(x['tipo'])))
 
-        saldo = 0
-        out = []
-        for it in items:
-            saldo_antes = saldo
-            saldo_despues = saldo + int(it['delta'])
-            saldo = saldo_despues
-            out.append({
-                **it,
-                'saldo_antes': saldo_antes,
-                'saldo_despues': saldo_despues,
-                'fecha_local': timezone.localtime(it['fecha'], tz),
-            })
-        return out
+            saldo = 0
+            out = []
+            for it in items:
+                saldo_antes = saldo
+                saldo_despues = saldo + int(it['delta'])
+                saldo = saldo_despues
+                out.append({
+                    **it,
+                    'saldo_antes': saldo_antes,
+                    'saldo_despues': saldo_despues,
+                    'fecha_local': timezone.localtime(it['fecha'], tz),
+                })
+            return out
 
-    # Export (mismo endpoint): CSV / Excel
-    export_tipo = request.GET.get('export')
-    export_format = (request.GET.get('format') or 'csv').strip().lower()
-    if export_tipo in ('ventas', 'movimientos', 'cajas', 'movimientos_caja'):
-        from django.http import HttpResponse
+        # Export (mismo endpoint): CSV / Excel
+        export_tipo = request.GET.get('export')
+        export_format = (request.GET.get('format') or 'csv').strip().lower()
+        if export_tipo in ('ventas', 'movimientos', 'cajas', 'movimientos_caja'):
+            from django.http import HttpResponse
 
-        if export_format in ('xlsx', 'excel'):
-            from openpyxl import Workbook
+            if export_format in ('xlsx', 'excel'):
+                from openpyxl import Workbook
 
-            wb = Workbook()
+                wb = Workbook()
 
-            def _set_headers(ws, headers):
-                ws.append(headers)
-                for cell in ws[1]:
-                    cell.font = cell.font.copy(bold=True)
+                def _set_headers(ws, headers):
+                    ws.append(headers)
+                    for cell in ws[1]:
+                        cell.font = cell.font.copy(bold=True)
 
-            if export_tipo == 'ventas':
+                if export_tipo == 'ventas':
                 ws = wb.active
                 ws.title = 'Ventas'
                 _set_headers(ws, [
@@ -2843,14 +2794,14 @@ def guardar_conteo_fisico_view(request):
             response['Content-Disposition'] = f'attachment; filename="{filename}"'
             return response
 
-        # CSV (por defecto)
-        import csv
-        filename = f"reporte_{export_tipo}_{fecha_desde.isoformat()}_a_{fecha_hasta.isoformat()}.csv"
-        response = HttpResponse(content_type='text/csv; charset=utf-8')
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        writer = csv.writer(response)
+            # CSV (por defecto)
+            import csv
+            filename = f"reporte_{export_tipo}_{fecha_desde.isoformat()}_a_{fecha_hasta.isoformat()}.csv"
+            response = HttpResponse(content_type='text/csv; charset=utf-8')
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            writer = csv.writer(response)
 
-        if export_tipo == 'ventas':
+            if export_tipo == 'ventas':
             writer.writerow([
                 'ID', 'Fecha', 'Total', 'Metodo Pago', 'Completada', 'Anulada',
                 'Usuario', 'Vendedor', 'Registradora',
@@ -2880,7 +2831,7 @@ def guardar_conteo_fisico_view(request):
                 ])
             return response
 
-        if export_tipo == 'movimientos':
+            if export_tipo == 'movimientos':
             writer.writerow([
                 'Fecha', 'Tipo', 'Descripcion', 'Monto', 'Metodo', 'Usuario', 'CajaUsuarioID'
             ])
@@ -2913,7 +2864,7 @@ def guardar_conteo_fisico_view(request):
                 ])
             return response
 
-        if export_tipo == 'cajas':
+            if export_tipo == 'cajas':
             writer.writerow([
                 'CajaUsuarioID', 'Apertura', 'Cierre', 'Monto Inicial', 'Monto Final', 'Usuario'
             ])
@@ -2934,7 +2885,7 @@ def guardar_conteo_fisico_view(request):
                 ])
             return response
 
-        if export_tipo == 'movimientos_caja':
+            if export_tipo == 'movimientos_caja':
             writer.writerow([
                 'Fecha/Hora', 'Tipo', 'Descripcion', 'Monto', 'Saldo Antes', 'Saldo Despues', 'Metodo de Pago', 'Usuario'
             ])
@@ -2951,8 +2902,8 @@ def guardar_conteo_fisico_view(request):
                 ])
             return response
 
-    # Ventas (incluye anuladas; se desglosa)
-    ventas_qs = Venta.objects.filter(
+        # Ventas (incluye anuladas; se desglosa)
+        ventas_qs = Venta.objects.filter(
         fecha__gte=inicio_dt,
         fecha__lte=fin_dt,
         completada=True
