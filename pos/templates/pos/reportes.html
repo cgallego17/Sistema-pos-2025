@@ -148,7 +148,7 @@
                 <ul class="pagination pagination-sm mb-0">
                     {% if resumen_productos.has_previous %}
                     <li class="page-item">
-                        <a class="page-link" href="?tipo=inventario&producto={{ producto_id }}&tipo_mov={{ tipo_movimiento }}&fecha_desde={{ fecha_desde }}&fecha_hasta={{ fecha_hasta }}&page={{ resumen_productos.previous_page_number }}">Anterior</a>
+                        <a class="page-link" href="?tipo=inventario{% if producto_id %}&producto={{ producto_id }}{% endif %}{% if tipo_movimiento %}&tipo_mov={{ tipo_movimiento }}{% endif %}{% if fecha_desde %}&fecha_desde={{ fecha_desde }}{% endif %}{% if fecha_hasta %}&fecha_hasta={{ fecha_hasta }}{% endif %}&page={{ resumen_productos.previous_page_number }}">Anterior</a>
                     </li>
                     {% endif %}
                     <li class="page-item disabled">
@@ -156,7 +156,7 @@
                     </li>
                     {% if resumen_productos.has_next %}
                     <li class="page-item">
-                        <a class="page-link" href="?tipo=inventario&producto={{ producto_id }}&tipo_mov={{ tipo_movimiento }}&fecha_desde={{ fecha_desde }}&fecha_hasta={{ fecha_hasta }}&page={{ resumen_productos.next_page_number }}">Siguiente</a>
+                        <a class="page-link" href="?tipo=inventario{% if producto_id %}&producto={{ producto_id }}{% endif %}{% if tipo_movimiento %}&tipo_mov={{ tipo_movimiento }}{% endif %}{% if fecha_desde %}&fecha_desde={{ fecha_desde }}{% endif %}{% if fecha_hasta %}&fecha_hasta={{ fecha_hasta }}{% endif %}&page={{ resumen_productos.next_page_number }}">Siguiente</a>
                     </li>
                     {% endif %}
                 </ul>

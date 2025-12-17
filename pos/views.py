@@ -2161,6 +2161,9 @@ def registrar_ingreso_view(request):
 @requiere_rol('Administradores')
 def reportes_view(request):
     """Vista de reportes"""
+    # Asegurar que Sum esté disponible en el scope local
+    from django.db.models import Sum as SumAgg, Count, Q
+    
     if not puede_ver_reportes(request.user):
         messages.error(request, 'No tienes permisos para ver reportes')
         return redirect('pos:home')
@@ -2177,7 +2180,6 @@ def reportes_view(request):
     # Si es inventario, usar la vista de movimientos de inventario
     if tipo_reporte == 'inventario':
         from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-        from django.db.models import Q
         from .models import MovimientoStock, Producto
         
         # Filtros
@@ -2186,11 +2188,25 @@ def reportes_view(request):
         fecha_desde = request.GET.get('fecha_desde')
         fecha_hasta = request.GET.get('fecha_hasta')
         
+        # Normalizar valores: convertir "None" a None y validar
+        if producto_id and producto_id.lower() in ('none', 'null', ''):
+            producto_id = None
+        if tipo_movimiento and tipo_movimiento.lower() in ('none', 'null', ''):
+            tipo_movimiento = None
+        if fecha_desde and fecha_desde.lower() in ('none', 'null', ''):
+            fecha_desde = None
+        if fecha_hasta and fecha_hasta.lower() in ('none', 'null', ''):
+            fecha_hasta = None
+        
         # Base query para movimientos
         movimientos_qs = MovimientoStock.objects.select_related('producto')
         
         if producto_id:
-            movimientos_qs = movimientos_qs.filter(producto_id=producto_id)
+            try:
+                producto_id_int = int(producto_id)
+                movimientos_qs = movimientos_qs.filter(producto_id=producto_id_int)
+            except (ValueError, TypeError):
+                pass  # Ignorar si no es un número válido
         
         if tipo_movimiento:
             movimientos_qs = movimientos_qs.filter(tipo=tipo_movimiento)
@@ -2250,17 +2266,17 @@ def reportes_view(request):
             
             # Calcular entradas (ingreso) - sumar todos los productos con este código+atributo
             total_entradas = movimientos_producto.filter(tipo='ingreso').aggregate(
-                total=Sum('cantidad')
+                total=SumAgg('cantidad')
             )['total'] or 0
             
             # Calcular salidas (salida) - sumar todos los productos con este código+atributo
             total_salidas = movimientos_producto.filter(tipo='salida').aggregate(
-                total=Sum('cantidad')
+                total=SumAgg('cantidad')
             )['total'] or 0
             
             # Calcular ajustes (pueden ser positivos o negativos) - sumar todos
             ajustes = movimientos_producto.filter(tipo='ajuste').aggregate(
-                total=Sum('cantidad')
+                total=SumAgg('cantidad')
             )['total'] or 0
             
             # Neto = entradas - salidas + ajustes
@@ -2715,8 +2731,8 @@ def reportes_view(request):
     ventas_validas = ventas_qs.filter(anulada=False)
     ventas_anuladas = ventas_qs.filter(anulada=True)
 
-    total_ventas = int(ventas_validas.aggregate(total=Sum('total'))['total'] or 0)
-    total_anuladas = int(ventas_anuladas.aggregate(total=Sum('total'))['total'] or 0)
+    total_ventas = int(ventas_validas.aggregate(total=SumAgg('total'))['total'] or 0)
+    total_anuladas = int(ventas_anuladas.aggregate(total=SumAgg('total'))['total'] or 0)
     cantidad_ventas = ventas_validas.count()
     cantidad_anuladas = ventas_anuladas.count()
     promedio_venta = int(total_ventas / cantidad_ventas) if cantidad_ventas > 0 else 0
@@ -2725,31 +2741,31 @@ def reportes_view(request):
     top_productos = ItemVenta.objects.filter(
         venta__in=ventas_validas
     ).values('producto__nombre').annotate(
-        total_vendido=Sum('cantidad'),
-        total_valor=Sum('subtotal')
+        total_vendido=SumAgg('cantidad'),
+        total_valor=SumAgg('subtotal')
     ).order_by('-total_vendido')[:15]
 
     # Ventas por método de pago (válidas)
     ventas_por_metodo = ventas_validas.values('metodo_pago').annotate(
         cantidad=Count('id'),
-        total=Sum('total')
+        total=SumAgg('total')
     ).order_by('-total')
 
     # Resumen por usuario / vendedor (solo válidas)
     resumen_por_usuario = ventas_validas.values('usuario__username').annotate(
         cantidad=Count('id'),
-        total=Sum('total')
+        total=SumAgg('total')
     ).order_by('-total')
 
     resumen_por_vendedor = ventas_validas.values('vendedor__username').annotate(
         cantidad=Count('id'),
-        total=Sum('total')
+        total=SumAgg('total')
     ).order_by('-total')
 
     # Totales por método (válidas)
-    ventas_efectivo = int(ventas_validas.filter(metodo_pago='efectivo').aggregate(total=Sum('total'))['total'] or 0)
-    ventas_tarjeta = int(ventas_validas.filter(metodo_pago='tarjeta').aggregate(total=Sum('total'))['total'] or 0)
-    ventas_transferencia = int(ventas_validas.filter(metodo_pago='transferencia').aggregate(total=Sum('total'))['total'] or 0)
+    ventas_efectivo = int(ventas_validas.filter(metodo_pago='efectivo').aggregate(total=SumAgg('total'))['total'] or 0)
+    ventas_tarjeta = int(ventas_validas.filter(metodo_pago='tarjeta').aggregate(total=SumAgg('total'))['total'] or 0)
+    ventas_transferencia = int(ventas_validas.filter(metodo_pago='transferencia').aggregate(total=SumAgg('total'))['total'] or 0)
     dinero_bancos = ventas_tarjeta + ventas_transferencia
 
     # Caja: cajas que se solapan con el rango
@@ -2761,9 +2777,9 @@ def reportes_view(request):
 
     # Movimientos (gastos/ingresos/retiros) por rango (no depende de una caja específica)
     movimientos_qs = GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario').order_by('-fecha')
-    total_gastos = int(movimientos_qs.filter(tipo='gasto').exclude(descripcion__icontains='Retiro de dinero al cerrar caja').aggregate(total=Sum('monto'))['total'] or 0)
-    total_ingresos = int(movimientos_qs.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0)
-    total_retiros = int(movimientos_qs.filter(tipo='gasto', descripcion__icontains='Retiro de dinero al cerrar caja').aggregate(total=Sum('monto'))['total'] or 0)
+    total_gastos = int(movimientos_qs.filter(tipo='gasto').exclude(descripcion__icontains='Retiro de dinero al cerrar caja').aggregate(total=SumAgg('monto'))['total'] or 0)
+    total_ingresos = int(movimientos_qs.filter(tipo='ingreso').aggregate(total=SumAgg('monto'))['total'] or 0)
+    total_retiros = int(movimientos_qs.filter(tipo='gasto', descripcion__icontains='Retiro de dinero al cerrar caja').aggregate(total=SumAgg('monto'))['total'] or 0)
 
     # Resumen diario (por fecha local)
     from django.db.models.functions import TruncDate
@@ -2780,7 +2796,7 @@ def reportes_view(request):
         ).annotate(
             dia=dia_apertura_expr
         ).values('dia').annotate(
-            saldo_inicial=Sum('monto_inicial')
+            saldo_inicial=SumAgg('monto_inicial')
         )
     }
 
@@ -2790,16 +2806,16 @@ def reportes_view(request):
 
     ventas_ok_map = {
         r['dia']: r for r in ventas_validas_diarias.values('dia').annotate(
-            total_ventas=Sum('total'),
+            total_ventas=SumAgg('total'),
             cantidad_ventas=Count('id'),
-            ventas_efectivo=Sum('total', filter=Q(metodo_pago='efectivo')),
-            ventas_tarjeta=Sum('total', filter=Q(metodo_pago='tarjeta')),
-            ventas_transferencia=Sum('total', filter=Q(metodo_pago='transferencia')),
+            ventas_efectivo=SumAgg('total', filter=Q(metodo_pago='efectivo')),
+            ventas_tarjeta=SumAgg('total', filter=Q(metodo_pago='tarjeta')),
+            ventas_transferencia=SumAgg('total', filter=Q(metodo_pago='transferencia')),
         )
     }
     ventas_an_map = {
         r['dia']: r for r in ventas_anuladas_diarias.values('dia').annotate(
-            total_anuladas=Sum('total'),
+            total_anuladas=SumAgg('total'),
             cantidad_anuladas=Count('id'),
         )
     }
@@ -2811,18 +2827,18 @@ def reportes_view(request):
     movs_g_map = {
         r['dia']: r for r in movs_diarias_qs.filter(tipo='gasto').exclude(
             descripcion__icontains='Retiro de dinero al cerrar caja'
-        ).values('dia').annotate(total_gastos=Sum('monto'), cantidad_gastos=Count('id'))
+        ).values('dia').annotate(total_gastos=SumAgg('monto'), cantidad_gastos=Count('id'))
     }
     movs_i_map = {
         r['dia']: r for r in movs_diarias_qs.filter(tipo='ingreso').values('dia').annotate(
-            total_ingresos=Sum('monto'),
+            total_ingresos=SumAgg('monto'),
             cantidad_ingresos=Count('id')
         )
     }
     movs_r_map = {
         r['dia']: r for r in movs_diarias_qs.filter(
             tipo='gasto', descripcion__icontains='Retiro de dinero al cerrar caja'
-        ).values('dia').annotate(total_retiros=Sum('monto'), cantidad_retiros=Count('id'))
+        ).values('dia').annotate(total_retiros=SumAgg('monto'), cantidad_retiros=Count('id'))
     }
 
     dias = sorted(set(
