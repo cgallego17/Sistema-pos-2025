@@ -49,7 +49,7 @@
                 <input type="hidden" name="tipo" value="inventario">
                 <div class="col-md-3">
                     <label class="form-label-modern">Producto:</label>
-                    <div class="autocomplete-wrapper" style="position: relative;">
+                    <div class="autocomplete-wrapper" style="position: relative; z-index: 10000;">
                         <input type="text" 
                                class="form-control form-control-modern" 
                                id="filtroProducto" 
@@ -59,7 +59,7 @@
                                value="{% if producto_id %}{% for p in productos %}{% if p.id|stringformat:"s" == producto_id %}{{ p.codigo }} - {{ p.nombre }}{% endif %}{% endfor %}{% endif %}">
                         <input type="hidden" name="producto" id="producto_id_hidden" value="{{ producto_id }}">
                         <div class="autocomplete-dropdown" 
-                             style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                             style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 10001; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 4px 4px;">
                         </div>
                     </div>
                 </div>
