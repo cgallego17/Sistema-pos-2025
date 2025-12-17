@@ -113,6 +113,7 @@
                             <th class="text-end">Ajustes</th>
                             <th class="text-end"><strong>Neto</strong></th>
                             <th class="text-end"><strong>Stock Actual</strong></th>
+                            <th class="text-center">Cantidad Física Contada</th>
                             <th>Análisis</th>
                         </tr>
                     </thead>
@@ -144,6 +145,26 @@
                                 <strong class="{% if item.stock_actual > 0 %}text-primary{% elif item.stock_actual == 0 %}text-warning{% else %}text-danger{% endif %}">
                                     {{ item.stock_actual|intcomma }}
                                 </strong>
+                            </td>
+                            <td class="text-center">
+                                <div class="input-group input-group-sm" style="max-width: 150px; margin: 0 auto;">
+                                    <input type="number" 
+                                           class="form-control form-control-sm conteo-fisico-input" 
+                                           data-codigo="{{ item.codigo }}" 
+                                           data-atributo="{{ item.atributo }}"
+                                           value="{% if item.cantidad_contada %}{{ item.cantidad_contada }}{% endif %}"
+                                           placeholder="0"
+                                           min="0"
+                                           style="text-align: center;">
+                                    <button class="btn btn-sm btn-outline-primary guardar-conteo-btn" 
+                                            type="button"
+                                            data-codigo="{{ item.codigo }}" 
+                                            data-atributo="{{ item.atributo }}"
+                                            title="Guardar conteo">
+                                        <i class="bi bi-check-lg"></i>
+                                    </button>
+                                </div>
+                                <small class="text-muted d-block mt-1" id="status-{{ item.codigo }}-{{ item.atributo|default:'sin' }}"></small>
                             </td>
                             <td>
                                 {% if item.tiene_problemas %}
@@ -222,7 +243,7 @@
                         {% endif %}
                         {% empty %}
                         <tr>
-                            <td colspan="8" class="text-center text-muted">No hay productos con movimientos en este rango.</td>
+                            <td colspan="9" class="text-center text-muted">No hay productos con movimientos en este rango.</td>
                         </tr>
                         {% endfor %}
                     </tbody>

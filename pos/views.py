@@ -2328,6 +2328,26 @@ def reportes_view(request):
         # Ordenar por código y atributo
         resumen_productos.sort(key=lambda x: (x['codigo'], x['atributo']))
         
+        # Obtener conteos físicos existentes (último conteo por código+atributo)
+        from .models import ConteoFisico
+        conteos_fisicos = {}
+        for item in resumen_productos:
+            codigo = item['codigo']
+            atributo = item['atributo'] if item['atributo'] != '-' else None
+            # Buscar último conteo para este código+atributo
+            conteo = ConteoFisico.objects.filter(
+                codigo=codigo,
+                atributo=atributo if atributo else None
+            ).order_by('-fecha_conteo').first()
+            if conteo:
+                conteos_fisicos[(codigo, atributo)] = conteo.cantidad_contada
+        
+        # Agregar conteos físicos a los items
+        for item in resumen_productos:
+            codigo = item['codigo']
+            atributo = item['atributo'] if item['atributo'] != '-' else None
+            item['cantidad_contada'] = conteos_fisicos.get((codigo, atributo), None)
+        
         # Obtener lista de productos para el filtro
         productos = Producto.objects.filter(activo=True).order_by('nombre')
         
@@ -2341,6 +2361,56 @@ def reportes_view(request):
             'fecha_hasta': fecha_hasta,
         }
         return render(request, 'pos/reportes.html', context)
+    
+    # Vista AJAX para guardar conteo físico de inventario
+@login_required
+@requiere_rol('Administradores')
+def guardar_conteo_fisico_view(request):
+    """Vista AJAX para guardar conteo físico de inventario"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+    
+    try:
+        codigo = request.POST.get('codigo')
+        atributo = request.POST.get('atributo')
+        cantidad = request.POST.get('cantidad')
+        
+        if not codigo:
+            return JsonResponse({'success': False, 'error': 'Código requerido'}, status=400)
+        
+        if cantidad is None or cantidad == '':
+            return JsonResponse({'success': False, 'error': 'Cantidad requerida'}, status=400)
+        
+        try:
+            cantidad = int(cantidad)
+        except ValueError:
+            return JsonResponse({'success': False, 'error': 'Cantidad debe ser un número'}, status=400)
+        
+        # Normalizar atributo (None si es vacío o '-')
+        if atributo in ('', '-', None):
+            atributo = None
+        
+        # Buscar si ya existe un conteo para este código+atributo
+        from .models import ConteoFisico
+        conteo, created = ConteoFisico.objects.update_or_create(
+            codigo=codigo,
+            atributo=atributo,
+            defaults={
+                'cantidad_contada': cantidad,
+                'usuario': request.user,
+                'fecha_conteo': timezone.now()
+            }
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Conteo guardado correctamente',
+            'cantidad': cantidad,
+            'created': created
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
     
     # Si es caja, continuar con el código existente
     # Obtener fechas del filtro

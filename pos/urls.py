@@ -44,6 +44,7 @@ urlpatterns = [
     
     # Reportes
     path('reportes/', views.reportes_view, name='reportes'),
+    path('reportes/guardar-conteo-fisico/', views.guardar_conteo_fisico_view, name='guardar_conteo_fisico'),
     
     # Inventario (Ingreso/Salida Mercancía unificado)
     path('inventario/', views.inventario_view, name='inventario'),

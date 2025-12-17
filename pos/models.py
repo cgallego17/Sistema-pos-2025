@@ -360,6 +360,56 @@ class MovimientoStock(models.Model):
         return f"{self.tipo} - {self.producto.nombre} ({self.cantidad})"
 
 
+class ConteoFisico(models.Model):
+    """Modelo para almacenar conteos físicos de inventario"""
+    codigo = models.CharField(
+        max_length=50,
+        db_index=True,
+        verbose_name='Código',
+        help_text='Código del producto'
+    )
+    atributo = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        verbose_name='Atributo',
+        help_text='Atributo del producto'
+    )
+    cantidad_contada = models.IntegerField(
+        verbose_name='Cantidad Contada',
+        help_text='Cantidad física contada'
+    )
+    fecha_conteo = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        verbose_name='Fecha de Conteo'
+    )
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='Usuario'
+    )
+    observaciones = models.TextField(
+        null=True,
+        blank=True,
+        verbose_name='Observaciones'
+    )
+
+    class Meta:
+        verbose_name = 'Conteo Físico'
+        verbose_name_plural = 'Conteos Físicos'
+        ordering = ['-fecha_conteo']
+        indexes = [
+            models.Index(fields=['codigo', 'atributo', '-fecha_conteo']),
+            models.Index(fields=['-fecha_conteo']),
+        ]
+
+    def __str__(self):
+        return f"Conteo {self.codigo} - {self.cantidad_contada} ({self.fecha_conteo.strftime('%Y-%m-%d')})"
+
+
 class PerfilUsuario(models.Model):
     """Modelo para perfil de usuario con PIN"""
     usuario = models.OneToOneField(
