@@ -105,10 +105,10 @@
                                 <button type="button" class="btn btn-sm" onclick="enviarTicketEmail({{ venta.id }})" title="Enviar ticket por correo" style="background: #10b981; color: white; border: none; padding: 0.25rem 0.5rem;">
                                     <i class="bi bi-envelope"></i>
                                 </button>
+                                {% if puede_anular_ventas %}
                                 <a href="{% url 'pos:editar_venta' venta.id %}" class="btn btn-sm btn-warning" title="Editar venta" style="padding: 0.25rem 0.5rem;">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                {% if user.is_staff %}
                                 <button type="button" 
                                         class="btn btn-sm btn-danger-pos" 
                                         onclick="anularVenta({{ venta.id }}, '{{ venta.metodo_pago }}', {{ venta.monto_recibido|default:0 }})" 

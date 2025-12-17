@@ -165,3 +165,4 @@ python manage.py trazar_saldo_caja
 python manage.py diagnosticar_caja
 ```
 
+

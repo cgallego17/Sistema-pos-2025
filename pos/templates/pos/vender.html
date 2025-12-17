@@ -939,9 +939,23 @@
 
 {% block extra_js %}
 <script>
+// Generar ID único para esta pestaña (único por carga de página, incluso si se duplica)
+// Usar performance.now() para mayor precisión y evitar colisiones
+function obtenerTabId() {
+    // Generar ID único cada vez que se carga la página
+    // Esto asegura que incluso si se duplica la pestaña, cada una tendrá su propio ID
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substr(2, 9);
+    const performance = window.performance ? window.performance.now() : Math.random() * 1000;
+    return 'tab_' + timestamp + '_' + performance.toString().replace('.', '') + '_' + random;
+}
+
+// Obtener tab_id al cargar (siempre genera uno nuevo, no usa sessionStorage)
+const TAB_ID = obtenerTabId();
+
 // Cargar carrito desde sesión al iniciar
 function cargarCarritoDesdeSesion() {
-    fetch('{% url "pos:vender" %}?cargar_carrito=1', {
+    fetch(`{% url "pos:vender" %}?cargar_carrito=1&tab_id=${TAB_ID}`, {
         headers: {'X-Requested-With': 'XMLHttpRequest'}
     })
         .then(r => r.json())
@@ -1034,6 +1048,7 @@ function agregarProductoRapido(productoId, cantidad) {
     const formData = new FormData();
     formData.append('producto_id', productoId);
     formData.append('cantidad', cantidad);
+    formData.append('tab_id', TAB_ID);
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
     
     fetch('{% url "pos:agregar_carrito" %}', {
@@ -1113,6 +1128,8 @@ async function procesarVenta() {
     if (vendedorId) {
         formData.append('vendedor_id', vendedorId);
     }
+    // Agregar tab_id para identificar la pestaña
+    formData.append('tab_id', TAB_ID);
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
     
     if (window.showNotification) {
@@ -1185,7 +1202,7 @@ async function limpiarCarrito(silencioso = false) {
     // Si no es silencioso, pedir confirmación
     if (!silencioso && !confirm('¿Estás seguro de limpiar el carrito?')) return;
     
-    fetch('{% url "pos:limpiar_carrito" %}', {
+    fetch(`{% url "pos:limpiar_carrito" %}?tab_id=${TAB_ID}`, {
         headers: {'X-Requested-With': 'XMLHttpRequest'}
     })
     .then(() => {
@@ -1204,8 +1221,9 @@ async function limpiarCarrito(silencioso = false) {
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', function() {
-    // Limpiar carrito al iniciar (no mantener entre recargas)
-    limpiarCarrito(true); // true = silencioso, sin confirmación
+    // Cargar carrito de esta pestaña específica al iniciar
+    // Cada pestaña tiene su propio tab_id único, así que cargará su propio carrito
+    cargarCarritoDesdeSesion();
     
     // Búsqueda optimizada con debounce
     const searchInput = document.getElementById('pos-search');
@@ -1579,6 +1597,7 @@ function actualizarCantidad(productoId, cantidad) {
     // Actualizar en servidor
     const formData = new FormData();
     formData.append('cantidad', cantidad);
+    formData.append('tab_id', TAB_ID);
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
     
     fetch(`{% url "pos:actualizar_cantidad" 999 %}`.replace('999', productoId), {
@@ -1612,7 +1631,7 @@ async function eliminarItem(productoId) {
     const confirmado = await confirm('¿Eliminar este producto del carrito?');
     if (!confirmado) return;
     
-    fetch(`{% url "pos:eliminar_item" 999 %}`.replace('999', productoId), {
+    fetch(`{% url "pos:eliminar_item" 999 %}?tab_id=${TAB_ID}`.replace('999', productoId), {
         headers: {'X-Requested-With': 'XMLHttpRequest'}
     })
     .then(r => r.json())
@@ -1720,6 +1739,7 @@ function actualizarPrecio(productoId, nuevoPrecio) {
     
     const formData = new FormData();
     formData.append('precio', nuevoPrecio);
+    formData.append('tab_id', TAB_ID);
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
     
     fetch(`{% url "pos:actualizar_precio" 999 %}`.replace('999', productoId), {

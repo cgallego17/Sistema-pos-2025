@@ -494,7 +494,8 @@ def vender_view(request):
     
     # Si es AJAX para cargar carrito
     if request.GET.get('cargar_carrito'):
-        carrito = get_carrito(request)
+        tab_id = request.GET.get('tab_id')
+        carrito = get_carrito(request, tab_id)
         # Validar y limpiar productos inválidos del carrito
         carrito_limpio = {}
         productos_activos_ids = set(Producto.objects.filter(activo=True).values_list('id', flat=True))
@@ -518,7 +519,12 @@ def vender_view(request):
         
         # Actualizar el carrito en la sesión si se limpió
         if len(carrito_limpio) != len(carrito):
-            request.session['carrito'] = carrito_limpio
+            if tab_id:
+                if 'carritos' not in request.session:
+                    request.session['carritos'] = {}
+                request.session['carritos'][tab_id] = carrito_limpio
+            else:
+                request.session['carrito'] = carrito_limpio
             request.session.modified = True
         
         return JsonResponse({'carrito': carrito_limpio})
@@ -1286,12 +1292,32 @@ def caja_view(request):
         # Calcular gastos e ingresos
         from .models import GastoCaja
         gastos_caja_item = GastoCaja.objects.filter(caja_usuario=caja_item)
-        total_gastos_caja = gastos_caja_item.filter(tipo='gasto').aggregate(total=Sum('monto'))['total'] or 0
-        total_ingresos_caja = gastos_caja_item.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0
+        
+        # IMPORTANTE: Filtrar gastos por el período de la caja (desde fecha_apertura hasta fecha_cierre o ahora)
+        # Esto asegura que solo se incluyan los gastos del período específico de esta caja
+        if caja_item.fecha_cierre:
+            gastos_periodo_caja = gastos_caja_item.filter(
+                fecha__gte=caja_item.fecha_apertura,
+                fecha__lte=caja_item.fecha_cierre
+            )
+        else:
+            gastos_periodo_caja = gastos_caja_item.filter(
+                fecha__gte=caja_item.fecha_apertura
+            )
+        
+        # IMPORTANTE: Excluir los retiros de cierre de caja del total de gastos
+        # Los retiros son salidas de dinero pero no son gastos operativos
+        gastos_sin_retiros_caja = gastos_periodo_caja.filter(
+            tipo='gasto'
+        ).exclude(
+            descripcion__icontains='Retiro de dinero al cerrar caja'
+        )
+        total_gastos_caja = gastos_sin_retiros_caja.aggregate(total=Sum('monto'))['total'] or 0
+        total_ingresos_caja = gastos_periodo_caja.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0
         
         # Calcular saldo esperado usando la misma lógica que saldo_caja
         # IMPORTANTE: Si hay gastos de devolución, significa que las ventas anuladas ingresaron dinero
-        gastos_devolucion_caja = gastos_caja_item.filter(
+        gastos_devolucion_caja = gastos_periodo_caja.filter(
             descripcion__icontains='Devolución por anulación',
             tipo='gasto'
         )
@@ -1376,17 +1402,34 @@ def caja_view(request):
         total_anuladas = int(total_anuladas_raw) if total_anuladas_raw else 0
         
         # Obtener gastos e ingresos de la caja (abierta o cerrada)
-        # Incluir TODOS los gastos asociados a esta caja (sin filtrar por fecha)
-        # para asegurar que se incluyan los retiros registrados al cerrar la caja
+        # IMPORTANTE: Filtrar por fecha para incluir solo los del período de la caja
+        # (desde fecha_apertura hasta fecha_cierre o ahora)
         from .models import GastoCaja
         gastos_todos = GastoCaja.objects.filter(
             caja_usuario=caja_mostrar
         )
         
-        # Para el cálculo del saldo, usar TODOS los gastos de esta caja abierta
-        # (no solo los del día actual) para incluir retiros registrados al cerrar
-        total_gastos_raw = gastos_todos.filter(tipo='gasto').aggregate(total=Sum('monto'))['total']
-        total_ingresos_raw = gastos_todos.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total']
+        # Filtrar gastos por el período de la caja para cálculos de totales
+        if caja_mostrar.fecha_cierre:
+            gastos_periodo = gastos_todos.filter(
+                fecha__gte=caja_mostrar.fecha_apertura,
+                fecha__lte=caja_mostrar.fecha_cierre
+            )
+        else:
+            gastos_periodo = gastos_todos.filter(
+                fecha__gte=caja_mostrar.fecha_apertura
+            )
+        
+        # Para el cálculo del saldo, usar solo los gastos del período de la caja
+        # IMPORTANTE: Excluir los retiros de cierre de caja del total de gastos
+        # Los retiros son salidas de dinero pero no son gastos operativos
+        gastos_sin_retiros = gastos_periodo.filter(
+            tipo='gasto'
+        ).exclude(
+            descripcion__icontains='Retiro de dinero al cerrar caja'
+        )
+        total_gastos_raw = gastos_sin_retiros.aggregate(total=Sum('monto'))['total']
+        total_ingresos_raw = gastos_periodo.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total']
         
         total_gastos = int(total_gastos_raw) if total_gastos_raw else 0
         total_ingresos = int(total_ingresos_raw) if total_ingresos_raw else 0
@@ -1408,6 +1451,9 @@ def caja_view(request):
         ventas_transferencia = int(ventas_transferencia)
         ventas_anuladas_efectivo = int(ventas_anuladas_efectivo)
         
+        # Calcular dinero en bancos (tarjeta + transferencia)
+        dinero_bancos = ventas_tarjeta + ventas_transferencia
+
         # Calcular dinero físico en caja (solo efectivo + monto inicial + ingresos - gastos)
         # IMPORTANTE sobre ventas anuladas en efectivo:
         # - Si una venta anulada en efectivo ingresó dinero a la caja (monto_recibido > 0), ese dinero SÍ entró físicamente
@@ -1416,7 +1462,7 @@ def caja_view(request):
         # - Si hay gastos de devolución en efectivo, significa que el dinero SÍ entró a la caja antes de anularse
         # Los otros métodos de pago van a cuentas bancarias
         # Verificar si hay gastos de devolución en efectivo para saber si el dinero de las ventas anuladas entró a la caja
-        gastos_devolucion_efectivo = gastos_todos.filter(
+        gastos_devolucion_efectivo = gastos_periodo.filter(
             descripcion__icontains='Devolución por anulación',
             tipo='gasto'
         )
@@ -1452,8 +1498,13 @@ def caja_view(request):
         # Calcular estadísticas adicionales
         cantidad_ventas = ventas_caja.count()
         promedio_venta = (total_ventas / cantidad_ventas) if cantidad_ventas > 0 else 0
-        cantidad_gastos = gastos_todos.filter(tipo='gasto').count()
-        cantidad_ingresos = gastos_todos.filter(tipo='ingreso').count()
+        # Excluir retiros de cierre de caja del conteo de gastos
+        cantidad_gastos = gastos_periodo.filter(
+            tipo='gasto'
+        ).exclude(
+            descripcion__icontains='Retiro de dinero al cerrar caja'
+        ).count()
+        cantidad_ingresos = gastos_periodo.filter(tipo='ingreso').count()
         
         # Calcular tiempo transcurrido desde apertura
         from datetime import timedelta
@@ -1465,9 +1516,8 @@ def caja_view(request):
             minutos = int((diferencia.total_seconds() % 3600) / 60)
             tiempo_transcurrido = f"{horas}h {minutos}m"
         
-        # Para mostrar en la tabla, incluir TODOS los gastos de la caja
-        # (no solo los del día actual) para incluir retiros registrados al cerrar
-        gastos_caja = gastos_todos.order_by('-fecha')
+        # Para mostrar en la tabla, incluir solo los gastos del período de la caja
+        gastos_caja = gastos_periodo.order_by('-fecha')
         
         # Crear lista unificada de movimientos (apertura, ventas, gastos, ingresos)
         movimientos_unificados = []
@@ -1488,7 +1538,7 @@ def caja_view(request):
         # Verificar si hay gastos de devolución por anulación para evitar duplicación
         # Si existe un GastoCaja de devolución, no agregar el movimiento adicional de anulación
         gastos_devolucion_ids = set()
-        for gasto in gastos_todos:
+        for gasto in gastos_periodo:
             if 'Devolución por anulación de venta #' in gasto.descripcion:
                 # Extraer el ID de la venta de la descripción
                 import re
@@ -1545,11 +1595,12 @@ def caja_view(request):
                 })
         
         # Agregar gastos e ingresos como movimientos
-        # Convertir a lista para asegurar que se incluyan todos los gastos
-        gastos_lista = list(gastos_todos.order_by('fecha'))
+        # Usar gastos_periodo que ya está filtrado por fecha
+        # Convertir a lista para asegurar que se incluyan todos los gastos del período
+        gastos_lista = list(gastos_periodo.order_by('fecha'))
         
         # Log para trazabilidad
-        logger.debug(f"Caja #{caja_mostrar.id}: Agregando {len(gastos_lista)} gastos/ingresos a movimientos")
+        logger.debug(f"Caja #{caja_mostrar.id}: Agregando {len(gastos_lista)} gastos/ingresos a movimientos (filtrados por fecha)")
         
         for movimiento in gastos_lista:
             # Identificar si es un retiro por la descripción
@@ -1576,7 +1627,9 @@ def caja_view(request):
         movimientos_unificados.sort(key=lambda x: x['fecha'])
         
         # Calcular saldo antes y después de cada movimiento
-        saldo_actual = 0  # Iniciar en 0 antes de la apertura
+        # IMPORTANTE: El saldo inicial es 0 antes de cualquier movimiento
+        # La apertura establece el monto inicial, y luego se calculan los saldos secuencialmente
+        saldo_actual = 0
         
         for movimiento in movimientos_unificados:
             saldo_antes = saldo_actual
@@ -1616,10 +1669,11 @@ def caja_view(request):
         # - Por lo tanto, debemos sumar el dinero que entró (total_anuladas) y restar el que se devolvió (gastos de devolución)
         # - Si hay gastos de devolución, significa que el dinero SÍ entró a la caja antes de anularse
         # (monto_inicial ya está definido arriba)
-        # Los gastos incluyen todos los retiros registrados y devoluciones
-        # Este es el dinero físico que debería haber en la caja
+        # IMPORTANTE: Los retiros de cierre de caja NO se incluyen en total_gastos (se excluyen del cálculo)
+        # Los retiros se muestran como movimientos separados pero no afectan el total de gastos operativos
+        # Este es el saldo total que debería haber en la caja (incluyendo todos los métodos de pago)
         # Verificar si hay gastos de devolución para saber si el dinero de las ventas anuladas entró a la caja
-        gastos_devolucion_total = gastos_todos.filter(descripcion__icontains='Devolución por anulación').aggregate(total=Sum('monto'))['total'] or 0
+        gastos_devolucion_total = gastos_periodo.filter(descripcion__icontains='Devolución por anulación').aggregate(total=Sum('monto'))['total'] or 0
         if gastos_devolucion_total > 0:
             # Si hay gastos de devolución, significa que el dinero de las ventas anuladas SÍ entró a la caja
             # Por lo tanto, debemos sumarlo al saldo (y luego se resta con el gasto de devolución)
@@ -1646,6 +1700,7 @@ def caja_view(request):
         'ventas_efectivo': ventas_efectivo,
         'ventas_tarjeta': ventas_tarjeta,
         'ventas_transferencia': ventas_transferencia,
+        'dinero_bancos': dinero_bancos,
         'dinero_fisico_caja': dinero_fisico_caja,
         'porcentaje_efectivo': porcentaje_efectivo,
         'porcentaje_tarjeta': porcentaje_tarjeta,
@@ -1772,17 +1827,25 @@ def cerrar_caja_view(request):
         
         if caja_abierta:
             monto_final = int(float(request.POST.get('monto_final', 0)))
-            dinero_retirar = int(float(request.POST.get('dinero_retirar', 0)))
+            # Nuevo: retiros separados (efectivo y bancos)
+            # Compatibilidad: si aún llega dinero_retirar, se toma como retiro de efectivo
+            dinero_retirar_efectivo = request.POST.get('dinero_retirar_efectivo', None)
+            dinero_retirar_bancos = request.POST.get('dinero_retirar_bancos', None)
+            if dinero_retirar_efectivo is None and dinero_retirar_bancos is None:
+                dinero_retirar_efectivo = request.POST.get('dinero_retirar', 0)
+                dinero_retirar_bancos = 0
+            dinero_retirar_efectivo = int(float(dinero_retirar_efectivo or 0))
+            dinero_retirar_bancos = int(float(dinero_retirar_bancos or 0))
             
             # Calcular el saldo actual de la caja antes de permitir el retiro
             from datetime import date
             from django.db.models import Sum
             hoy = date.today()
-            inicio_dia = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            fin_dia = timezone.now().replace(hour=23, minute=59, second=59, microsecond=999999)
             
             # Obtener todas las ventas de la caja (válidas y anuladas)
+            # IMPORTANTE: Usar el mismo filtrado que en caja_view para consistencia
             if caja_abierta.fecha_cierre:
+                # Si la caja está cerrada, filtrar ventas entre apertura y cierre
                 ventas_caja_todas = Venta.objects.filter(
                     caja=caja_principal,
                     fecha__gte=caja_abierta.fecha_apertura,
@@ -1790,10 +1853,10 @@ def cerrar_caja_view(request):
                     completada=True
                 )
             else:
+                # Si la caja está abierta, filtrar ventas desde la fecha de apertura de la caja
                 ventas_caja_todas = Venta.objects.filter(
                     caja=caja_principal,
-                    fecha__gte=inicio_dia,
-                    fecha__lte=fin_dia,
+                    fecha__gte=caja_abierta.fecha_apertura,
                     completada=True
                 )
             
@@ -1801,43 +1864,138 @@ def cerrar_caja_view(request):
             ventas_caja = ventas_caja_todas.filter(anulada=False)
             ventas_anuladas_caja = ventas_caja_todas.filter(anulada=True)
             
-            # Calcular totales
+            # Calcular totales (solo para estadísticas)
             total_ventas = int(ventas_caja.aggregate(total=Sum('total'))['total'] or 0)
             total_anuladas = int(ventas_anuladas_caja.aggregate(total=Sum('total'))['total'] or 0)
             
-            # Obtener gastos e ingresos
+            # IMPORTANTE: Para el saldo disponible, solo contar ventas en EFECTIVO
+            # Las ventas con tarjeta y transferencia no generan dinero físico en la caja
+            ventas_efectivo = int(ventas_caja.filter(metodo_pago='efectivo').aggregate(total=Sum('total'))['total'] or 0)
+            ventas_anuladas_efectivo = int(ventas_anuladas_caja.filter(metodo_pago='efectivo').aggregate(total=Sum('total'))['total'] or 0)
+            ventas_tarjeta = int(ventas_caja.filter(metodo_pago='tarjeta').aggregate(total=Sum('total'))['total'] or 0)
+            ventas_transferencia = int(ventas_caja.filter(metodo_pago='transferencia').aggregate(total=Sum('total'))['total'] or 0)
+            ventas_anuladas_tarjeta = int(ventas_anuladas_caja.filter(metodo_pago='tarjeta').aggregate(total=Sum('total'))['total'] or 0)
+            ventas_anuladas_transferencia = int(ventas_anuladas_caja.filter(metodo_pago='transferencia').aggregate(total=Sum('total'))['total'] or 0)
+            
+            # Obtener gastos e ingresos de la caja
+            # IMPORTANTE: Filtrar por fecha para incluir solo los del período de la caja
+            # (desde fecha_apertura hasta fecha_cierre o ahora)
             from .models import GastoCaja
-            gastos_todos = GastoCaja.objects.filter(caja_usuario=caja_abierta)
-            total_gastos = int(gastos_todos.filter(tipo='gasto').aggregate(total=Sum('monto'))['total'] or 0)
-            total_ingresos = int(gastos_todos.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0)
+            gastos_todos = GastoCaja.objects.filter(
+                caja_usuario=caja_abierta
+            )
+            
+            # Filtrar gastos por el período de la caja para cálculos de totales
+            if caja_abierta.fecha_cierre:
+                gastos_periodo = gastos_todos.filter(
+                    fecha__gte=caja_abierta.fecha_apertura,
+                    fecha__lte=caja_abierta.fecha_cierre
+                )
+            else:
+                gastos_periodo = gastos_todos.filter(
+                    fecha__gte=caja_abierta.fecha_apertura
+                )
+            
+            # IMPORTANTE: Excluir los retiros de cierre de caja del total de gastos
+            # Los retiros son salidas de dinero pero no son gastos operativos
+            gastos_sin_retiros = gastos_periodo.filter(
+                tipo='gasto'
+            ).exclude(
+                descripcion__icontains='Retiro de dinero al cerrar caja'
+            )
+            total_gastos = int(gastos_sin_retiros.aggregate(total=Sum('monto'))['total'] or 0)
+            total_ingresos = int(gastos_periodo.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0)
             
             # Obtener monto inicial
             monto_inicial = int(caja_abierta.monto_inicial) if caja_abierta.monto_inicial else 0
             
-            # Verificar si hay gastos de devolución para calcular correctamente el saldo
-            gastos_devolucion_total = gastos_todos.filter(descripcion__icontains='Devolución por anulación').aggregate(total=Sum('monto'))['total'] or 0
+            # Verificar si hay gastos de devolución en efectivo para calcular correctamente el saldo
+            gastos_devolucion_efectivo = gastos_periodo.filter(
+                descripcion__icontains='Devolución por anulación',
+                tipo='gasto'
+            )
+            # Filtrar solo los gastos de devolución que corresponden a ventas en efectivo
+            gastos_devolucion_efectivo_total = 0
+            for gasto in gastos_devolucion_efectivo:
+                # Extraer ID de venta de la descripción
+                import re
+                match = re.search(r'venta #(\d+)', gasto.descripcion, re.IGNORECASE)
+                if match:
+                    venta_id_devolucion = int(match.group(1))
+                    # Verificar si la venta era en efectivo
+                    try:
+                        venta_devolucion = Venta.objects.get(id=venta_id_devolucion)
+                        if venta_devolucion.metodo_pago == 'efectivo':
+                            gastos_devolucion_efectivo_total += gasto.monto
+                    except Venta.DoesNotExist:
+                        pass
             
-            # Calcular saldo disponible (sin incluir el retiro que se va a hacer)
-            if gastos_devolucion_total > 0:
-                saldo_disponible = monto_inicial + total_ventas + total_anuladas + total_ingresos - total_gastos
+            # Calcular saldo disponible (solo dinero físico en efectivo, sin incluir el retiro que se va a hacer)
+            if gastos_devolucion_efectivo_total > 0:
+                # Si hay gastos de devolución en efectivo, significa que el dinero de las ventas anuladas SÍ entró a la caja
+                # Por lo tanto, debemos sumarlo al dinero físico (y luego se resta con el gasto de devolución)
+                saldo_disponible = monto_inicial + ventas_efectivo + ventas_anuladas_efectivo + total_ingresos - total_gastos
             else:
-                saldo_disponible = monto_inicial + total_ventas + total_ingresos - total_gastos
+                # Si NO hay gastos de devolución en efectivo, las ventas anuladas no afectan el dinero físico
+                saldo_disponible = monto_inicial + ventas_efectivo + total_ingresos - total_gastos
+
+            # Calcular saldo disponible en bancos (tarjeta + transferencia)
+            # Nota: ingresos/gastos operativos no se consideran bancos (se asumen efectivo).
+            gastos_devolucion_bancos_total = 0
+            for gasto in gastos_devolucion_efectivo:
+                import re
+                match = re.search(r'venta #(\d+)', gasto.descripcion, re.IGNORECASE)
+                if match:
+                    venta_id_devolucion = int(match.group(1))
+                    try:
+                        venta_devolucion = Venta.objects.get(id=venta_id_devolucion)
+                        if venta_devolucion.metodo_pago in ('tarjeta', 'transferencia'):
+                            gastos_devolucion_bancos_total += gasto.monto
+                    except Venta.DoesNotExist:
+                        pass
+
+            # Si hay devoluciones por anulación en bancos, asumimos que las ventas anuladas sí ingresaron y luego se devolvió.
+            if gastos_devolucion_bancos_total > 0:
+                saldo_disponible_bancos = (
+                    ventas_tarjeta
+                    + ventas_transferencia
+                    + ventas_anuladas_tarjeta
+                    + ventas_anuladas_transferencia
+                )
+            else:
+                saldo_disponible_bancos = ventas_tarjeta + ventas_transferencia
             
-            # Validar que el dinero a retirar no sea mayor que el saldo disponible
-            if dinero_retirar > saldo_disponible:
+            # Validar retiros: efectivo vs bancos (separados)
+            # Permitir retirar $0 (cero) incluso si el saldo es negativo, ya que $0 significa no retirar nada
+            if dinero_retirar_efectivo > 0 and dinero_retirar_efectivo > saldo_disponible:
                 messages.error(
                     request, 
-                    f'No se puede retirar ${dinero_retirar:,}. El saldo disponible en caja es ${saldo_disponible:,}'
+                    f'No se puede retirar ${dinero_retirar_efectivo:,}. El saldo disponible en EFECTIVO en caja es ${saldo_disponible:,}'
+                )
+                return redirect('pos:caja')
+
+            if dinero_retirar_bancos > 0 and dinero_retirar_bancos > saldo_disponible_bancos:
+                messages.error(
+                    request,
+                    f'No se puede retirar ${dinero_retirar_bancos:,}. El saldo disponible en BANCOS (tarjeta/transferencia) es ${saldo_disponible_bancos:,}'
                 )
                 return redirect('pos:caja')
             
             # Si hay dinero a retirar, registrarlo como un gasto antes de cerrar
             # Este gasto se agrega al historial y NO se elimina
-            if dinero_retirar > 0:
+            if dinero_retirar_efectivo > 0:
                 GastoCaja.objects.create(
                     tipo='gasto',
-                    monto=dinero_retirar,
-                    descripcion=f'Retiro de dinero al cerrar caja - Usuario: {request.user.get_full_name() or request.user.username}',
+                    monto=dinero_retirar_efectivo,
+                    descripcion=f'Retiro de dinero al cerrar caja (Efectivo) - Usuario: {request.user.get_full_name() or request.user.username}',
+                    usuario=request.user,
+                    caja_usuario=caja_abierta
+                )
+            if dinero_retirar_bancos > 0:
+                GastoCaja.objects.create(
+                    tipo='gasto',
+                    monto=dinero_retirar_bancos,
+                    descripcion=f'Retiro de dinero al cerrar caja (Bancos) - Usuario: {request.user.get_full_name() or request.user.username}',
                     usuario=request.user,
                     caja_usuario=caja_abierta
                 )
@@ -1864,8 +2022,13 @@ def cerrar_caja_view(request):
             
             # Mensaje de confirmación
             mensaje = 'Caja cerrada exitosamente'
-            if dinero_retirar > 0:
-                mensaje += f'. Se registró un retiro de ${dinero_retirar:,} como salida.'
+            if dinero_retirar_efectivo > 0 or dinero_retirar_bancos > 0:
+                partes = []
+                if dinero_retirar_efectivo > 0:
+                    partes.append(f'Efectivo: ${dinero_retirar_efectivo:,}')
+                if dinero_retirar_bancos > 0:
+                    partes.append(f'Bancos: ${dinero_retirar_bancos:,}')
+                mensaje += f'. Se registró retiro como salida ({", ".join(partes)}).'
             if registradoras_cerradas > 0:
                 mensaje += f' Se cerraron {registradoras_cerradas} registradora(s) activa(s).'
             
@@ -2007,53 +2170,357 @@ def reportes_view(request):
     fecha_hasta = request.GET.get('fecha_hasta')
     
     # Ventas del mes actual por defecto
-    if not fecha_desde:
+    try:
+        if not fecha_desde:
+            fecha_desde = timezone.now().replace(day=1).date()
+        else:
+            fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+    except Exception:
         fecha_desde = timezone.now().replace(day=1).date()
-    else:
-        fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
     
-    if not fecha_hasta:
+    try:
+        if not fecha_hasta:
+            fecha_hasta = timezone.now().date()
+        else:
+            fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+    except Exception:
         fecha_hasta = timezone.now().date()
-    else:
-        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
-    
-    ventas = Venta.objects.filter(
-        fecha__date__gte=fecha_desde,
-        fecha__date__lte=fecha_hasta,
-        completada=True,
-        anulada=False
+
+    if fecha_hasta < fecha_desde:
+        fecha_desde, fecha_hasta = fecha_hasta, fecha_desde
+
+    # Rango datetime (timezone-aware)
+    from datetime import time
+    tz = timezone.get_current_timezone()
+    inicio_dt = timezone.make_aware(datetime.combine(fecha_desde, time.min), tz)
+    fin_dt = timezone.make_aware(datetime.combine(fecha_hasta, time.max), tz)
+
+    # Export (mismo endpoint): CSV / Excel
+    export_tipo = request.GET.get('export')
+    export_format = (request.GET.get('format') or 'csv').strip().lower()
+    if export_tipo in ('ventas', 'movimientos', 'cajas'):
+        from django.http import HttpResponse
+
+        if export_format in ('xlsx', 'excel'):
+            from openpyxl import Workbook
+
+            wb = Workbook()
+
+            def _set_headers(ws, headers):
+                ws.append(headers)
+                for cell in ws[1]:
+                    cell.font = cell.font.copy(bold=True)
+
+            if export_tipo == 'ventas':
+                ws = wb.active
+                ws.title = 'Ventas'
+                _set_headers(ws, [
+                    'ID', 'Fecha', 'Total', 'Metodo Pago', 'Anulada',
+                    'Usuario', 'Vendedor', 'Registradora',
+                    'Items Cantidad', 'Items Detalle'
+                ])
+
+                qs = Venta.objects.filter(
+                    fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
+                ).select_related('usuario', 'vendedor').prefetch_related('items__producto').order_by('fecha')
+
+                ws_items = wb.create_sheet('Items')
+                _set_headers(ws_items, [
+                    'VentaID', 'Fecha', 'Producto', 'Cantidad', 'Precio Unitario', 'Subtotal'
+                ])
+
+                for v in qs:
+                    items = list(v.items.all())
+                    items_cant = sum((it.cantidad or 0) for it in items)
+                    items_detalle = ' | '.join([
+                        f"{it.producto.nombre} x{it.cantidad} (${it.subtotal})" for it in items
+                    ])
+                    ws.append([
+                        v.id,
+                        v.fecha.isoformat(sep=' ', timespec='seconds'),
+                        v.total,
+                        v.metodo_pago,
+                        int(v.anulada),
+                        (v.usuario.username if v.usuario else ''),
+                        (v.vendedor.username if v.vendedor else ''),
+                        (v.registradora_id or ''),
+                        items_cant,
+                        items_detalle,
+                    ])
+                    for it in items:
+                        ws_items.append([
+                            v.id,
+                            v.fecha.isoformat(sep=' ', timespec='seconds'),
+                            it.producto.nombre,
+                            it.cantidad,
+                            it.precio_unitario,
+                            it.subtotal,
+                        ])
+
+            elif export_tipo == 'movimientos':
+                ws = wb.active
+                ws.title = 'Movimientos'
+                _set_headers(ws, [
+                    'Fecha', 'Tipo', 'Descripcion', 'Monto', 'Metodo', 'Usuario', 'CajaUsuarioID'
+                ])
+
+                # Ventas
+                for v in Venta.objects.filter(
+                    fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
+                ).select_related('usuario').order_by('fecha'):
+                    tipo = 'venta_anulada' if v.anulada else 'venta'
+                    ws.append([
+                        v.fecha.isoformat(sep=' ', timespec='seconds'),
+                        tipo,
+                        f'Venta #{v.id}',
+                        v.total,
+                        v.metodo_pago,
+                        (v.usuario.username if v.usuario else ''),
+                        '',
+                    ])
+
+                # Gastos/Ingresos
+                from .models import GastoCaja
+                for g in GastoCaja.objects.filter(
+                    fecha__gte=inicio_dt, fecha__lte=fin_dt
+                ).select_related('usuario', 'caja_usuario').order_by('fecha'):
+                    ws.append([
+                        g.fecha.isoformat(sep=' ', timespec='seconds'),
+                        g.tipo,
+                        g.descripcion,
+                        g.monto,
+                        '',
+                        (g.usuario.username if g.usuario else ''),
+                        (g.caja_usuario_id or ''),
+                    ])
+
+            else:  # cajas
+                ws = wb.active
+                ws.title = 'Cajas'
+                _set_headers(ws, [
+                    'CajaUsuarioID', 'Caja', 'Apertura', 'Cierre', 'Monto Inicial', 'Monto Final', 'Usuario'
+                ])
+                for cu in CajaUsuario.objects.filter(
+                    fecha_apertura__lte=fin_dt
+                ).filter(
+                    Q(fecha_cierre__gte=inicio_dt) | Q(fecha_cierre__isnull=True)
+                ).select_related('usuario', 'caja').order_by('fecha_apertura'):
+                    ws.append([
+                        cu.id,
+                        (cu.caja.nombre if cu.caja else ''),
+                        cu.fecha_apertura.isoformat(sep=' ', timespec='seconds'),
+                        (cu.fecha_cierre.isoformat(sep=' ', timespec='seconds') if cu.fecha_cierre else ''),
+                        cu.monto_inicial,
+                        (cu.monto_final if cu.monto_final is not None else ''),
+                        (cu.usuario.username if cu.usuario else ''),
+                    ])
+
+            from io import BytesIO
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+
+            filename = f"reporte_{export_tipo}_{fecha_desde.isoformat()}_a_{fecha_hasta.isoformat()}.xlsx"
+            response = HttpResponse(
+                output.getvalue(),
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+
+        # CSV (por defecto)
+        import csv
+        filename = f"reporte_{export_tipo}_{fecha_desde.isoformat()}_a_{fecha_hasta.isoformat()}.csv"
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        writer = csv.writer(response)
+
+        if export_tipo == 'ventas':
+            writer.writerow([
+                'ID', 'Fecha', 'Total', 'Metodo Pago', 'Completada', 'Anulada',
+                'Usuario', 'Vendedor', 'Registradora',
+                'Items Cantidad', 'Items Detalle'
+            ])
+            for v in Venta.objects.filter(
+                fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
+            ).select_related('usuario', 'vendedor').prefetch_related('items__producto'):
+                items = list(v.items.all())
+                items_cant = sum((it.cantidad or 0) for it in items)
+                items_detalle = ' | '.join([
+                    f"{it.producto.nombre} x{it.cantidad} (${it.subtotal})" for it in items
+                ])
+                writer.writerow([
+                    v.id,
+                    v.fecha.isoformat(sep=' ', timespec='seconds'),
+                    v.total,
+                    v.metodo_pago,
+                    int(v.completada),
+                    int(v.anulada),
+                    (v.usuario.username if v.usuario else ''),
+                    (v.vendedor.username if v.vendedor else ''),
+                    (v.registradora_id or ''),
+                    items_cant,
+                    items_detalle,
+                ])
+            return response
+
+        if export_tipo == 'movimientos':
+            from .models import GastoCaja
+            writer.writerow([
+                'Fecha', 'Tipo', 'Descripcion', 'Monto', 'Metodo', 'Usuario', 'CajaUsuarioID'
+            ])
+            # Ventas
+            for v in Venta.objects.filter(
+                fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
+            ).select_related('usuario'):
+                tipo = 'venta_anulada' if v.anulada else 'venta'
+                writer.writerow([
+                    v.fecha.isoformat(sep=' ', timespec='seconds'),
+                    tipo,
+                    f'Venta #{v.id}',
+                    v.total,
+                    v.metodo_pago,
+                    (v.usuario.username if v.usuario else ''),
+                    '',
+                ])
+            # Gastos/Ingresos
+            for g in GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario'):
+                writer.writerow([
+                    g.fecha.isoformat(sep=' ', timespec='seconds'),
+                    g.tipo,
+                    g.descripcion,
+                    g.monto,
+                    '',
+                    (g.usuario.username if g.usuario else ''),
+                    (g.caja_usuario_id or ''),
+                ])
+            return response
+
+        if export_tipo == 'cajas':
+            writer.writerow([
+                'CajaUsuarioID', 'Apertura', 'Cierre', 'Monto Inicial', 'Monto Final', 'Usuario'
+            ])
+            for cu in CajaUsuario.objects.filter(
+                fecha_apertura__lte=fin_dt
+            ).filter(
+                Q(fecha_cierre__gte=inicio_dt) | Q(fecha_cierre__isnull=True)
+            ).select_related('usuario', 'caja').order_by('-fecha_apertura'):
+                writer.writerow([
+                    cu.id,
+                    cu.fecha_apertura.isoformat(sep=' ', timespec='seconds'),
+                    (cu.fecha_cierre.isoformat(sep=' ', timespec='seconds') if cu.fecha_cierre else ''),
+                    cu.monto_inicial,
+                    (cu.monto_final if cu.monto_final is not None else ''),
+                    (cu.usuario.username if cu.usuario else ''),
+                ])
+            return response
+
+    # Ventas (incluye anuladas; se desglosa)
+    ventas_qs = Venta.objects.filter(
+        fecha__gte=inicio_dt,
+        fecha__lte=fin_dt,
+        completada=True
     )
-    
-    total_ventas_mes = ventas.aggregate(total=Sum('total'))['total'] or 0
-    cantidad_ventas_mes = ventas.count()
-    promedio_venta = total_ventas_mes / cantidad_ventas_mes if cantidad_ventas_mes > 0 else 0
-    
-    # Top productos
+    ventas_validas = ventas_qs.filter(anulada=False)
+    ventas_anuladas = ventas_qs.filter(anulada=True)
+
+    total_ventas = int(ventas_validas.aggregate(total=Sum('total'))['total'] or 0)
+    total_anuladas = int(ventas_anuladas.aggregate(total=Sum('total'))['total'] or 0)
+    cantidad_ventas = ventas_validas.count()
+    cantidad_anuladas = ventas_anuladas.count()
+    promedio_venta = int(total_ventas / cantidad_ventas) if cantidad_ventas > 0 else 0
+
+    # Top productos (solo ventas válidas)
     top_productos = ItemVenta.objects.filter(
-        venta__in=ventas
+        venta__in=ventas_validas
     ).values('producto__nombre').annotate(
-        total_vendido=Sum('cantidad')
-    ).order_by('-total_vendido')[:10]
-    
-    # Ventas por método de pago
-    ventas_por_metodo = ventas.values('metodo_pago').annotate(
+        total_vendido=Sum('cantidad'),
+        total_valor=Sum('subtotal')
+    ).order_by('-total_vendido')[:15]
+
+    # Ventas por método de pago (válidas)
+    ventas_por_metodo = ventas_validas.values('metodo_pago').annotate(
         cantidad=Count('id'),
         total=Sum('total')
-    )
-    
+    ).order_by('-total')
+
+    # Resumen por usuario / vendedor (solo válidas)
+    resumen_por_usuario = ventas_validas.values('usuario__username').annotate(
+        cantidad=Count('id'),
+        total=Sum('total')
+    ).order_by('-total')
+
+    resumen_por_vendedor = ventas_validas.values('vendedor__username').annotate(
+        cantidad=Count('id'),
+        total=Sum('total')
+    ).order_by('-total')
+
+    # Totales por método (válidas)
+    ventas_efectivo = int(ventas_validas.filter(metodo_pago='efectivo').aggregate(total=Sum('total'))['total'] or 0)
+    ventas_tarjeta = int(ventas_validas.filter(metodo_pago='tarjeta').aggregate(total=Sum('total'))['total'] or 0)
+    ventas_transferencia = int(ventas_validas.filter(metodo_pago='transferencia').aggregate(total=Sum('total'))['total'] or 0)
+    dinero_bancos = ventas_tarjeta + ventas_transferencia
+
+    # Caja: cajas que se solapan con el rango
+    from .models import GastoCaja
+    cajas_qs = CajaUsuario.objects.filter(
+        fecha_apertura__lte=fin_dt
+    ).filter(
+        Q(fecha_cierre__gte=inicio_dt) | Q(fecha_cierre__isnull=True)
+    ).select_related('usuario', 'caja').order_by('-fecha_apertura')
+
+    # Movimientos (gastos/ingresos/retiros) por rango (no depende de una caja específica)
+    movimientos_qs = GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario').order_by('-fecha')
+    total_gastos = int(movimientos_qs.filter(tipo='gasto').exclude(descripcion__icontains='Retiro de dinero al cerrar caja').aggregate(total=Sum('monto'))['total'] or 0)
+    total_ingresos = int(movimientos_qs.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0)
+    total_retiros = int(movimientos_qs.filter(tipo='gasto', descripcion__icontains='Retiro de dinero al cerrar caja').aggregate(total=Sum('monto'))['total'] or 0)
+
+    # Paginación (ventas y movimientos)
+    from django.core.paginator import Paginator
+    ventas_page = request.GET.get('page_ventas', 1)
+    movs_page = request.GET.get('page_movs', 1)
+    cajas_page = request.GET.get('page_cajas', 1)
+
+    ventas_paginated = Paginator(
+        ventas_qs.select_related('usuario', 'vendedor').prefetch_related('items__producto').order_by('-fecha'), 50
+    ).get_page(ventas_page)
+    movs_paginated = Paginator(movimientos_qs, 50).get_page(movs_page)
+    cajas_paginated = Paginator(cajas_qs, 25).get_page(cajas_page)
+
     total_productos = Producto.objects.filter(activo=True).count()
-    
+
     context = {
-        'total_ventas_mes': total_ventas_mes,
-        'cantidad_ventas_mes': cantidad_ventas_mes,
-        'promedio_venta': promedio_venta,
-        'total_productos': total_productos,
-        'top_productos': top_productos,
-        'ventas_por_metodo': ventas_por_metodo,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
+        'inicio_dt': inicio_dt,
+        'fin_dt': fin_dt,
+
+        # Ventas
+        'total_ventas': total_ventas,
+        'cantidad_ventas': cantidad_ventas,
+        'promedio_venta': promedio_venta,
+        'total_anuladas': total_anuladas,
+        'cantidad_anuladas': cantidad_anuladas,
+        'ventas_efectivo': ventas_efectivo,
+        'ventas_tarjeta': ventas_tarjeta,
+        'ventas_transferencia': ventas_transferencia,
+        'dinero_bancos': dinero_bancos,
+        'ventas_por_metodo': ventas_por_metodo,
+        'resumen_por_usuario': resumen_por_usuario,
+        'resumen_por_vendedor': resumen_por_vendedor,
+        'top_productos': top_productos,
+        'ventas_detalle': ventas_paginated,
+
+        # Caja / movimientos
+        'cajas_detalle': cajas_paginated,
+        'movimientos_detalle': movs_paginated,
+        'total_gastos': total_gastos,
+        'total_ingresos': total_ingresos,
+        'total_retiros': total_retiros,
+
+        'total_productos': total_productos,
     }
-    
+
     return render(request, 'pos/reportes.html', context)
 
 
@@ -2402,11 +2869,26 @@ def usuarios_view(request):
 # SISTEMA DE CARRITO CON SESIÓN
 # ============================================
 
-def get_carrito(request):
-    """Obtener o crear el carrito en la sesión"""
-    if 'carrito' not in request.session:
-        request.session['carrito'] = {}
-    return request.session['carrito']
+def get_carrito(request, tab_id=None):
+    """
+    Obtener o crear el carrito en la sesión.
+    Si se proporciona tab_id, cada pestaña tendrá su propio carrito.
+    Si no se proporciona tab_id, usa el carrito por defecto (compatibilidad hacia atrás).
+    """
+    # Si no hay tab_id, usar el carrito por defecto (compatibilidad)
+    if not tab_id:
+        if 'carrito' not in request.session:
+            request.session['carrito'] = {}
+        return request.session['carrito']
+    
+    # Si hay tab_id, usar carritos múltiples por pestaña
+    if 'carritos' not in request.session:
+        request.session['carritos'] = {}
+    
+    if tab_id not in request.session['carritos']:
+        request.session['carritos'][tab_id] = {}
+    
+    return request.session['carritos'][tab_id]
 
 
 @login_required
@@ -2471,6 +2953,7 @@ def agregar_al_carrito_view(request):
         try:
             producto_id = int(request.POST.get('producto_id'))
             cantidad = int(request.POST.get('cantidad', 1))
+            tab_id = request.POST.get('tab_id')  # Obtener tab_id del POST
             
             producto = get_object_or_404(Producto, id=producto_id, activo=True)
             
@@ -2483,7 +2966,7 @@ def agregar_al_carrito_view(request):
                     'error': f'Stock insuficiente. Disponible: {producto.stock}'
                 })
             
-            carrito = get_carrito(request)
+            carrito = get_carrito(request, tab_id)
             producto_key = str(producto_id)
             
             if producto_key in carrito:
@@ -2530,8 +3013,9 @@ def actualizar_cantidad_carrito_view(request, producto_id):
     if request.method == 'POST':
         try:
             cantidad = int(request.POST.get('cantidad', 1))
+            tab_id = request.POST.get('tab_id')
             producto = get_object_or_404(Producto, id=producto_id)
-            carrito = get_carrito(request)
+            carrito = get_carrito(request, tab_id)
             producto_key = str(producto_id)
             
             if producto_key not in carrito:
@@ -2563,7 +3047,8 @@ def actualizar_precio_carrito_view(request, producto_id):
     if request.method == 'POST':
         try:
             nuevo_precio = int(float(request.POST.get('precio', 0)))
-            carrito = get_carrito(request)
+            tab_id = request.POST.get('tab_id')
+            carrito = get_carrito(request, tab_id)
             producto_key = str(producto_id)
             
             if producto_key not in carrito:
@@ -2587,7 +3072,8 @@ def actualizar_precio_carrito_view(request, producto_id):
 def eliminar_item_carrito_view(request, producto_id):
     """Eliminar item del carrito"""
     if request.method == 'GET':
-        carrito = get_carrito(request)
+        tab_id = request.GET.get('tab_id')
+        carrito = get_carrito(request, tab_id)
         producto_key = str(producto_id)
         
         if producto_key in carrito:
@@ -2603,7 +3089,13 @@ def eliminar_item_carrito_view(request, producto_id):
 def limpiar_carrito_view(request):
     """Limpiar todo el carrito"""
     if request.method == 'GET':
-        request.session['carrito'] = {}
+        tab_id = request.GET.get('tab_id')
+        if tab_id:
+            if 'carritos' not in request.session:
+                request.session['carritos'] = {}
+            request.session['carritos'][tab_id] = {}
+        else:
+            request.session['carrito'] = {}
         request.session.modified = True
         return JsonResponse({'success': True})
     
@@ -2627,7 +3119,8 @@ def procesar_venta_completa_view(request):
                     'error': 'Debes abrir una caja antes de realizar ventas. Por favor, abre la caja desde el Dashboard.'
                 })
             
-            carrito = get_carrito(request)
+            tab_id = request.POST.get('tab_id')
+            carrito = get_carrito(request, tab_id)
             
             if not carrito:
                 return JsonResponse({'success': False, 'error': 'El carrito está vacío'})
@@ -2745,8 +3238,13 @@ def procesar_venta_completa_view(request):
             
             venta.save()
             
-            # Limpiar carrito
-            request.session['carrito'] = {}
+            # Limpiar carrito de esta pestaña
+            if tab_id:
+                if 'carritos' not in request.session:
+                    request.session['carritos'] = {}
+                request.session['carritos'][tab_id] = {}
+            else:
+                request.session['carrito'] = {}
             request.session.modified = True
             
             return JsonResponse({

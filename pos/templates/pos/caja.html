@@ -866,16 +866,38 @@
                         <i class="bi bi-info-circle"></i> <strong>Nota:</strong> Todos los movimientos, ventas y el historial se conservan permanentemente. Podrás consultarlos en cualquier momento desde el historial de cajas.
                     </div>
                     <div class="mb-3">
-                        <p style="margin-bottom: 0.5rem;"><strong>Saldo Calculado:</strong></p>
-                        <div style="background: #f0f9ff; border: 2px solid #0ea5e9; border-radius: 0.5rem; padding: 1rem; text-align: center;">
-                            <div style="font-size: 1.8rem; font-weight: 700; color: #0c4a6e;">${{ saldo_caja|intcomma|default:"0" }}</div>
-                            <small style="color: #64748b;">Monto Inicial ({{ caja_mostrar.monto_inicial|intcomma|default:"0" }}) + Ventas ({{ total_ventas|intcomma|default:"0" }}) + Ingresos ({{ total_ingresos|intcomma|default:"0" }}) - Gastos ({{ total_gastos|intcomma|default:"0" }})</small>
+                        <p style="margin-bottom: 0.5rem;"><strong>Saldo total (incluye tarjeta/transferencia):</strong></p>
+                        <div style="background: #f0f9ff; border: 2px solid #0ea5e9; border-radius: 0.5rem; padding: 1rem; text-align: center; margin-bottom: 0.75rem;">
+                            <div style="font-size: 1.6rem; font-weight: 700; color: #0c4a6e;">${{ saldo_caja|intcomma|default:"0" }}</div>
+                            <small style="color: #64748b;">
+                                Monto Inicial ({{ caja_mostrar.monto_inicial|intcomma|default:"0" }}) + Ventas ({{ total_ventas|intcomma|default:"0" }})
+                                + Ingresos ({{ total_ingresos|intcomma|default:"0" }}) - Gastos ({{ total_gastos|intcomma|default:"0" }})
+                            </small>
+                        </div>
+                        <p style="margin-bottom: 0.5rem;"><strong>Efectivo disponible para retirar:</strong></p>
+                        <div style="background: #f0fdf4; border: 2px solid #10b981; border-radius: 0.5rem; padding: 1rem; text-align: center;">
+                            <div style="font-size: 1.6rem; font-weight: 700; color: #065f46;">${{ dinero_fisico_caja|intcomma|default:"0" }}</div>
+                            <small style="color: #64748b;">
+                                (Monto Inicial + Ventas en efectivo + Ingresos - Gastos) — sin tarjeta/transferencia
+                            </small>
+                        </div>
+                        <p style="margin-bottom: 0.5rem; margin-top: 0.75rem;"><strong>Dinero en bancos (tarjeta + transferencia):</strong></p>
+                        <div style="background: #fdf2f8; border: 2px solid #ec4899; border-radius: 0.5rem; padding: 1rem; text-align: center;">
+                            <div style="font-size: 1.6rem; font-weight: 700; color: #9d174d;">
+                                ${{ dinero_bancos|intcomma|default:"0" }}
+                            </div>
+                            <small style="color: #64748b;">Este valor no está en la caja física; está en bancos.</small>
                         </div>
                     </div>
                     <div class="form-group-modern">
-                        <label class="form-label-modern">Dinero a Retirar</label>
-                        <input type="number" class="form-control form-control-modern" name="dinero_retirar" id="dineroRetirar" step="1" min="0" value="0" placeholder="0">
-                        <small style="color: #94a3b8; font-size: 0.8rem;">Cantidad de dinero que te vas a llevar (se registrará como salida)</small>
+                        <label class="form-label-modern">Retiro de efectivo</label>
+                        <input type="number" class="form-control form-control-modern" name="dinero_retirar_efectivo" id="dineroRetirarEfectivo" step="1" min="0" value="0" placeholder="0">
+                        <small style="color: #94a3b8; font-size: 0.8rem;">Efectivo que te llevas de la caja (se registrará como salida).</small>
+                    </div>
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">Retiro de bancos (tarjeta/transferencia)</label>
+                        <input type="number" class="form-control form-control-modern" name="dinero_retirar_bancos" id="dineroRetirarBancos" step="1" min="0" value="0" placeholder="0">
+                        <small style="color: #94a3b8; font-size: 0.8rem;">Valor a “retirar”/registrar de bancos (se registrará como salida).</small>
                     </div>
                     <div class="mb-3" id="saldoDespuesRetiro" style="display: none;">
                         <p style="margin-bottom: 0.5rem;"><strong>Saldo después del retiro:</strong></p>
@@ -958,30 +980,45 @@
         const saldoDespuesRetiro = document.getElementById('saldoDespuesRetiro');
         const saldoCalculado = document.getElementById('saldoCalculado');
         const montoFinalInput = document.getElementById('montoFinal');
+        const dineroRetirarEfectivoInput = document.getElementById('dineroRetirarEfectivo');
+        const dineroRetirarBancosInput = document.getElementById('dineroRetirarBancos');
         
-        // Saldo inicial de la caja
-        const saldoInicial = {{ saldo_caja|default:0 }};
+        // Para retiro: usar SOLO efectivo disponible (no tarjeta/transferencia)
+        const saldoInicial = {{ dinero_fisico_caja|default:0 }};
+        const bancosInicial = {{ dinero_bancos|default:0 }};
+
+        // Sugerir monto final inicial (efectivo contado) si el input existe
+        if (montoFinalInput) {
+            montoFinalInput.value = Math.max(0, saldoInicial);
+        }
         
-        if (dineroRetirarInput && saldoDespuesRetiro && saldoCalculado) {
-            dineroRetirarInput.addEventListener('input', function() {
-                const dineroRetirar = parseFloat(this.value) || 0;
-                
-                if (dineroRetirar > 0) {
-                    const nuevoSaldo = saldoInicial - dineroRetirar;
-                    saldoCalculado.textContent = '$' + nuevoSaldo.toLocaleString('es-ES');
-                    saldoDespuesRetiro.style.display = 'block';
-                    
-                    // Sugerir el monto final (saldo después del retiro)
-                    if (montoFinalInput) {
-                        montoFinalInput.value = Math.max(0, nuevoSaldo);
-                    }
-                } else {
-                    saldoDespuesRetiro.style.display = 'none';
-                    if (montoFinalInput) {
-                        montoFinalInput.value = saldoInicial;
-                    }
+        function actualizarSaldosRetiro() {
+            const retiroEfectivo = parseFloat(dineroRetirarEfectivoInput?.value) || 0;
+            const retiroBancos = parseFloat(dineroRetirarBancosInput?.value) || 0;
+            const nuevoEfectivo = saldoInicial - retiroEfectivo;
+            const nuevoBancos = bancosInicial - retiroBancos;
+
+            if (retiroEfectivo > 0 || retiroBancos > 0) {
+                saldoDespuesRetiro.style.display = 'block';
+                saldoCalculado.textContent =
+                    'Efectivo: $' + nuevoEfectivo.toLocaleString('es-ES') +
+                    ' | Bancos: $' + nuevoBancos.toLocaleString('es-ES');
+                if (montoFinalInput) {
+                    montoFinalInput.value = Math.max(0, nuevoEfectivo);
                 }
-            });
+            } else {
+                saldoDespuesRetiro.style.display = 'none';
+                if (montoFinalInput) {
+                    montoFinalInput.value = Math.max(0, saldoInicial);
+                }
+            }
+        }
+
+        if (dineroRetirarEfectivoInput && saldoDespuesRetiro && saldoCalculado) {
+            dineroRetirarEfectivoInput.addEventListener('input', actualizarSaldosRetiro);
+        }
+        if (dineroRetirarBancosInput && saldoDespuesRetiro && saldoCalculado) {
+            dineroRetirarBancosInput.addEventListener('input', actualizarSaldosRetiro);
         }
         
         // Manejar el formulario de abrir caja

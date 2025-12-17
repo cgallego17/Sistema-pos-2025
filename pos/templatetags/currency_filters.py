@@ -16,3 +16,4 @@ def currency(value):
     except (ValueError, TypeError):
         return "0.00"
 
+

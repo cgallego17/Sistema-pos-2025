@@ -9,106 +9,9 @@
         <h1><i class="bi bi-graph-up"></i> Reportes y Estadísticas</h1>
     </div>
 
-    <div class="cards-grid">
-        <div class="stat-card success">
-            <div class="stat-card-label">
-                <i class="bi bi-currency-dollar"></i> Ventas del Mes
-            </div>
-            <div class="stat-card-value">${{ total_ventas_mes|intcomma }}</div>
-        </div>
-        <div class="stat-card primary">
-            <div class="stat-card-label">
-                <i class="bi bi-receipt"></i> Transacciones
-            </div>
-            <div class="stat-card-value">{{ cantidad_ventas_mes|intcomma }}</div>
-        </div>
-        <div class="stat-card info">
-            <div class="stat-card-label">
-                <i class="bi bi-graph-up-arrow"></i> Promedio por Venta
-            </div>
-            <div class="stat-card-value">${{ promedio_venta|intcomma }}</div>
-        </div>
-        <div class="stat-card warning">
-            <div class="stat-card-label">
-                <i class="bi bi-box-seam"></i> Productos Activos
-            </div>
-            <div class="stat-card-value">{{ total_productos }}</div>
-        </div>
-    </div>
-
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <div class="card-modern">
-                <div class="card-header">
-                    <h5 class="mb-0">Top 10 Productos Más Vendidos</h5>
-                </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Producto</th>
-                                <th>Cantidad</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in top_productos %}
-                            <tr>
-                                <td>{{ forloop.counter }}</td>
-                                <td>{{ item.producto__nombre }}</td>
-                                <td><span class="badge badge-modern badge-success-modern">{{ item.total_vendido|intcomma }}</span></td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="3" class="text-center text-muted">No hay datos</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-        <div class="col-md-6">
-            <div class="card-modern">
-                <div class="card-header">
-                    <h5 class="mb-0">Ventas por Método de Pago</h5>
-                </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Método</th>
-                                <th>Cantidad</th>
-                                <th>Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for metodo in ventas_por_metodo %}
-                            <tr>
-                                <td>{{ metodo.metodo_pago|capfirst }}</td>
-                                <td>{{ metodo.cantidad|intcomma }}</td>
-                                <td><strong>${{ metodo.total|intcomma }}</strong></td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="3" class="text-center text-muted">No hay datos</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-    <div class="card-modern mt-4">
+    <div class="card-modern mt-2">
         <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-funnel"></i> Filtrar Reportes</h5>
+            <h5 class="mb-0"><i class="bi bi-funnel"></i> Filtro</h5>
         </div>
         <div class="card-body">
             <form method="get">
@@ -121,13 +24,462 @@
                         <label class="form-label-modern">Fecha Hasta</label>
                         <input type="date" class="form-control form-control-modern" name="fecha_hasta" value="{{ fecha_hasta|date:'Y-m-d' }}">
                     </div>
-                    <div class="col-md-4 d-flex align-items-end">
+                    <div class="col-md-4 d-flex align-items-end gap-2">
                         <button type="submit" class="btn btn-primary-pos w-100">
                             <i class="bi bi-search"></i> Filtrar
                         </button>
                     </div>
                 </div>
             </form>
+            <div class="mt-3 d-flex flex-wrap gap-2">
+                <a class="btn btn-sm btn-outline-primary"
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&export=ventas">
+                    <i class="bi bi-download"></i> CSV Ventas
+                </a>
+                <a class="btn btn-sm btn-outline-success"
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&export=ventas&format=xlsx">
+                    <i class="bi bi-file-earmark-excel"></i> Excel Ventas
+                </a>
+                <a class="btn btn-sm btn-outline-primary"
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&export=movimientos">
+                    <i class="bi bi-download"></i> CSV Movimientos
+                </a>
+                <a class="btn btn-sm btn-outline-success"
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&export=movimientos&format=xlsx">
+                    <i class="bi bi-file-earmark-excel"></i> Excel Movimientos
+                </a>
+                <a class="btn btn-sm btn-outline-primary"
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&export=cajas">
+                    <i class="bi bi-download"></i> CSV Cajas
+                </a>
+                <a class="btn btn-sm btn-outline-success"
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&export=cajas&format=xlsx">
+                    <i class="bi bi-file-earmark-excel"></i> Excel Cajas
+                </a>
+                <span class="text-muted" style="align-self:center;">
+                    Rango: <strong>{{ fecha_desde|date:"d/m/Y" }}</strong> a <strong>{{ fecha_hasta|date:"d/m/Y" }}</strong>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="cards-grid">
+        <div class="stat-card success">
+            <div class="stat-card-label">
+                <i class="bi bi-currency-dollar"></i> Total Ventas (válidas)
+            </div>
+            <div class="stat-card-value">${{ total_ventas|intcomma }}</div>
+        </div>
+        <div class="stat-card primary">
+            <div class="stat-card-label">
+                <i class="bi bi-receipt"></i> Ventas (válidas)
+            </div>
+            <div class="stat-card-value">{{ cantidad_ventas|intcomma }}</div>
+        </div>
+        <div class="stat-card info">
+            <div class="stat-card-label">
+                <i class="bi bi-graph-up-arrow"></i> Promedio por Venta
+            </div>
+            <div class="stat-card-value">${{ promedio_venta|intcomma }}</div>
+        </div>
+        <div class="stat-card warning">
+            <div class="stat-card-label">
+                <i class="bi bi-x-circle"></i> Anuladas
+            </div>
+            <div class="stat-card-value">{{ cantidad_anuladas|intcomma }}</div>
+        </div>
+    </div>
+
+    <div class="row mt-4 g-4">
+        <div class="col-lg-6">
+            <div class="card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Top productos (por cantidad)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Producto</th>
+                                    <th>Cantidad</th>
+                                    <th>Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in top_productos %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>{{ item.producto__nombre }}</td>
+                                    <td><span class="badge badge-modern badge-success-modern">{{ item.total_vendido|intcomma }}</span></td>
+                                    <td><strong>${{ item.total_valor|intcomma }}</strong></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">No hay datos</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Ventas por método (válidas)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            Efectivo: <strong>${{ ventas_efectivo|intcomma }}</strong> |
+                            Tarjeta: <strong>${{ ventas_tarjeta|intcomma }}</strong> |
+                            Transferencia: <strong>${{ ventas_transferencia|intcomma }}</strong> |
+                            Bancos: <strong>${{ dinero_bancos|intcomma }}</strong>
+                        </small>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Método</th>
+                                    <th>Cantidad</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for metodo in ventas_por_metodo %}
+                                <tr>
+                                    <td>{{ metodo.metodo_pago|capfirst }}</td>
+                                    <td>{{ metodo.cantidad|intcomma }}</td>
+                                    <td><strong>${{ metodo.total|intcomma }}</strong></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">No hay datos</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4 g-4">
+        <div class="col-lg-6">
+            <div class="card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-person-badge"></i> Resumen por usuario (cajero)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Cantidad</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in resumen_por_usuario %}
+                                <tr>
+                                    <td>{{ r.usuario__username|default:"-" }}</td>
+                                    <td><span class="badge badge-modern badge-info-modern">{{ r.cantidad|intcomma }}</span></td>
+                                    <td><strong>${{ r.total|intcomma }}</strong></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">No hay datos</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-person-lines-fill"></i> Resumen por vendedor</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Vendedor</th>
+                                    <th>Cantidad</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in resumen_por_vendedor %}
+                                <tr>
+                                    <td>{{ r.vendedor__username|default:"-" }}</td>
+                                    <td><span class="badge badge-modern badge-info-modern">{{ r.cantidad|intcomma }}</span></td>
+                                    <td><strong>${{ r.total|intcomma }}</strong></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">No hay datos</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-12">
+            <div class="card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-receipt"></i> Ventas (detalle)</h5>
+                    <small class="text-muted">Incluye anuladas (marcadas) + detalle de ítems</small>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Fecha</th>
+                                    <th>Método</th>
+                                    <th>Total</th>
+                                    <th>Items</th>
+                                    <th>Usuario</th>
+                                    <th>Vendedor</th>
+                                    <th>Estado</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for v in ventas_detalle %}
+                                <tr>
+                                    <td>{{ v.id }}</td>
+                                    <td>{{ v.fecha|date:"d/m/Y H:i" }}</td>
+                                    <td>{{ v.get_metodo_pago_display }}</td>
+                                    <td><strong>${{ v.total|intcomma }}</strong></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-secondary"
+                                                type="button"
+                                                data-bs-toggle="collapse"
+                                                data-bs-target="#itemsVenta{{ v.id }}"
+                                                aria-expanded="false"
+                                                aria-controls="itemsVenta{{ v.id }}">
+                                            <i class="bi bi-list-ul"></i> Ver ({{ v.items.all|length }})
+                                        </button>
+                                    </td>
+                                    <td>{{ v.usuario.username|default:"-" }}</td>
+                                    <td>{{ v.vendedor.username|default:"-" }}</td>
+                                    <td>
+                                        {% if v.anulada %}
+                                        <span class="badge badge-modern badge-danger-modern">Anulada</span>
+                                        {% else %}
+                                        <span class="badge badge-modern badge-success-modern">OK</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a class="btn btn-sm btn-outline-primary" href="{% url 'pos:detalle_venta' v.id %}">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                <tr class="collapse" id="itemsVenta{{ v.id }}">
+                                    <td colspan="9">
+                                        <div class="p-2">
+                                            <div class="table-responsive">
+                                                <table class="table table-sm mb-0">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Producto</th>
+                                                            <th>Cantidad</th>
+                                                            <th>Precio</th>
+                                                            <th>Subtotal</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for it in v.items.all %}
+                                                        <tr>
+                                                            <td>{{ it.producto.nombre }}</td>
+                                                            <td>{{ it.cantidad|intcomma }}</td>
+                                                            <td>${{ it.precio_unitario|intcomma }}</td>
+                                                            <td><strong>${{ it.subtotal|intcomma }}</strong></td>
+                                                        </tr>
+                                                        {% empty %}
+                                                        <tr>
+                                                            <td colspan="4" class="text-center text-muted">Sin ítems</td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted">No hay ventas en este rango.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if ventas_detalle.paginator.num_pages > 1 %}
+                    <nav class="mt-3" aria-label="Paginación ventas">
+                        <ul class="pagination pagination-sm mb-0">
+                            {% if ventas_detalle.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&page_ventas={{ ventas_detalle.previous_page_number }}">Anterior</a>
+                            </li>
+                            {% endif %}
+                            <li class="page-item disabled">
+                                <span class="page-link">Página {{ ventas_detalle.number }} de {{ ventas_detalle.paginator.num_pages }}</span>
+                            </li>
+                            {% if ventas_detalle.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&page_ventas={{ ventas_detalle.next_page_number }}">Siguiente</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4 g-4">
+        <div class="col-lg-6">
+            <div class="card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-cash-coin"></i> Movimientos de caja (gastos/ingresos/retiros)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">
+                            Gastos (sin retiros): <strong>${{ total_gastos|intcomma }}</strong> |
+                            Ingresos: <strong>${{ total_ingresos|intcomma }}</strong> |
+                            Retiros: <strong>${{ total_retiros|intcomma }}</strong>
+                        </small>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Tipo</th>
+                                    <th>Descripción</th>
+                                    <th>Monto</th>
+                                    <th>Usuario</th>
+                                    <th>Caja</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for m in movimientos_detalle %}
+                                <tr>
+                                    <td>{{ m.fecha|date:"d/m/Y H:i" }}</td>
+                                    <td>{{ m.tipo|capfirst }}</td>
+                                    <td>{{ m.descripcion }}</td>
+                                    <td><strong>${{ m.monto|intcomma }}</strong></td>
+                                    <td>{{ m.usuario.username }}</td>
+                                    <td>{{ m.caja_usuario_id|default:"-" }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">No hay movimientos en este rango.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if movimientos_detalle.paginator.num_pages > 1 %}
+                    <nav class="mt-3" aria-label="Paginación movimientos">
+                        <ul class="pagination pagination-sm mb-0">
+                            {% if movimientos_detalle.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&page_movs={{ movimientos_detalle.previous_page_number }}">Anterior</a>
+                            </li>
+                            {% endif %}
+                            <li class="page-item disabled">
+                                <span class="page-link">Página {{ movimientos_detalle.number }} de {{ movimientos_detalle.paginator.num_pages }}</span>
+                            </li>
+                            {% if movimientos_detalle.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&page_movs={{ movimientos_detalle.next_page_number }}">Siguiente</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Cajas (aperturas/cierres)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Apertura</th>
+                                    <th>Cierre</th>
+                                    <th>Inicial</th>
+                                    <th>Final</th>
+                                    <th>Usuario</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in cajas_detalle %}
+                                <tr>
+                                    <td>{{ c.id }}</td>
+                                    <td>{{ c.fecha_apertura|date:"d/m/Y H:i" }}</td>
+                                    <td>{% if c.fecha_cierre %}{{ c.fecha_cierre|date:"d/m/Y H:i" }}{% else %}<span class="badge badge-modern badge-success-modern">Abierta</span>{% endif %}</td>
+                                    <td>${{ c.monto_inicial|intcomma }}</td>
+                                    <td>{% if c.monto_final is not None %}${{ c.monto_final|intcomma }}{% else %}-{% endif %}</td>
+                                    <td>{{ c.usuario.username }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">No hay cajas en este rango.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if cajas_detalle.paginator.num_pages > 1 %}
+                    <nav class="mt-3" aria-label="Paginación cajas">
+                        <ul class="pagination pagination-sm mb-0">
+                            {% if cajas_detalle.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&page_cajas={{ cajas_detalle.previous_page_number }}">Anterior</a>
+                            </li>
+                            {% endif %}
+                            <li class="page-item disabled">
+                                <span class="page-link">Página {{ cajas_detalle.number }} de {{ cajas_detalle.paginator.num_pages }}</span>
+                            </li>
+                            {% if cajas_detalle.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&page_cajas={{ cajas_detalle.next_page_number }}">Siguiente</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 </div>
