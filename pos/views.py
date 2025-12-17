@@ -2240,10 +2240,6 @@ def reportes_view(request):
         Reporte estilo "Todos los Movimientos" (Caja):
         Apertura + Ventas + Gastos/Ingresos/Retiros con saldo antes/después.
         """
-        if not caja_usuario_sel:
-            # Evitar generar un reporte gigantesco por rango. Este reporte es para una caja específica.
-            return []
-
         items = []
 
         # Apertura(s)
@@ -2344,9 +2340,6 @@ def reportes_view(request):
     export_format = (request.GET.get('format') or 'csv').strip().lower()
     if export_tipo in ('ventas', 'movimientos', 'cajas', 'movimientos_caja'):
         from django.http import HttpResponse
-
-        if export_tipo == 'movimientos_caja' and not caja_usuario_sel:
-            return HttpResponse('Debe especificar caja_usuario_id para exportar Movimientos (Caja).', status=400)
 
         if export_format in ('xlsx', 'excel'):
             from openpyxl import Workbook
@@ -2804,7 +2797,7 @@ def reportes_view(request):
     ).get_page(ventas_page)
     movs_paginated = Paginator(movimientos_qs, 50).get_page(movs_page)
     cajas_paginated = Paginator(cajas_qs, 25).get_page(cajas_page)
-    movs_caja_list = _build_movimientos_caja() if caja_usuario_sel else []
+    movs_caja_list = _build_movimientos_caja()
     movs_caja_paginated = Paginator(movs_caja_list, 100).get_page(movs_caja_page)
 
     total_productos = Producto.objects.filter(activo=True).count()
