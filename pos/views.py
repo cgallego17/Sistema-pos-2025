@@ -2165,6 +2165,75 @@ def reportes_view(request):
         messages.error(request, 'No tienes permisos para ver reportes')
         return redirect('pos:home')
     
+    # Obtener tipo de reporte
+    tipo_reporte = request.GET.get('tipo', '')
+    
+    # Si no hay tipo seleccionado, mostrar página de selección
+    if not tipo_reporte:
+        return render(request, 'pos/reportes.html', {
+            'mostrar_seleccion': True,
+        })
+    
+    # Si es inventario, usar la vista de movimientos de inventario
+    if tipo_reporte == 'inventario':
+        from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+        from .models import MovimientoStock, Producto
+        
+        # Obtener todos los movimientos de stock
+        movimientos_list = MovimientoStock.objects.select_related('producto', 'usuario').order_by('-fecha')
+        
+        # Filtros
+        producto_id = request.GET.get('producto')
+        tipo_movimiento = request.GET.get('tipo_mov')
+        fecha_desde = request.GET.get('fecha_desde')
+        fecha_hasta = request.GET.get('fecha_hasta')
+        
+        if producto_id:
+            movimientos_list = movimientos_list.filter(producto_id=producto_id)
+        
+        if tipo_movimiento:
+            movimientos_list = movimientos_list.filter(tipo=tipo_movimiento)
+        
+        if fecha_desde:
+            try:
+                fecha_desde_obj = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+                movimientos_list = movimientos_list.filter(fecha__date__gte=fecha_desde_obj)
+            except ValueError:
+                pass
+        
+        if fecha_hasta:
+            try:
+                fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+                movimientos_list = movimientos_list.filter(fecha__date__lte=fecha_hasta_obj)
+            except ValueError:
+                pass
+        
+        # Paginación: 50 movimientos por página
+        paginator = Paginator(movimientos_list, 50)
+        page = request.GET.get('page', 1)
+        
+        try:
+            movimientos = paginator.page(page)
+        except PageNotAnInteger:
+            movimientos = paginator.page(1)
+        except EmptyPage:
+            movimientos = paginator.page(paginator.num_pages)
+        
+        # Obtener lista de productos para el filtro
+        productos = Producto.objects.filter(activo=True).order_by('nombre')
+        
+        context = {
+            'tipo_reporte': 'inventario',
+            'movimientos': movimientos,
+            'productos': productos,
+            'producto_id': producto_id,
+            'tipo_movimiento': tipo_movimiento,
+            'fecha_desde': fecha_desde,
+            'fecha_hasta': fecha_hasta,
+        }
+        return render(request, 'pos/reportes.html', context)
+    
+    # Si es caja, continuar con el código existente
     # Obtener fechas del filtro
     fecha_desde = request.GET.get('fecha_desde')
     fecha_hasta = request.GET.get('fecha_hasta')
@@ -2748,6 +2817,7 @@ def reportes_view(request):
     total_productos = Producto.objects.filter(activo=True).count()
 
     context = {
+        'tipo_reporte': 'caja',
         'modo_simple': True,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
