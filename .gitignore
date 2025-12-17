@@ -24,6 +24,7 @@ wheels/
 *.log
 *.pot
 *.pyc
+# SQLite databases
 db.sqlite3
 db.sqlite3-journal
 db.sqlite3-wal
@@ -32,6 +33,10 @@ db.sqlite3-shm
 *.sqlite3-journal
 *.sqlite3-wal
 *.sqlite3-shm
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 media/
 staticfiles/
 static_root/
