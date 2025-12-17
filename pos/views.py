@@ -2225,98 +2225,75 @@ def reportes_view(request):
             except ValueError:
                 pass
         
-        # Agrupar por código + atributo (cada variante aparece por separado)
-        # Usar un diccionario con clave (codigo, atributo) para evitar duplicados
-        resumen_dict = {}
+        # Optimización: Agrupar directamente por código + atributo usando annotate
+        # Esto hace todo en una sola consulta SQL en lugar de múltiples consultas
+        from django.db.models import Min
         
-        # Obtener todos los productos únicos (codigo + atributo) que tienen movimientos
-        productos_con_movimientos = movimientos_qs.values('producto_id').distinct()
+        # Agrupar movimientos por producto__codigo y producto__atributo
+        # Usar Min para obtener el primer nombre (todos los productos con mismo código+atributo tienen el mismo nombre)
+        resumen_agrupado = movimientos_qs.values(
+            'producto__codigo',
+            'producto__atributo'
+        ).annotate(
+            producto__nombre=Min('producto__nombre'),  # Obtener nombre del primer producto
+            total_entradas=SumAgg('cantidad', filter=Q(tipo='ingreso')),
+            total_salidas=SumAgg('cantidad', filter=Q(tipo='salida')),
+            total_ajustes=SumAgg('cantidad', filter=Q(tipo='ajuste'))
+        ).order_by('producto__codigo', 'producto__atributo')
         
-        for item in productos_con_movimientos:
-            producto_id = item.get('producto_id')
-            # Saltar si producto_id es None
-            if not producto_id:
-                continue
+        # Obtener stock actual de productos agrupados por código+atributo
+        # Pre-cargar todos los productos activos para evitar consultas N+1
+        productos_activos = Producto.objects.filter(activo=True).values(
+            'codigo', 'atributo', 'stock', 'nombre'
+        )
+        
+        # Crear un diccionario para lookup rápido de stock por (codigo, atributo)
+        stock_map = {}
+        for p in productos_activos:
+            codigo = p['codigo']
+            atributo = p['atributo'] if p['atributo'] else ''
+            clave = (codigo, atributo)
+            if clave not in stock_map:
+                stock_map[clave] = {'stock': 0, 'nombre': p['nombre']}
+            stock_map[clave]['stock'] += p['stock']
+        
+        # Construir la lista de resultados
+        resumen_productos = []
+        for item in resumen_agrupado:
+            codigo = item['producto__codigo']
+            atributo = item['producto__atributo'] if item['producto__atributo'] else ''
+            clave = (codigo, atributo)
             
-            try:
-                producto = Producto.objects.get(id=producto_id)
-            except Producto.DoesNotExist:
-                continue
-            
-            # Clave única: código + atributo (None se convierte a '' para comparación)
-            atributo_key = producto.atributo if producto.atributo else ''
-            clave = (producto.codigo, atributo_key)
-            
-            # Si ya procesamos esta combinación código+atributo, saltarla
-            if clave in resumen_dict:
-                continue
-            
-            # Obtener todos los productos con este código Y atributo (pueden ser múltiples si hay duplicados)
-            productos_mismo_codigo_atributo = Producto.objects.filter(
-                codigo=producto.codigo,
-                atributo=producto.atributo if producto.atributo else None,
-                activo=True
-            )
-            
-            # Obtener todos los movimientos de productos con este código Y atributo
-            movimientos_producto = movimientos_qs.filter(
-                producto__codigo=producto.codigo,
-                producto__atributo=producto.atributo if producto.atributo else None
-            )
-            
-            # Calcular entradas (ingreso) - sumar todos los productos con este código+atributo
-            total_entradas = movimientos_producto.filter(tipo='ingreso').aggregate(
-                total=SumAgg('cantidad')
-            )['total'] or 0
-            
-            # Calcular salidas (salida) - sumar todos los productos con este código+atributo
-            total_salidas = movimientos_producto.filter(tipo='salida').aggregate(
-                total=SumAgg('cantidad')
-            )['total'] or 0
-            
-            # Calcular ajustes (pueden ser positivos o negativos) - sumar todos
-            ajustes = movimientos_producto.filter(tipo='ajuste').aggregate(
-                total=SumAgg('cantidad')
-            )['total'] or 0
-            
-            # Neto = entradas - salidas + ajustes
+            total_entradas = int(item['total_entradas'] or 0)
+            total_salidas = int(item['total_salidas'] or 0)
+            ajustes = int(item['total_ajustes'] or 0)
             neto = total_entradas - total_salidas + ajustes
             
-            # Stock actual: sumar el stock de todos los productos con este código+atributo
-            stock_actual = sum(p.stock for p in productos_mismo_codigo_atributo)
+            # Obtener stock actual del mapa
+            stock_info = stock_map.get(clave, {'stock': 0, 'nombre': item.get('producto__nombre', '')})
+            stock_actual = stock_info['stock']
+            nombre = stock_info['nombre'] or item.get('producto__nombre', '')
             
-            resumen_dict[clave] = {
-                'codigo': producto.codigo,
-                'nombre': producto.nombre,
-                'atributo': producto.atributo if producto.atributo else '-',
-                'total_entradas': int(total_entradas),
-                'total_salidas': int(total_salidas),
-                'ajustes': int(ajustes),
-                'neto': int(neto),
+            resumen_productos.append({
+                'codigo': codigo,
+                'nombre': nombre,
+                'atributo': atributo if atributo else '-',
+                'total_entradas': total_entradas,
+                'total_salidas': total_salidas,
+                'ajustes': ajustes,
+                'neto': neto,
                 'stock_actual': stock_actual,
-            }
+            })
         
-        # Convertir el diccionario a lista y ordenar por código y luego por atributo
-        resumen_productos = list(resumen_dict.values())
+        # Ordenar por código y atributo
         resumen_productos.sort(key=lambda x: (x['codigo'], x['atributo']))
-        
-        # Paginación: 50 productos por página
-        paginator = Paginator(resumen_productos, 50)
-        page = request.GET.get('page', 1)
-        
-        try:
-            resumen_paginated = paginator.page(page)
-        except PageNotAnInteger:
-            resumen_paginated = paginator.page(1)
-        except EmptyPage:
-            resumen_paginated = paginator.page(paginator.num_pages)
         
         # Obtener lista de productos para el filtro
         productos = Producto.objects.filter(activo=True).order_by('nombre')
         
         context = {
             'tipo_reporte': 'inventario',
-            'resumen_productos': resumen_paginated,
+            'resumen_productos': resumen_productos,
             'productos': productos,
             'producto_id': producto_id,
             'tipo_movimiento': tipo_movimiento,
