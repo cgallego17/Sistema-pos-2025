@@ -25,6 +25,11 @@
                         <input type="date" class="form-control form-control-modern" name="fecha_hasta" value="{{ fecha_hasta|date:'Y-m-d' }}">
                     </div>
                     <div class="col-md-4">
+                        <label class="form-label-modern">CajaUsuario ID (opcional)</label>
+                        <input type="number" class="form-control form-control-modern" name="caja_usuario_id" value="{{ caja_usuario_id }}" placeholder="Ej: 68">
+                        <small class="text-muted">Si lo llenas, se usa el periodo exacto de esa caja (como en Caja).</small>
+                    </div>
+                    <div class="col-md-4">
                         <label class="form-label-modern">Corte de día (madrugada al día anterior)</label>
                         <div class="d-flex gap-2 align-items-center">
                             <div class="form-check">
@@ -35,6 +40,7 @@
                         </div>
                         <small class="text-muted">Ej: 05:00 = lo de 00:00–04:59 cuenta al día anterior</small>
                     </div>
+                    {% if not modo_simple %}
                     <div class="col-md-4">
                         <label class="form-label-modern">Cajas</label>
                         <div class="form-check">
@@ -45,6 +51,7 @@
                         </div>
                         <small class="text-muted">Quita cajas “0/0” sin retiros/gastos para que la lista quede limpia</small>
                     </div>
+                    {% endif %}
                     <div class="col-md-4 d-flex align-items-end gap-2">
                         <button type="submit" class="btn btn-primary-pos w-100">
                             <i class="bi bi-search"></i> Filtrar
@@ -54,28 +61,12 @@
             </form>
             <div class="mt-3 d-flex flex-wrap gap-2">
                 <a class="btn btn-sm btn-outline-primary"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=ventas">
-                    <i class="bi bi-download"></i> CSV Ventas
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&caja_usuario_id={{ caja_usuario_id }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&export=movimientos_caja">
+                    <i class="bi bi-download"></i> CSV Movimientos (Caja)
                 </a>
                 <a class="btn btn-sm btn-outline-success"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=ventas&format=xlsx">
-                    <i class="bi bi-file-earmark-excel"></i> Excel Ventas
-                </a>
-                <a class="btn btn-sm btn-outline-primary"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=movimientos">
-                    <i class="bi bi-download"></i> CSV Movimientos
-                </a>
-                <a class="btn btn-sm btn-outline-success"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=movimientos&format=xlsx">
-                    <i class="bi bi-file-earmark-excel"></i> Excel Movimientos
-                </a>
-                <a class="btn btn-sm btn-outline-primary"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=cajas">
-                    <i class="bi bi-download"></i> CSV Cajas
-                </a>
-                <a class="btn btn-sm btn-outline-success"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=cajas&format=xlsx">
-                    <i class="bi bi-file-earmark-excel"></i> Excel Cajas
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&caja_usuario_id={{ caja_usuario_id }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&export=movimientos_caja&format=xlsx">
+                    <i class="bi bi-file-earmark-excel"></i> Excel Movimientos (Caja)
                 </a>
                 <span class="text-muted" style="align-self:center;">
                     Rango: <strong>{{ fecha_desde|date:"d/m/Y" }}</strong> a <strong>{{ fecha_hasta|date:"d/m/Y" }}</strong>
@@ -84,6 +75,7 @@
         </div>
     </div>
 
+    {% if not modo_simple %}
     <div class="cards-grid">
         <div class="stat-card success">
             <div class="stat-card-label">
@@ -111,6 +103,8 @@
         </div>
     </div>
 
+    {% if not modo_simple %}
+    {% if not modo_simple %}
     <div class="row mt-4 g-4">
         <div class="col-lg-6">
             <div class="card-modern">
@@ -118,6 +112,11 @@
                     <h5 class="mb-0">Top productos (por cantidad)</h5>
                 </div>
                 <div class="card-body">
+                    {% if not caja_usuario_sel %}
+                    <div class="alert alert-warning mb-3">
+                        Para ver este reporte como en <strong>Caja</strong>, escribe un <strong>CajaUsuario ID</strong> y filtra.
+                    </div>
+                    {% endif %}
                     <div class="table-responsive">
                         <table class="table table-sm">
                             <thead>
@@ -189,19 +188,28 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     <div class="row mt-4 g-4">
         <div class="col-lg-12">
             <div class="card-modern">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-calendar3"></i> Resumen diario (ventas + caja)</h5>
-                    <small class="text-muted">Retiros se muestran separados (no cuentan como gasto operativo)</small>
+                    <h5 class="mb-0"><i class="bi bi-calendar3"></i> Totales de ventas por día</h5>
+                    <small class="text-muted">Ventas completadas (válidas) y anuladas</small>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
                         <table class="table table-sm">
                             <thead>
                                 <tr>
+                                    {% if modo_simple %}
+                                    <th>Día</th>
+                                    <th>Ventas OK</th>
+                                    <th>Anuladas</th>
+                                    <th>Efectivo</th>
+                                    <th>Transferencia</th>
+                                    <th>Tarjeta</th>
+                                    {% else %}
                                     <th>Día</th>
                                     <th>Saldo inicial</th>
                                     <th>Ventas OK</th>
@@ -213,11 +221,20 @@
                                     <th>Ingresos</th>
                                     <th>Retiros</th>
                                     <th>Neto operativo</th>
+                                    {% endif %}
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for d in resumen_diario %}
                                 <tr>
+                                    {% if modo_simple %}
+                                    <td><strong>{{ d.dia|date:"d/m/Y" }}</strong></td>
+                                    <td><strong>${{ d.ventas_total|intcomma }}</strong> ({{ d.ventas_cantidad|intcomma }})</td>
+                                    <td>${{ d.anuladas_total|intcomma }} ({{ d.anuladas_cantidad|intcomma }})</td>
+                                    <td>${{ d.ventas_efectivo|intcomma }}</td>
+                                    <td>${{ d.ventas_transferencia|intcomma }}</td>
+                                    <td>${{ d.ventas_tarjeta|intcomma }}</td>
+                                    {% else %}
                                     <td><strong>{{ d.dia|date:"d/m/Y" }}</strong></td>
                                     <td>${{ d.saldo_inicial|intcomma }}</td>
                                     <td>${{ d.ventas_total|intcomma }} ({{ d.ventas_cantidad|intcomma }})</td>
@@ -229,10 +246,15 @@
                                     <td>${{ d.ingresos_total|intcomma }} ({{ d.ingresos_cantidad|intcomma }})</td>
                                     <td>${{ d.retiros_total|intcomma }} ({{ d.retiros_cantidad|intcomma }})</td>
                                     <td><strong>${{ d.neto_operativo|intcomma }}</strong></td>
+                                    {% endif %}
                                 </tr>
                                 {% empty %}
                                 <tr>
+                                    {% if modo_simple %}
+                                    <td colspan="6" class="text-center text-muted">No hay ventas en este rango.</td>
+                                    {% else %}
                                     <td colspan="11" class="text-center text-muted">No hay datos diarios en este rango.</td>
+                                    {% endif %}
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -244,6 +266,7 @@
     </div>
 
     <div class="row mt-4 g-4">
+        {% if not modo_simple %}
         <div class="col-lg-6">
             <div class="card-modern">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -310,6 +333,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
         <div class="col-lg-12">
             <div class="card-modern">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -419,6 +443,86 @@
                             {% if ventas_detalle.has_next %}
                             <li class="page-item">
                                 <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&page_ventas={{ ventas_detalle.next_page_number }}">Siguiente</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row mt-4 g-4">
+        <div class="col-lg-12">
+            <div class="card-modern">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-list-check"></i> Movimientos de Caja (estilo Caja)</h5>
+                    <small class="text-muted">
+                        {% if caja_usuario_sel %}CajaUsuario #{{ caja_usuario_sel.id }}{% else %}Rango seleccionado{% endif %}
+                    </small>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Fecha/Hora</th>
+                                    <th>Tipo</th>
+                                    <th>Descripción</th>
+                                    <th>Monto</th>
+                                    <th>Saldo Antes</th>
+                                    <th>Saldo Después</th>
+                                    <th>Método de Pago</th>
+                                    <th>Usuario</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for m in movimientos_caja_detalle %}
+                                <tr>
+                                    <td>{{ m.fecha_local|date:"d/m/Y H:i" }}</td>
+                                    <td>{{ m.tipo }}</td>
+                                    <td style="max-width: 520px;">{{ m.descripcion }}</td>
+                                    <td><strong>{% if m.delta >= 0 %}+{% endif %}${{ m.delta|intcomma }}</strong></td>
+                                    <td>${{ m.saldo_antes|intcomma }}</td>
+                                    <td><strong>${{ m.saldo_despues|intcomma }}</strong></td>
+                                    <td>{{ m.metodo_pago|default:"-" }}</td>
+                                    <td>{{ m.usuario|default:"-" }}</td>
+                                    <td>
+                                        {% if m.venta_id %}
+                                        <a class="btn btn-sm btn-outline-primary" href="{% url 'pos:detalle_venta' m.venta_id %}">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted">No hay movimientos para este filtro.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if movimientos_caja_detalle.paginator.num_pages > 1 %}
+                    <nav class="mt-3" aria-label="Paginación movimientos caja">
+                        <ul class="pagination pagination-sm mb-0">
+                            {% if movimientos_caja_detalle.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&caja_usuario_id={{ caja_usuario_id }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&page_movs_caja={{ movimientos_caja_detalle.previous_page_number }}">Anterior</a>
+                            </li>
+                            {% endif %}
+                            <li class="page-item disabled">
+                                <span class="page-link">Página {{ movimientos_caja_detalle.number }} de {{ movimientos_caja_detalle.paginator.num_pages }}</span>
+                            </li>
+                            {% if movimientos_caja_detalle.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&caja_usuario_id={{ caja_usuario_id }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&page_movs_caja={{ movimientos_caja_detalle.next_page_number }}">Siguiente</a>
                             </li>
                             {% endif %}
                         </ul>
@@ -556,6 +660,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}
 

@@ -15,6 +15,7 @@ from django.utils import timezone
 from openpyxl import load_workbook
 
 from pos.models import Caja, GastoCaja, ItemVenta, Producto, Venta
+from pos.models import CajaUsuario
 
 
 # Evitar problemas al copiar contextos instrumentados en tests
@@ -68,6 +69,15 @@ class ReportesTestCase(TestCase):
         self.fin_dt = timezone.make_aware(datetime(2025, 12, 14, 23, 59, 59), tz)
 
         # Ventas dentro del rango
+        # CajaUsuario dentro del rango (para probar Apertura en movimientos estilo caja)
+        self.caja_usuario = CajaUsuario.objects.create(
+            usuario=self.user_admin,
+            caja=self.caja,
+            monto_inicial=5000,
+            fecha_apertura=timezone.make_aware(datetime(2025, 12, 14, 9, 0, 0), tz),
+            fecha_cierre=timezone.make_aware(datetime(2025, 12, 14, 23, 0, 0), tz),
+        )
+
         self.v1 = Venta.objects.create(
             fecha=timezone.make_aware(datetime(2025, 12, 14, 10, 0, 0), tz),
             total=10000,
@@ -137,6 +147,7 @@ class ReportesTestCase(TestCase):
             descripcion='Gasto operativo',
             fecha=timezone.make_aware(datetime(2025, 12, 14, 11, 0, 0), tz),
             usuario=self.user_admin,
+            caja_usuario=self.caja_usuario,
         )
         GastoCaja.objects.create(
             tipo='ingreso',
@@ -144,6 +155,7 @@ class ReportesTestCase(TestCase):
             descripcion='Ingreso extra',
             fecha=timezone.make_aware(datetime(2025, 12, 14, 11, 30, 0), tz),
             usuario=self.user_admin,
+            caja_usuario=self.caja_usuario,
         )
         # Retiro: debe NO entrar en total_gastos, pero SÍ en total_retiros
         GastoCaja.objects.create(
@@ -152,6 +164,7 @@ class ReportesTestCase(TestCase):
             descripcion='Retiro de dinero al cerrar caja (Efectivo)',
             fecha=timezone.make_aware(datetime(2025, 12, 14, 16, 0, 0), tz),
             usuario=self.user_admin,
+            caja_usuario=self.caja_usuario,
         )
 
     def test_reportes_contexto_congruente(self):
@@ -193,7 +206,7 @@ class ReportesTestCase(TestCase):
         resumen_diario = ctx.get('resumen_diario') or []
         self.assertEqual(len(resumen_diario), 1)
         d0 = resumen_diario[0]
-        self.assertEqual(d0['saldo_inicial'], 0)
+        self.assertEqual(d0['saldo_inicial'], 5000)
         self.assertEqual(d0['ventas_total'], 30000)
         self.assertEqual(d0['ventas_cantidad'], 2)
         self.assertEqual(d0['anuladas_total'], 5000)
@@ -268,5 +281,32 @@ class ReportesTestCase(TestCase):
         ws_items = wb['Items']
         headers_items = [cell.value for cell in ws_items[1]]
         self.assertEqual(headers_items[:3], ['VentaID', 'Fecha', 'Producto'])
+
+    def test_export_csv_movimientos_caja_con_saldos(self):
+        """El CSV movimientos_caja debe incluir saldo antes/después y comenzar con apertura si aplica."""
+        url = reverse('pos:reportes')
+        resp = self.client.get(url, {
+            'fecha_desde': self.fecha_desde.isoformat(),
+            'fecha_hasta': self.fecha_hasta.isoformat(),
+            'caja_usuario_id': str(self.caja_usuario.id),
+            'export': 'movimientos_caja',
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('text/csv', resp.get('Content-Type', ''))
+
+        content = resp.content.decode('utf-8')
+        reader = csv.reader(io.StringIO(content))
+        rows = list(reader)
+        self.assertGreaterEqual(len(rows), 2)
+        header = rows[0]
+        self.assertEqual(header[:4], ['Fecha/Hora', 'Tipo', 'Descripcion', 'Monto'])
+        self.assertIn('Saldo Antes', header)
+        self.assertIn('Saldo Despues', header)
+
+        # Primera fila de datos debería ser apertura con saldo_despues = 5000
+        first = rows[1]
+        self.assertEqual(first[1], 'Apertura')
+        self.assertEqual(int(first[4]), 0)      # saldo antes
+        self.assertEqual(int(first[5]), 5000)   # saldo después
 
 

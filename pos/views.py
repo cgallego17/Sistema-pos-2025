@@ -2219,11 +2219,134 @@ def reportes_view(request):
         inicio_dt = timezone.make_aware(datetime.combine(fecha_desde, time.min), tz)
         fin_dt = timezone.make_aware(datetime.combine(fecha_hasta, time.max), tz)
 
+    # Filtro opcional: forzar el rango al periodo de una CajaUsuario (para reportar "como Caja")
+    caja_usuario_id = request.GET.get('caja_usuario_id', '').strip()
+    caja_usuario_sel = None
+    if caja_usuario_id:
+        try:
+            caja_usuario_sel = CajaUsuario.objects.select_related('usuario', 'caja').get(id=int(caja_usuario_id))
+            inicio_dt = caja_usuario_sel.fecha_apertura
+            fin_dt = caja_usuario_sel.fecha_cierre or timezone.now()
+        except Exception:
+            caja_usuario_sel = None
+
+    def _display_user(u):
+        if not u:
+            return ''
+        return (u.get_full_name() or u.username)
+
+    def _build_movimientos_caja():
+        """
+        Reporte estilo "Todos los Movimientos" (Caja):
+        Apertura + Ventas + Gastos/Ingresos/Retiros con saldo antes/después.
+        """
+        if not caja_usuario_sel:
+            # Evitar generar un reporte gigantesco por rango. Este reporte es para una caja específica.
+            return []
+
+        items = []
+
+        # Apertura(s)
+        aperturas_qs = CajaUsuario.objects.none()
+        if caja_usuario_sel:
+            aperturas_qs = CajaUsuario.objects.filter(id=caja_usuario_sel.id).select_related('usuario', 'caja')
+        else:
+            aperturas_qs = CajaUsuario.objects.filter(
+                fecha_apertura__gte=inicio_dt,
+                fecha_apertura__lte=fin_dt
+            ).select_related('usuario', 'caja')
+
+        for cu in aperturas_qs:
+            items.append({
+                'fecha': cu.fecha_apertura,
+                'tipo': 'Apertura',
+                'descripcion': f'Apertura de Caja (CajaUsuario #{cu.id})',
+                'delta': int(cu.monto_inicial or 0),
+                'monto_abs': int(cu.monto_inicial or 0),
+                'metodo_pago': '-',
+                'usuario': _display_user(cu.usuario),
+                'venta_id': None,
+            })
+
+        # Ventas
+        for v in Venta.objects.filter(
+            fecha__gte=inicio_dt,
+            fecha__lte=fin_dt,
+            completada=True
+        ).select_related('usuario', 'vendedor').order_by('fecha'):
+            vendedor = v.vendedor if v.vendedor else v.usuario
+            desc = f'Venta #{v.id}'
+            if v.registradora_id:
+                desc = f'{desc} - Registradora {v.registradora_id}'
+            delta = int(v.total or 0)
+            tipo = 'Venta'
+            if v.anulada:
+                tipo = 'Venta Anulada'
+                delta = -delta
+            items.append({
+                'fecha': v.fecha,
+                'tipo': tipo,
+                'descripcion': desc,
+                'delta': delta,
+                'monto_abs': int(v.total or 0),
+                'metodo_pago': v.get_metodo_pago_display(),
+                'usuario': _display_user(vendedor),
+                'venta_id': v.id,
+            })
+
+        # Gastos / Ingresos (y retiros)
+        gastos_qs = GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario')
+        if caja_usuario_sel:
+            gastos_qs = gastos_qs.filter(caja_usuario=caja_usuario_sel)
+
+        for g in gastos_qs.order_by('fecha'):
+            es_retiro = bool(g.descripcion and 'Retiro de dinero al cerrar caja' in g.descripcion)
+            tipo = 'Retiro' if es_retiro else ('Gasto' if g.tipo == 'gasto' else 'Ingreso')
+            delta = int(g.monto or 0)
+            if g.tipo == 'gasto':
+                delta = -delta
+            items.append({
+                'fecha': g.fecha,
+                'tipo': tipo,
+                'descripcion': g.descripcion,
+                'delta': delta,
+                'monto_abs': int(g.monto or 0),
+                'metodo_pago': '-',
+                'usuario': _display_user(g.usuario),
+                'venta_id': None,
+            })
+
+        def _orden_tipo(t):
+            if t == 'Apertura':
+                return 0
+            if t.startswith('Venta'):
+                return 1
+            return 2
+
+        items.sort(key=lambda x: (x['fecha'], _orden_tipo(x['tipo'])))
+
+        saldo = 0
+        out = []
+        for it in items:
+            saldo_antes = saldo
+            saldo_despues = saldo + int(it['delta'])
+            saldo = saldo_despues
+            out.append({
+                **it,
+                'saldo_antes': saldo_antes,
+                'saldo_despues': saldo_despues,
+                'fecha_local': timezone.localtime(it['fecha'], tz),
+            })
+        return out
+
     # Export (mismo endpoint): CSV / Excel
     export_tipo = request.GET.get('export')
     export_format = (request.GET.get('format') or 'csv').strip().lower()
-    if export_tipo in ('ventas', 'movimientos', 'cajas'):
+    if export_tipo in ('ventas', 'movimientos', 'cajas', 'movimientos_caja'):
         from django.http import HttpResponse
+
+        if export_tipo == 'movimientos_caja' and not caja_usuario_sel:
+            return HttpResponse('Debe especificar caja_usuario_id para exportar Movimientos (Caja).', status=400)
 
         if export_format in ('xlsx', 'excel'):
             from openpyxl import Workbook
@@ -2306,7 +2429,6 @@ def reportes_view(request):
                     ])
 
                 # Gastos/Ingresos
-                from .models import GastoCaja
                 for g in GastoCaja.objects.filter(
                     fecha__gte=inicio_dt, fecha__lte=fin_dt
                 ).select_related('usuario', 'caja_usuario').order_by('fecha'):
@@ -2321,7 +2443,7 @@ def reportes_view(request):
                         (g.caja_usuario_id or ''),
                     ])
 
-            else:  # cajas
+            elif export_tipo == 'cajas':
                 ws = wb.active
                 ws.title = 'Cajas'
                 _set_headers(ws, [
@@ -2342,6 +2464,23 @@ def reportes_view(request):
                         cu.monto_inicial,
                         (cu.monto_final if cu.monto_final is not None else ''),
                         (cu.usuario.username if cu.usuario else ''),
+                    ])
+            else:  # movimientos_caja
+                ws = wb.active
+                ws.title = 'MovimientosCaja'
+                _set_headers(ws, [
+                    'Fecha/Hora', 'Tipo', 'Descripcion', 'Monto', 'Saldo Antes', 'Saldo Despues', 'Metodo de Pago', 'Usuario'
+                ])
+                for m in _build_movimientos_caja():
+                    ws.append([
+                        m['fecha_local'].strftime('%Y-%m-%d %H:%M:%S'),
+                        m['tipo'],
+                        m['descripcion'],
+                        m['delta'],
+                        m['saldo_antes'],
+                        m['saldo_despues'],
+                        m['metodo_pago'] or '-',
+                        m['usuario'] or '',
                     ])
 
             from io import BytesIO
@@ -2395,7 +2534,6 @@ def reportes_view(request):
             return response
 
         if export_tipo == 'movimientos':
-            from .models import GastoCaja
             writer.writerow([
                 'Fecha', 'Tipo', 'Descripcion', 'Monto', 'Metodo', 'Usuario', 'CajaUsuarioID'
             ])
@@ -2449,6 +2587,23 @@ def reportes_view(request):
                 ])
             return response
 
+        if export_tipo == 'movimientos_caja':
+            writer.writerow([
+                'Fecha/Hora', 'Tipo', 'Descripcion', 'Monto', 'Saldo Antes', 'Saldo Despues', 'Metodo de Pago', 'Usuario'
+            ])
+            for m in _build_movimientos_caja():
+                writer.writerow([
+                    m['fecha_local'].strftime('%Y-%m-%d %H:%M:%S'),
+                    m['tipo'],
+                    m['descripcion'],
+                    m['delta'],
+                    m['saldo_antes'],
+                    m['saldo_despues'],
+                    m['metodo_pago'] or '-',
+                    m['usuario'] or '',
+                ])
+            return response
+
     # Ventas (incluye anuladas; se desglosa)
     ventas_qs = Venta.objects.filter(
         fecha__gte=inicio_dt,
@@ -2496,7 +2651,6 @@ def reportes_view(request):
     dinero_bancos = ventas_tarjeta + ventas_transferencia
 
     # Caja: cajas que se solapan con el rango
-    from .models import GastoCaja
     cajas_qs = CajaUsuario.objects.filter(
         fecha_apertura__lte=fin_dt
     ).filter(
@@ -2643,16 +2797,20 @@ def reportes_view(request):
     ventas_page = request.GET.get('page_ventas', 1)
     movs_page = request.GET.get('page_movs', 1)
     cajas_page = request.GET.get('page_cajas', 1)
+    movs_caja_page = request.GET.get('page_movs_caja', 1)
 
     ventas_paginated = Paginator(
         ventas_qs.select_related('usuario', 'vendedor').prefetch_related('items__producto').order_by('-fecha'), 50
     ).get_page(ventas_page)
     movs_paginated = Paginator(movimientos_qs, 50).get_page(movs_page)
     cajas_paginated = Paginator(cajas_qs, 25).get_page(cajas_page)
+    movs_caja_list = _build_movimientos_caja() if caja_usuario_sel else []
+    movs_caja_paginated = Paginator(movs_caja_list, 100).get_page(movs_caja_page)
 
     total_productos = Producto.objects.filter(activo=True).count()
 
     context = {
+        'modo_simple': True,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
         'inicio_dt': inicio_dt,
@@ -2680,10 +2838,13 @@ def reportes_view(request):
         # Caja / movimientos
         'cajas_detalle': cajas_paginated,
         'movimientos_detalle': movs_paginated,
+        'movimientos_caja_detalle': movs_caja_paginated,
         'total_gastos': total_gastos,
         'total_ingresos': total_ingresos,
         'total_retiros': total_retiros,
         'resumen_diario': resumen_diario,
+        'caja_usuario_id': caja_usuario_id,
+        'caja_usuario_sel': caja_usuario_sel,
 
         'total_productos': total_productos,
     }
