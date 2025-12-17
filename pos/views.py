@@ -2190,10 +2190,33 @@ def reportes_view(request):
         fecha_desde, fecha_hasta = fecha_hasta, fecha_desde
 
     # Rango datetime (timezone-aware)
-    from datetime import time
+    # Soportar "corte de dia" para agrupar madrugada al dia anterior (dia de trabajo).
+    from datetime import time, timedelta
+    from django.db.models import F
+    from django.db.models.expressions import ExpressionWrapper
+    from django.db.models.fields import DateTimeField
     tz = timezone.get_current_timezone()
-    inicio_dt = timezone.make_aware(datetime.combine(fecha_desde, time.min), tz)
-    fin_dt = timezone.make_aware(datetime.combine(fecha_hasta, time.max), tz)
+
+    usar_corte_dia = request.GET.get('usar_corte_dia', '1') in ('1', 'true', 'True', 'on', 'yes')
+    corte_dia_str = (request.GET.get('corte_dia') or '05:00').strip()
+    try:
+        hh, mm = corte_dia_str.split(':', 1)
+        corte_h = max(0, min(23, int(hh)))
+        corte_m = max(0, min(59, int(mm)))
+    except Exception:
+        corte_h, corte_m = 5, 0
+        corte_dia_str = '05:00'
+
+    corte_time = time(corte_h, corte_m)
+    corte_delta = timedelta(hours=corte_h, minutes=corte_m)
+
+    if usar_corte_dia:
+        # Dia de trabajo: [fecha_desde corte, fecha_hasta+1 corte)
+        inicio_dt = timezone.make_aware(datetime.combine(fecha_desde, corte_time), tz)
+        fin_dt = timezone.make_aware(datetime.combine(fecha_hasta + timedelta(days=1), corte_time), tz) - timedelta(microseconds=1)
+    else:
+        inicio_dt = timezone.make_aware(datetime.combine(fecha_desde, time.min), tz)
+        fin_dt = timezone.make_aware(datetime.combine(fecha_hasta, time.max), tz)
 
     # Export (mismo endpoint): CSV / Excel
     export_tipo = request.GET.get('export')
@@ -2485,9 +2508,14 @@ def reportes_view(request):
     total_ingresos = int(movimientos_qs.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0)
     total_retiros = int(movimientos_qs.filter(tipo='gasto', descripcion__icontains='Retiro de dinero al cerrar caja').aggregate(total=Sum('monto'))['total'] or 0)
 
-    # Resumen diario (por fecha local)
+    # Resumen diario (por fecha local / dia de trabajo)
     from django.db.models.functions import TruncDate
-    ventas_diarias_qs = ventas_qs.annotate(dia=TruncDate('fecha', tzinfo=tz))
+    if usar_corte_dia:
+        dia_expr = TruncDate(ExpressionWrapper(F('fecha') - corte_delta, output_field=DateTimeField()), tzinfo=tz)
+    else:
+        dia_expr = TruncDate('fecha', tzinfo=tz)
+
+    ventas_diarias_qs = ventas_qs.annotate(dia=dia_expr)
     ventas_validas_diarias = ventas_diarias_qs.filter(anulada=False)
     ventas_anuladas_diarias = ventas_diarias_qs.filter(anulada=True)
 
@@ -2509,7 +2537,7 @@ def reportes_view(request):
 
     movs_diarias_qs = GastoCaja.objects.filter(
         fecha__gte=inicio_dt, fecha__lte=fin_dt
-    ).annotate(dia=TruncDate('fecha', tzinfo=tz))
+    ).annotate(dia=dia_expr)
 
     movs_g_map = {
         r['dia']: r for r in movs_diarias_qs.filter(tipo='gasto').exclude(
@@ -2595,6 +2623,8 @@ def reportes_view(request):
         'fecha_hasta': fecha_hasta,
         'inicio_dt': inicio_dt,
         'fin_dt': fin_dt,
+        'usar_corte_dia': usar_corte_dia,
+        'corte_dia': corte_dia_str,
 
         # Ventas
         'total_ventas': total_ventas,
