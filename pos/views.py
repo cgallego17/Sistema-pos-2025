@@ -2274,6 +2274,10 @@ def reportes_view(request):
             stock_actual = stock_info['stock']
             nombre = stock_info['nombre'] or item.get('producto__nombre', '')
             
+            # Calcular stock inicial: stock_actual - neto
+            # Esto nos da el stock que había antes de los movimientos del período
+            stock_inicial_calculado = stock_actual - neto
+            
             # Analizar causas de negativos
             causas_negativos = []
             alertas = []
@@ -2318,6 +2322,7 @@ def reportes_view(request):
                 'ajustes': ajustes,
                 'ajustes_abs': abs(ajustes),  # Valor absoluto para el template
                 'neto': neto,
+                'stock_inicial': stock_inicial_calculado,
                 'stock_actual': stock_actual,
                 'causas_negativos': causas_negativos,
                 'alertas': alertas,
@@ -2351,6 +2356,133 @@ def reportes_view(request):
         # Obtener lista de productos para el filtro
         productos = Producto.objects.filter(activo=True).order_by('nombre')
         
+        # ===== COMPARATIVA: Ingresos vs Salidas (Ventas) vs Salidas de Mercancía =====
+        from .models import ItemVenta, Venta
+        from django.db.models import Sum, Count
+        
+        # Filtros de fecha para la comparativa
+        fecha_desde_comparativa = None
+        fecha_hasta_comparativa = None
+        if fecha_desde:
+            try:
+                fecha_desde_comparativa = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        if fecha_hasta:
+            try:
+                fecha_hasta_comparativa = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        
+        # 1. INGRESOS DE MERCANCÍA (MovimientoStock tipo='ingreso')
+        ingresos_qs = MovimientoStock.objects.filter(tipo='ingreso')
+        if fecha_desde_comparativa:
+            ingresos_qs = ingresos_qs.filter(fecha__date__gte=fecha_desde_comparativa)
+        if fecha_hasta_comparativa:
+            ingresos_qs = ingresos_qs.filter(fecha__date__lte=fecha_hasta_comparativa)
+        if producto_id:
+            try:
+                producto_id_int = int(producto_id)
+                ingresos_qs = ingresos_qs.filter(producto_id=producto_id_int)
+            except (ValueError, TypeError):
+                pass
+        
+        total_ingresos_cantidad = ingresos_qs.aggregate(total=Sum('cantidad'))['total'] or 0
+        total_ingresos_registros = ingresos_qs.count()
+        
+        # 2. SALIDAS POR VENTAS (ItemVenta de ventas completadas y no anuladas)
+        ventas_qs = Venta.objects.filter(completada=True, anulada=False)
+        if fecha_desde_comparativa:
+            ventas_qs = ventas_qs.filter(fecha__date__gte=fecha_desde_comparativa)
+        if fecha_hasta_comparativa:
+            ventas_qs = ventas_qs.filter(fecha__date__lte=fecha_hasta_comparativa)
+        
+        items_venta_qs = ItemVenta.objects.filter(venta__in=ventas_qs)
+        if producto_id:
+            try:
+                producto_id_int = int(producto_id)
+                items_venta_qs = items_venta_qs.filter(producto_id=producto_id_int)
+            except (ValueError, TypeError):
+                pass
+        
+        total_ventas_cantidad = items_venta_qs.aggregate(total=Sum('cantidad'))['total'] or 0
+        total_ventas_registros = items_venta_qs.count()
+        total_ventas_valor = items_venta_qs.aggregate(total=Sum('precio_total'))['total'] or 0
+        
+        # 3. SALIDAS DE MERCANCÍA (MovimientoStock tipo='salida')
+        salidas_qs = MovimientoStock.objects.filter(tipo='salida')
+        if fecha_desde_comparativa:
+            salidas_qs = salidas_qs.filter(fecha__date__gte=fecha_desde_comparativa)
+        if fecha_hasta_comparativa:
+            salidas_qs = salidas_qs.filter(fecha__date__lte=fecha_hasta_comparativa)
+        if producto_id:
+            try:
+                producto_id_int = int(producto_id)
+                salidas_qs = salidas_qs.filter(producto_id=producto_id_int)
+            except (ValueError, TypeError):
+                pass
+        
+        total_salidas_cantidad = salidas_qs.aggregate(total=Sum('cantidad'))['total'] or 0
+        total_salidas_registros = salidas_qs.count()
+        
+        # Calcular balance neto
+        balance_neto_cantidad = total_ingresos_cantidad - total_ventas_cantidad - total_salidas_cantidad
+        
+        # Comparativa por producto (si no hay filtro de producto específico)
+        comparativa_por_producto = []
+        if not producto_id:
+            # Agrupar por producto
+            productos_comparativa = Producto.objects.filter(activo=True).values('id', 'codigo', 'nombre', 'atributo')
+            
+            for prod in productos_comparativa:
+                prod_id = prod['id']
+                
+                # Ingresos del producto
+                ingresos_prod = MovimientoStock.objects.filter(
+                    tipo='ingreso',
+                    producto_id=prod_id
+                )
+                if fecha_desde_comparativa:
+                    ingresos_prod = ingresos_prod.filter(fecha__date__gte=fecha_desde_comparativa)
+                if fecha_hasta_comparativa:
+                    ingresos_prod = ingresos_prod.filter(fecha__date__lte=fecha_hasta_comparativa)
+                cant_ingresos = ingresos_prod.aggregate(total=Sum('cantidad'))['total'] or 0
+                
+                # Ventas del producto
+                items_venta_prod = ItemVenta.objects.filter(
+                    producto_id=prod_id,
+                    venta__in=ventas_qs
+                )
+                cant_ventas = items_venta_prod.aggregate(total=Sum('cantidad'))['total'] or 0
+                valor_ventas = items_venta_prod.aggregate(total=Sum('precio_total'))['total'] or 0
+                
+                # Salidas de mercancía del producto
+                salidas_prod = MovimientoStock.objects.filter(
+                    tipo='salida',
+                    producto_id=prod_id
+                )
+                if fecha_desde_comparativa:
+                    salidas_prod = salidas_prod.filter(fecha__date__gte=fecha_desde_comparativa)
+                if fecha_hasta_comparativa:
+                    salidas_prod = salidas_prod.filter(fecha__date__lte=fecha_hasta_comparativa)
+                cant_salidas = salidas_prod.aggregate(total=Sum('cantidad'))['total'] or 0
+                
+                # Solo agregar si hay algún movimiento
+                if cant_ingresos > 0 or cant_ventas > 0 or cant_salidas > 0:
+                    comparativa_por_producto.append({
+                        'codigo': prod['codigo'],
+                        'nombre': prod['nombre'],
+                        'atributo': prod['atributo'] or '-',
+                        'ingresos_cantidad': cant_ingresos,
+                        'ventas_cantidad': cant_ventas,
+                        'ventas_valor': valor_ventas,
+                        'salidas_cantidad': cant_salidas,
+                        'balance_neto': cant_ingresos - cant_ventas - cant_salidas,
+                    })
+        
+        # Ordenar por código
+        comparativa_por_producto.sort(key=lambda x: x['codigo'])
+        
         context = {
             'tipo_reporte': 'inventario',
             'resumen_productos': resumen_productos,
@@ -2359,6 +2491,16 @@ def reportes_view(request):
             'tipo_movimiento': tipo_movimiento,
             'fecha_desde': fecha_desde,
             'fecha_hasta': fecha_hasta,
+            # Comparativa
+            'total_ingresos_cantidad': total_ingresos_cantidad,
+            'total_ingresos_registros': total_ingresos_registros,
+            'total_ventas_cantidad': total_ventas_cantidad,
+            'total_ventas_registros': total_ventas_registros,
+            'total_ventas_valor': total_ventas_valor,
+            'total_salidas_cantidad': total_salidas_cantidad,
+            'total_salidas_registros': total_salidas_registros,
+            'balance_neto_cantidad': balance_neto_cantidad,
+            'comparativa_por_producto': comparativa_por_producto,
         }
         return render(request, 'pos/reportes.html', context)
     
