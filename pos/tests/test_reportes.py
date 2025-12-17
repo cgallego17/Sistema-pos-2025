@@ -288,7 +288,6 @@ class ReportesTestCase(TestCase):
         resp = self.client.get(url, {
             'fecha_desde': self.fecha_desde.isoformat(),
             'fecha_hasta': self.fecha_hasta.isoformat(),
-            'caja_usuario_id': str(self.caja_usuario.id),
             'export': 'movimientos_caja',
         })
         self.assertEqual(resp.status_code, 200)

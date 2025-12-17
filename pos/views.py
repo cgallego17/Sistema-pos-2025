@@ -2189,46 +2189,15 @@ def reportes_view(request):
     if fecha_hasta < fecha_desde:
         fecha_desde, fecha_hasta = fecha_hasta, fecha_desde
 
-    # Rango datetime (timezone-aware)
-    # Soportar "corte de dia" para agrupar madrugada al dia anterior (dia de trabajo).
+    # Rango datetime (timezone-aware): por fecha calendario
     from datetime import time, timedelta
-    from django.db.models import F
-    from django.db.models.expressions import ExpressionWrapper
-    from django.db.models.fields import DateTimeField
     tz = timezone.get_current_timezone()
+    inicio_dt = timezone.make_aware(datetime.combine(fecha_desde, time.min), tz)
+    fin_dt = timezone.make_aware(datetime.combine(fecha_hasta, time.max), tz)
 
-    usar_corte_dia = request.GET.get('usar_corte_dia', '1') in ('1', 'true', 'True', 'on', 'yes')
-    ocultar_cajas_sin_mov = request.GET.get('ocultar_cajas_sin_mov', '1') in ('1', 'true', 'True', 'on', 'yes')
-    corte_dia_str = (request.GET.get('corte_dia') or '05:00').strip()
-    try:
-        hh, mm = corte_dia_str.split(':', 1)
-        corte_h = max(0, min(23, int(hh)))
-        corte_m = max(0, min(59, int(mm)))
-    except Exception:
-        corte_h, corte_m = 5, 0
-        corte_dia_str = '05:00'
-
-    corte_time = time(corte_h, corte_m)
-    corte_delta = timedelta(hours=corte_h, minutes=corte_m)
-
-    if usar_corte_dia:
-        # Dia de trabajo: [fecha_desde corte, fecha_hasta+1 corte)
-        inicio_dt = timezone.make_aware(datetime.combine(fecha_desde, corte_time), tz)
-        fin_dt = timezone.make_aware(datetime.combine(fecha_hasta + timedelta(days=1), corte_time), tz) - timedelta(microseconds=1)
-    else:
-        inicio_dt = timezone.make_aware(datetime.combine(fecha_desde, time.min), tz)
-        fin_dt = timezone.make_aware(datetime.combine(fecha_hasta, time.max), tz)
-
-    # Filtro opcional: forzar el rango al periodo de una CajaUsuario (para reportar "como Caja")
-    caja_usuario_id = request.GET.get('caja_usuario_id', '').strip()
+    # En modo web simplificado: siempre todas las cajas del rango (sin forzar CajaUsuario)
+    caja_usuario_id = ''
     caja_usuario_sel = None
-    if caja_usuario_id:
-        try:
-            caja_usuario_sel = CajaUsuario.objects.select_related('usuario', 'caja').get(id=int(caja_usuario_id))
-            inicio_dt = caja_usuario_sel.fecha_apertura
-            fin_dt = caja_usuario_sel.fecha_cierre or timezone.now()
-        except Exception:
-            caja_usuario_sel = None
 
     def _display_user(u):
         if not u:
@@ -2244,13 +2213,10 @@ def reportes_view(request):
 
         # Apertura(s)
         aperturas_qs = CajaUsuario.objects.none()
-        if caja_usuario_sel:
-            aperturas_qs = CajaUsuario.objects.filter(id=caja_usuario_sel.id).select_related('usuario', 'caja')
-        else:
-            aperturas_qs = CajaUsuario.objects.filter(
-                fecha_apertura__gte=inicio_dt,
-                fecha_apertura__lte=fin_dt
-            ).select_related('usuario', 'caja')
+        aperturas_qs = CajaUsuario.objects.filter(
+            fecha_apertura__gte=inicio_dt,
+            fecha_apertura__lte=fin_dt
+        ).select_related('usuario', 'caja')
 
         for cu in aperturas_qs:
             items.append({
@@ -2292,8 +2258,6 @@ def reportes_view(request):
 
         # Gastos / Ingresos (y retiros)
         gastos_qs = GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario')
-        if caja_usuario_sel:
-            gastos_qs = gastos_qs.filter(caja_usuario=caja_usuario_sel)
 
         for g in gastos_qs.order_by('fecha'):
             es_retiro = bool(g.descripcion and 'Retiro de dinero al cerrar caja' in g.descripcion)
@@ -2650,37 +2614,18 @@ def reportes_view(request):
         Q(fecha_cierre__gte=inicio_dt) | Q(fecha_cierre__isnull=True)
     ).select_related('usuario', 'caja').order_by('-fecha_apertura')
 
-    if ocultar_cajas_sin_mov:
-        from django.db.models import Exists, OuterRef
-        cajas_qs = cajas_qs.annotate(
-            tiene_movimientos=Exists(
-                GastoCaja.objects.filter(caja_usuario_id=OuterRef('pk'))
-            )
-        ).filter(
-            Q(tiene_movimientos=True) | Q(monto_inicial__gt=0) | Q(monto_final__gt=0)
-        )
-
     # Movimientos (gastos/ingresos/retiros) por rango (no depende de una caja específica)
     movimientos_qs = GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario').order_by('-fecha')
     total_gastos = int(movimientos_qs.filter(tipo='gasto').exclude(descripcion__icontains='Retiro de dinero al cerrar caja').aggregate(total=Sum('monto'))['total'] or 0)
     total_ingresos = int(movimientos_qs.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0)
     total_retiros = int(movimientos_qs.filter(tipo='gasto', descripcion__icontains='Retiro de dinero al cerrar caja').aggregate(total=Sum('monto'))['total'] or 0)
 
-    # Resumen diario (por fecha local / dia de trabajo)
+    # Resumen diario (por fecha local)
     from django.db.models.functions import TruncDate
-    if usar_corte_dia:
-        dia_expr = TruncDate(ExpressionWrapper(F('fecha') - corte_delta, output_field=DateTimeField()), tzinfo=tz)
-    else:
-        dia_expr = TruncDate('fecha', tzinfo=tz)
+    dia_expr = TruncDate('fecha', tzinfo=tz)
 
     # Saldo inicial por dia: suma de montos iniciales de cajas abiertas ese dia (segun corte)
-    if usar_corte_dia:
-        dia_apertura_expr = TruncDate(
-            ExpressionWrapper(F('fecha_apertura') - corte_delta, output_field=DateTimeField()),
-            tzinfo=tz
-        )
-    else:
-        dia_apertura_expr = TruncDate('fecha_apertura', tzinfo=tz)
+    dia_apertura_expr = TruncDate('fecha_apertura', tzinfo=tz)
 
     saldo_inicial_map = {
         r['dia']: int(r['saldo_inicial'] or 0)
@@ -2808,9 +2753,9 @@ def reportes_view(request):
         'fecha_hasta': fecha_hasta,
         'inicio_dt': inicio_dt,
         'fin_dt': fin_dt,
-        'usar_corte_dia': usar_corte_dia,
-        'corte_dia': corte_dia_str,
-        'ocultar_cajas_sin_mov': ocultar_cajas_sin_mov,
+        'usar_corte_dia': False,
+        'corte_dia': '',
+        'ocultar_cajas_sin_mov': False,
 
         # Ventas
         'total_ventas': total_ventas,
