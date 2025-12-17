@@ -2475,6 +2475,96 @@ def reportes_view(request):
     total_ingresos = int(movimientos_qs.filter(tipo='ingreso').aggregate(total=Sum('monto'))['total'] or 0)
     total_retiros = int(movimientos_qs.filter(tipo='gasto', descripcion__icontains='Retiro de dinero al cerrar caja').aggregate(total=Sum('monto'))['total'] or 0)
 
+    # Resumen diario (por fecha local)
+    from django.db.models.functions import TruncDate
+    ventas_diarias_qs = ventas_qs.annotate(dia=TruncDate('fecha', tzinfo=tz))
+    ventas_validas_diarias = ventas_diarias_qs.filter(anulada=False)
+    ventas_anuladas_diarias = ventas_diarias_qs.filter(anulada=True)
+
+    ventas_ok_map = {
+        r['dia']: r for r in ventas_validas_diarias.values('dia').annotate(
+            total_ventas=Sum('total'),
+            cantidad_ventas=Count('id'),
+            ventas_efectivo=Sum('total', filter=Q(metodo_pago='efectivo')),
+            ventas_tarjeta=Sum('total', filter=Q(metodo_pago='tarjeta')),
+            ventas_transferencia=Sum('total', filter=Q(metodo_pago='transferencia')),
+        )
+    }
+    ventas_an_map = {
+        r['dia']: r for r in ventas_anuladas_diarias.values('dia').annotate(
+            total_anuladas=Sum('total'),
+            cantidad_anuladas=Count('id'),
+        )
+    }
+
+    movs_diarias_qs = GastoCaja.objects.filter(
+        fecha__gte=inicio_dt, fecha__lte=fin_dt
+    ).annotate(dia=TruncDate('fecha', tzinfo=tz))
+
+    movs_g_map = {
+        r['dia']: r for r in movs_diarias_qs.filter(tipo='gasto').exclude(
+            descripcion__icontains='Retiro de dinero al cerrar caja'
+        ).values('dia').annotate(total_gastos=Sum('monto'), cantidad_gastos=Count('id'))
+    }
+    movs_i_map = {
+        r['dia']: r for r in movs_diarias_qs.filter(tipo='ingreso').values('dia').annotate(
+            total_ingresos=Sum('monto'),
+            cantidad_ingresos=Count('id')
+        )
+    }
+    movs_r_map = {
+        r['dia']: r for r in movs_diarias_qs.filter(
+            tipo='gasto', descripcion__icontains='Retiro de dinero al cerrar caja'
+        ).values('dia').annotate(total_retiros=Sum('monto'), cantidad_retiros=Count('id'))
+    }
+
+    dias = sorted(set(
+        list(ventas_ok_map.keys())
+        + list(ventas_an_map.keys())
+        + list(movs_g_map.keys())
+        + list(movs_i_map.keys())
+        + list(movs_r_map.keys())
+    ))
+
+    def _n(v):
+        return int(v or 0)
+
+    resumen_diario = []
+    for dia in dias:
+        vo = ventas_ok_map.get(dia, {})
+        va = ventas_an_map.get(dia, {})
+        mg = movs_g_map.get(dia, {})
+        mi = movs_i_map.get(dia, {})
+        mr = movs_r_map.get(dia, {})
+
+        ventas_ef = _n(vo.get('ventas_efectivo'))
+        ventas_tj = _n(vo.get('ventas_tarjeta'))
+        ventas_tf = _n(vo.get('ventas_transferencia'))
+        gastos_sr = _n(mg.get('total_gastos'))
+        ingresos = _n(mi.get('total_ingresos'))
+        retiros = _n(mr.get('total_retiros'))
+
+        # Neto de efectivo estimado del día (sin monto inicial): efectivo + ingresos - gastos - retiros
+        neto_efectivo = ventas_ef + ingresos - gastos_sr - retiros
+
+        resumen_diario.append({
+            'dia': dia,
+            'ventas_total': _n(vo.get('total_ventas')),
+            'ventas_cantidad': _n(vo.get('cantidad_ventas')),
+            'anuladas_total': _n(va.get('total_anuladas')),
+            'anuladas_cantidad': _n(va.get('cantidad_anuladas')),
+            'ventas_efectivo': ventas_ef,
+            'ventas_tarjeta': ventas_tj,
+            'ventas_transferencia': ventas_tf,
+            'gastos_sin_retiro_total': gastos_sr,
+            'gastos_sin_retiro_cantidad': _n(mg.get('cantidad_gastos')),
+            'ingresos_total': ingresos,
+            'ingresos_cantidad': _n(mi.get('cantidad_ingresos')),
+            'retiros_total': retiros,
+            'retiros_cantidad': _n(mr.get('cantidad_retiros')),
+            'neto_efectivo': int(neto_efectivo),
+        })
+
     # Paginación (ventas y movimientos)
     from django.core.paginator import Paginator
     ventas_page = request.GET.get('page_ventas', 1)
@@ -2517,6 +2607,7 @@ def reportes_view(request):
         'total_gastos': total_gastos,
         'total_ingresos': total_ingresos,
         'total_retiros': total_retiros,
+        'resumen_diario': resumen_diario,
 
         'total_productos': total_productos,
     }

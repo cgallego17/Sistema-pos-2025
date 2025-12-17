@@ -189,6 +189,22 @@ class ReportesTestCase(TestCase):
         self.assertEqual(ctx['total_ingresos'], 1000)
         self.assertEqual(ctx['total_retiros'], 7000)
 
+        # Resumen diario
+        resumen_diario = ctx.get('resumen_diario') or []
+        self.assertEqual(len(resumen_diario), 1)
+        d0 = resumen_diario[0]
+        self.assertEqual(d0['ventas_total'], 30000)
+        self.assertEqual(d0['ventas_cantidad'], 2)
+        self.assertEqual(d0['anuladas_total'], 5000)
+        self.assertEqual(d0['anuladas_cantidad'], 1)
+        self.assertEqual(d0['ventas_efectivo'], 10000)
+        self.assertEqual(d0['ventas_tarjeta'], 20000)
+        self.assertEqual(d0['ventas_transferencia'], 0)
+        self.assertEqual(d0['gastos_sin_retiro_total'], 3000)
+        self.assertEqual(d0['ingresos_total'], 1000)
+        self.assertEqual(d0['retiros_total'], 7000)
+        self.assertEqual(d0['neto_efectivo'], 10000 + 1000 - 3000 - 7000)
+
         # Resúmenes
         resumen_usuarios = list(ctx['resumen_por_usuario'])
         self.assertTrue(any(r['usuario__username'] == 'admin_test' and int(r['total']) == 30000 for r in resumen_usuarios))
