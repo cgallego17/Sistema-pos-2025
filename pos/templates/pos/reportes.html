@@ -329,9 +329,12 @@
                                 // Calcular posición del dropdown usando getBoundingClientRect
                                 const inputRect = filtroProducto.getBoundingClientRect();
                                 dropdown.style.display = 'block';
+                                dropdown.style.position = 'fixed';
                                 dropdown.style.top = (inputRect.bottom + window.scrollY) + 'px';
                                 dropdown.style.left = (inputRect.left + window.scrollX) + 'px';
                                 dropdown.style.width = inputRect.width + 'px';
+                                dropdown.style.zIndex = '99999';
+                                dropdown.style.backgroundColor = 'white';
                                 
                                 // Agregar eventos a los items
                                 dropdown.querySelectorAll('.autocomplete-item').forEach(item => {
@@ -357,12 +360,16 @@
                                 // Calcular posición del dropdown usando getBoundingClientRect
                                 const inputRect = filtroProducto.getBoundingClientRect();
                                 dropdown.style.display = 'block';
+                                dropdown.style.position = 'fixed';
                                 dropdown.style.top = (inputRect.bottom + window.scrollY) + 'px';
                                 dropdown.style.left = (inputRect.left + window.scrollX) + 'px';
                                 dropdown.style.width = inputRect.width + 'px';
+                                dropdown.style.zIndex = '99999';
+                                dropdown.style.backgroundColor = 'white';
                             }
                         })
-                        .catch(() => {
+                        .catch((error) => {
+                            console.error('Error en autocomplete:', error);
                             dropdown.style.display = 'none';
                         });
                 }, 300);
@@ -370,10 +377,21 @@
             
             // Cerrar dropdown al hacer clic fuera
             document.addEventListener('click', function(e) {
-                if (!filtroProducto.contains(e.target) && !dropdown.contains(e.target)) {
+                if (filtroProducto && dropdown && 
+                    !filtroProducto.contains(e.target) && 
+                    !dropdown.contains(e.target)) {
                     dropdown.style.display = 'none';
                 }
             });
+            
+            // Actualizar posición del dropdown al hacer scroll
+            window.addEventListener('scroll', function() {
+                if (dropdown.style.display === 'block' && filtroProducto) {
+                    const inputRect = filtroProducto.getBoundingClientRect();
+                    dropdown.style.top = (inputRect.bottom + window.scrollY) + 'px';
+                    dropdown.style.left = (inputRect.left + window.scrollX) + 'px';
+                }
+            }, true);
             
             // Permitir limpiar el filtro
             filtroProducto.addEventListener('keydown', function(e) {
