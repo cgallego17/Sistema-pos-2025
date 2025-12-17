@@ -86,67 +86,77 @@
 
     <div class="card-modern mt-4">
         <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-list-ul"></i> Movimientos de Inventario</h5>
-            <small class="text-muted">Total: {{ movimientos.paginator.count|intcomma }} movimientos</small>
+            <h5 class="mb-0"><i class="bi bi-list-ul"></i> Resumen de Entradas y Salidas por Producto</h5>
+            <small class="text-muted">Total: {{ resumen_productos.paginator.count|intcomma }} productos</small>
         </div>
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-sm">
                     <thead>
                         <tr>
-                            <th>Fecha/Hora</th>
+                            <th>Código</th>
                             <th>Producto</th>
-                            <th>Tipo</th>
-                            <th>Cantidad</th>
-                            <th>Stock Anterior</th>
-                            <th>Stock Nuevo</th>
-                            <th>Usuario</th>
-                            <th>Observaciones</th>
+                            <th>Atributo</th>
+                            <th class="text-end">Entradas</th>
+                            <th class="text-end">Salidas</th>
+                            <th class="text-end">Ajustes</th>
+                            <th class="text-end"><strong>Neto</strong></th>
+                            <th class="text-end"><strong>Stock Actual</strong></th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for m in movimientos %}
+                        {% for item in resumen_productos %}
                         <tr>
-                            <td>{{ m.fecha|date:"d/m/Y H:i" }}</td>
-                            <td><strong>{{ m.producto.codigo }}</strong> - {{ m.producto.nombre }}</td>
-                            <td>
-                                {% if m.tipo == 'entrada' %}
-                                <span class="badge badge-modern badge-success-modern">Entrada</span>
-                                {% elif m.tipo == 'salida' %}
-                                <span class="badge badge-modern badge-danger-modern">Salida</span>
+                            <td><strong>{{ item.codigo }}</strong></td>
+                            <td>{{ item.nombre }}</td>
+                            <td>{{ item.atributo|default:"-" }}</td>
+                            <td class="text-end">
+                                <span class="badge badge-modern badge-success-modern">{{ item.total_entradas|intcomma }}</span>
+                            </td>
+                            <td class="text-end">
+                                <span class="badge badge-modern badge-danger-modern">{{ item.total_salidas|intcomma }}</span>
+                            </td>
+                            <td class="text-end">
+                                {% if item.ajustes != 0 %}
+                                <span class="badge badge-modern badge-warning-modern">{% if item.ajustes > 0 %}+{% endif %}{{ item.ajustes|intcomma }}</span>
                                 {% else %}
-                                <span class="badge badge-modern badge-warning-modern">Ajuste</span>
+                                <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
-                            <td><strong>{% if m.tipo == 'entrada' %}+{% elif m.tipo == 'salida' %}-{% endif %}{{ m.cantidad|intcomma }}</strong></td>
-                            <td>{{ m.stock_anterior|intcomma }}</td>
-                            <td><strong>{{ m.stock_nuevo|intcomma }}</strong></td>
-                            <td>{{ m.usuario.username|default:"-" }}</td>
-                            <td>{{ m.observaciones|default:"-" }}</td>
+                            <td class="text-end">
+                                <strong class="{% if item.neto > 0 %}text-success{% elif item.neto < 0 %}text-danger{% else %}text-muted{% endif %}">
+                                    {% if item.neto > 0 %}+{% endif %}{{ item.neto|intcomma }}
+                                </strong>
+                            </td>
+                            <td class="text-end">
+                                <strong class="{% if item.stock_actual > 0 %}text-primary{% elif item.stock_actual == 0 %}text-warning{% else %}text-danger{% endif %}">
+                                    {{ item.stock_actual|intcomma }}
+                                </strong>
+                            </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="8" class="text-center text-muted">No hay movimientos en este rango.</td>
+                            <td colspan="8" class="text-center text-muted">No hay productos con movimientos en este rango.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
 
-            {% if movimientos.paginator.num_pages > 1 %}
-            <nav class="mt-3" aria-label="Paginación movimientos">
+            {% if resumen_productos.paginator.num_pages > 1 %}
+            <nav class="mt-3" aria-label="Paginación productos">
                 <ul class="pagination pagination-sm mb-0">
-                    {% if movimientos.has_previous %}
+                    {% if resumen_productos.has_previous %}
                     <li class="page-item">
-                        <a class="page-link" href="?tipo=inventario&producto={{ producto_id }}&tipo_mov={{ tipo_movimiento }}&fecha_desde={{ fecha_desde }}&fecha_hasta={{ fecha_hasta }}&page={{ movimientos.previous_page_number }}">Anterior</a>
+                        <a class="page-link" href="?tipo=inventario&producto={{ producto_id }}&tipo_mov={{ tipo_movimiento }}&fecha_desde={{ fecha_desde }}&fecha_hasta={{ fecha_hasta }}&page={{ resumen_productos.previous_page_number }}">Anterior</a>
                     </li>
                     {% endif %}
                     <li class="page-item disabled">
-                        <span class="page-link">Página {{ movimientos.number }} de {{ movimientos.paginator.num_pages }}</span>
+                        <span class="page-link">Página {{ resumen_productos.number }} de {{ resumen_productos.paginator.num_pages }}</span>
                     </li>
-                    {% if movimientos.has_next %}
+                    {% if resumen_productos.has_next %}
                     <li class="page-item">
-                        <a class="page-link" href="?tipo=inventario&producto={{ producto_id }}&tipo_mov={{ tipo_movimiento }}&fecha_desde={{ fecha_desde }}&fecha_hasta={{ fecha_hasta }}&page={{ movimientos.next_page_number }}">Siguiente</a>
+                        <a class="page-link" href="?tipo=inventario&producto={{ producto_id }}&tipo_mov={{ tipo_movimiento }}&fecha_desde={{ fecha_desde }}&fecha_hasta={{ fecha_hasta }}&page={{ resumen_productos.next_page_number }}">Siguiente</a>
                     </li>
                     {% endif %}
                 </ul>

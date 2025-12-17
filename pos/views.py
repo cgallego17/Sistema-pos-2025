@@ -2177,10 +2177,8 @@ def reportes_view(request):
     # Si es inventario, usar la vista de movimientos de inventario
     if tipo_reporte == 'inventario':
         from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+        from django.db.models import Sum, Q
         from .models import MovimientoStock, Producto
-        
-        # Obtener todos los movimientos de stock
-        movimientos_list = MovimientoStock.objects.select_related('producto', 'usuario').order_by('-fecha')
         
         # Filtros
         producto_id = request.GET.get('producto')
@@ -2188,43 +2186,90 @@ def reportes_view(request):
         fecha_desde = request.GET.get('fecha_desde')
         fecha_hasta = request.GET.get('fecha_hasta')
         
+        # Base query para movimientos
+        movimientos_qs = MovimientoStock.objects.select_related('producto')
+        
         if producto_id:
-            movimientos_list = movimientos_list.filter(producto_id=producto_id)
+            movimientos_qs = movimientos_qs.filter(producto_id=producto_id)
         
         if tipo_movimiento:
-            movimientos_list = movimientos_list.filter(tipo=tipo_movimiento)
+            movimientos_qs = movimientos_qs.filter(tipo=tipo_movimiento)
         
         if fecha_desde:
             try:
                 fecha_desde_obj = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
-                movimientos_list = movimientos_list.filter(fecha__date__gte=fecha_desde_obj)
+                movimientos_qs = movimientos_qs.filter(fecha__date__gte=fecha_desde_obj)
             except ValueError:
                 pass
         
         if fecha_hasta:
             try:
                 fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
-                movimientos_list = movimientos_list.filter(fecha__date__lte=fecha_hasta_obj)
+                movimientos_qs = movimientos_qs.filter(fecha__date__lte=fecha_hasta_obj)
             except ValueError:
                 pass
         
-        # Paginación: 50 movimientos por página
-        paginator = Paginator(movimientos_list, 50)
+        # Agrupar por producto y calcular totales
+        resumen_productos = []
+        productos_con_movimientos = movimientos_qs.values('producto_id').distinct()
+        
+        for item in productos_con_movimientos:
+            producto = Producto.objects.get(id=item['producto_id'])
+            movimientos_producto = movimientos_qs.filter(producto_id=producto.id)
+            
+            # Calcular entradas (ingreso)
+            total_entradas = movimientos_producto.filter(tipo='ingreso').aggregate(
+                total=Sum('cantidad')
+            )['total'] or 0
+            
+            # Calcular salidas (salida)
+            total_salidas = movimientos_producto.filter(tipo='salida').aggregate(
+                total=Sum('cantidad')
+            )['total'] or 0
+            
+            # Calcular ajustes (pueden ser positivos o negativos)
+            ajustes = movimientos_producto.filter(tipo='ajuste').aggregate(
+                total=Sum('cantidad')
+            )['total'] or 0
+            
+            # Neto = entradas - salidas + ajustes
+            neto = total_entradas - total_salidas + ajustes
+            
+            # Stock actual del producto
+            stock_actual = producto.stock
+            
+            resumen_productos.append({
+                'producto': producto,
+                'codigo': producto.codigo,
+                'nombre': producto.nombre,
+                'atributo': producto.atributo,
+                'total_entradas': int(total_entradas),
+                'total_salidas': int(total_salidas),
+                'ajustes': int(ajustes),
+                'neto': int(neto),
+                'stock_actual': stock_actual,
+            })
+        
+        # Ordenar por nombre
+        resumen_productos.sort(key=lambda x: x['nombre'])
+        
+        # Paginación: 50 productos por página
+        paginator = Paginator(resumen_productos, 50)
         page = request.GET.get('page', 1)
         
         try:
-            movimientos = paginator.page(page)
+            resumen_paginated = paginator.page(page)
         except PageNotAnInteger:
-            movimientos = paginator.page(1)
+            resumen_paginated = paginator.page(1)
         except EmptyPage:
-            movimientos = paginator.page(paginator.num_pages)
+            resumen_paginated = paginator.page(paginator.num_pages)
         
         # Obtener lista de productos para el filtro
         productos = Producto.objects.filter(activo=True).order_by('nombre')
         
         context = {
             'tipo_reporte': 'inventario',
-            'movimientos': movimientos,
+            'resumen_productos': resumen_paginated,
             'productos': productos,
             'producto_id': producto_id,
             'tipo_movimiento': tipo_movimiento,
