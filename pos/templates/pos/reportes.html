@@ -75,8 +75,6 @@
         </div>
     </div>
 
-    {% if not modo_simple %}
-    {% if not modo_simple %}
     <div class="row mt-4 g-4">
         <div class="col-lg-6">
             <div class="card-modern">
@@ -84,11 +82,6 @@
                     <h5 class="mb-0">Top productos (por cantidad)</h5>
                 </div>
                 <div class="card-body">
-                    {% if not caja_usuario_sel %}
-                    <div class="alert alert-warning mb-3">
-                        Para ver este reporte como en <strong>Caja</strong>, escribe un <strong>CajaUsuario ID</strong> y filtra.
-                    </div>
-                    {% endif %}
                     <div class="table-responsive">
                         <table class="table table-sm">
                             <thead>
@@ -486,7 +479,7 @@
                         <ul class="pagination pagination-sm mb-0">
                             {% if movimientos_caja_detalle.has_previous %}
                             <li class="page-item">
-                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&caja_usuario_id={{ caja_usuario_id }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&page_movs_caja={{ movimientos_caja_detalle.previous_page_number }}">Anterior</a>
+                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&page_movs_caja={{ movimientos_caja_detalle.previous_page_number }}">Anterior</a>
                             </li>
                             {% endif %}
                             <li class="page-item disabled">
@@ -494,7 +487,7 @@
                             </li>
                             {% if movimientos_caja_detalle.has_next %}
                             <li class="page-item">
-                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&caja_usuario_id={{ caja_usuario_id }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&page_movs_caja={{ movimientos_caja_detalle.next_page_number }}">Siguiente</a>
+                                <a class="page-link" href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&page_movs_caja={{ movimientos_caja_detalle.next_page_number }}">Siguiente</a>
                             </li>
                             {% endif %}
                         </ul>
