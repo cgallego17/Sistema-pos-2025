@@ -59,7 +59,7 @@
                                value="{% if producto_id %}{% for p in productos %}{% if p.id|stringformat:"s" == producto_id %}{{ p.codigo }} - {{ p.nombre }}{% endif %}{% endfor %}{% endif %}">
                         <input type="hidden" name="producto" id="producto_id_hidden" value="{{ producto_id }}">
                         <div class="autocomplete-dropdown" 
-                             style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 10001; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 4px 4px;">
+                             style="position: fixed; background: white; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; z-index: 99999; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 4px; min-width: 300px;">
                         </div>
                     </div>
                 </div>
@@ -325,7 +325,13 @@
                                     </div>
                                 `;
                                 }).join('');
+                                
+                                // Calcular posición del dropdown usando getBoundingClientRect
+                                const inputRect = filtroProducto.getBoundingClientRect();
                                 dropdown.style.display = 'block';
+                                dropdown.style.top = (inputRect.bottom + window.scrollY) + 'px';
+                                dropdown.style.left = (inputRect.left + window.scrollX) + 'px';
+                                dropdown.style.width = inputRect.width + 'px';
                                 
                                 // Agregar eventos a los items
                                 dropdown.querySelectorAll('.autocomplete-item').forEach(item => {
@@ -348,7 +354,12 @@
                                 });
                             } else {
                                 dropdown.innerHTML = '<div style="padding: 0.5rem; color: #64748b;">No se encontraron productos</div>';
+                                // Calcular posición del dropdown usando getBoundingClientRect
+                                const inputRect = filtroProducto.getBoundingClientRect();
                                 dropdown.style.display = 'block';
+                                dropdown.style.top = (inputRect.bottom + window.scrollY) + 'px';
+                                dropdown.style.left = (inputRect.left + window.scrollX) + 'px';
+                                dropdown.style.width = inputRect.width + 'px';
                             }
                         })
                         .catch(() => {
