@@ -2177,7 +2177,7 @@ def reportes_view(request):
     # Si es inventario, usar la vista de movimientos de inventario
     if tipo_reporte == 'inventario':
         from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-        from django.db.models import Sum, Q
+        from django.db.models import Q
         from .models import MovimientoStock, Producto
         
         # Filtros
@@ -2217,7 +2217,15 @@ def reportes_view(request):
         productos_con_movimientos = movimientos_qs.values('producto_id').distinct()
         
         for item in productos_con_movimientos:
-            producto = Producto.objects.get(id=item['producto_id'])
+            producto_id = item.get('producto_id')
+            # Saltar si producto_id es None
+            if not producto_id:
+                continue
+            
+            try:
+                producto = Producto.objects.get(id=producto_id)
+            except Producto.DoesNotExist:
+                continue
             
             # Clave única: código + atributo (None se convierte a '' para comparación)
             atributo_key = producto.atributo if producto.atributo else ''
