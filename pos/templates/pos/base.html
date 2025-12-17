@@ -1306,6 +1306,13 @@
                     <i class="bi bi-people-fill"></i> Clientes Potenciales
                 </a>
             </li>
+            {% if es_administrador or user.is_staff %}
+            <li class="nav-item">
+                <a href="{% url 'pos:reportes' %}" class="nav-link-custom {% if 'reportes' in request.path %}active{% endif %}">
+                    <i class="bi bi-graph-up"></i> Reportes
+                </a>
+            </li>
+            {% endif %}
             {% if user.is_staff %}
             <li class="nav-item">
                 <a href="{% url 'pos:usuarios' %}" class="nav-link-custom {% if 'usuarios' in request.path %}active{% endif %}">
@@ -1409,6 +1416,14 @@
                     <span>Clientes Potenciales</span>
                 </a>
             </li>
+            {% if es_administrador or user.is_staff %}
+            <li class="mobile-nav-item">
+                <a href="{% url 'pos:reportes' %}" class="mobile-nav-link {% if 'reportes' in request.path %}active{% endif %}">
+                    <i class="bi bi-graph-up"></i>
+                    <span>Reportes</span>
+                </a>
+            </li>
+            {% endif %}
             {% if user.is_staff %}
             <li class="mobile-nav-item">
                 <a href="{% url 'pos:usuarios' %}" class="mobile-nav-link {% if 'usuarios' in request.path %}active{% endif %}">
