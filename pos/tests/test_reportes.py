@@ -193,6 +193,7 @@ class ReportesTestCase(TestCase):
         resumen_diario = ctx.get('resumen_diario') or []
         self.assertEqual(len(resumen_diario), 1)
         d0 = resumen_diario[0]
+        self.assertEqual(d0['saldo_inicial'], 0)
         self.assertEqual(d0['ventas_total'], 30000)
         self.assertEqual(d0['ventas_cantidad'], 2)
         self.assertEqual(d0['anuladas_total'], 5000)

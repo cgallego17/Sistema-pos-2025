@@ -2198,6 +2198,7 @@ def reportes_view(request):
     tz = timezone.get_current_timezone()
 
     usar_corte_dia = request.GET.get('usar_corte_dia', '1') in ('1', 'true', 'True', 'on', 'yes')
+    ocultar_cajas_sin_mov = request.GET.get('ocultar_cajas_sin_mov', '1') in ('1', 'true', 'True', 'on', 'yes')
     corte_dia_str = (request.GET.get('corte_dia') or '05:00').strip()
     try:
         hh, mm = corte_dia_str.split(':', 1)
@@ -2502,6 +2503,16 @@ def reportes_view(request):
         Q(fecha_cierre__gte=inicio_dt) | Q(fecha_cierre__isnull=True)
     ).select_related('usuario', 'caja').order_by('-fecha_apertura')
 
+    if ocultar_cajas_sin_mov:
+        from django.db.models import Exists, OuterRef
+        cajas_qs = cajas_qs.annotate(
+            tiene_movimientos=Exists(
+                GastoCaja.objects.filter(caja_usuario_id=OuterRef('pk'))
+            )
+        ).filter(
+            Q(tiene_movimientos=True) | Q(monto_inicial__gt=0) | Q(monto_final__gt=0)
+        )
+
     # Movimientos (gastos/ingresos/retiros) por rango (no depende de una caja específica)
     movimientos_qs = GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario').order_by('-fecha')
     total_gastos = int(movimientos_qs.filter(tipo='gasto').exclude(descripcion__icontains='Retiro de dinero al cerrar caja').aggregate(total=Sum('monto'))['total'] or 0)
@@ -2514,6 +2525,27 @@ def reportes_view(request):
         dia_expr = TruncDate(ExpressionWrapper(F('fecha') - corte_delta, output_field=DateTimeField()), tzinfo=tz)
     else:
         dia_expr = TruncDate('fecha', tzinfo=tz)
+
+    # Saldo inicial por dia: suma de montos iniciales de cajas abiertas ese dia (segun corte)
+    if usar_corte_dia:
+        dia_apertura_expr = TruncDate(
+            ExpressionWrapper(F('fecha_apertura') - corte_delta, output_field=DateTimeField()),
+            tzinfo=tz
+        )
+    else:
+        dia_apertura_expr = TruncDate('fecha_apertura', tzinfo=tz)
+
+    saldo_inicial_map = {
+        r['dia']: int(r['saldo_inicial'] or 0)
+        for r in CajaUsuario.objects.filter(
+            fecha_apertura__gte=inicio_dt,
+            fecha_apertura__lte=fin_dt
+        ).annotate(
+            dia=dia_apertura_expr
+        ).values('dia').annotate(
+            saldo_inicial=Sum('monto_inicial')
+        )
+    }
 
     ventas_diarias_qs = ventas_qs.annotate(dia=dia_expr)
     ventas_validas_diarias = ventas_diarias_qs.filter(anulada=False)
@@ -2575,6 +2607,7 @@ def reportes_view(request):
         mi = movs_i_map.get(dia, {})
         mr = movs_r_map.get(dia, {})
 
+        saldo_inicial = int(saldo_inicial_map.get(dia, 0) or 0)
         ventas_ef = _n(vo.get('ventas_efectivo'))
         ventas_tj = _n(vo.get('ventas_tarjeta'))
         ventas_tf = _n(vo.get('ventas_transferencia'))
@@ -2588,6 +2621,7 @@ def reportes_view(request):
 
         resumen_diario.append({
             'dia': dia,
+            'saldo_inicial': saldo_inicial,
             'ventas_total': _n(vo.get('total_ventas')),
             'ventas_cantidad': _n(vo.get('cantidad_ventas')),
             'anuladas_total': _n(va.get('total_anuladas')),
@@ -2625,6 +2659,7 @@ def reportes_view(request):
         'fin_dt': fin_dt,
         'usar_corte_dia': usar_corte_dia,
         'corte_dia': corte_dia_str,
+        'ocultar_cajas_sin_mov': ocultar_cajas_sin_mov,
 
         # Ventas
         'total_ventas': total_ventas,

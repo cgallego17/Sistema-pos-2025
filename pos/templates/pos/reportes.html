@@ -35,6 +35,16 @@
                         </div>
                         <small class="text-muted">Ej: 05:00 = lo de 00:00–04:59 cuenta al día anterior</small>
                     </div>
+                    <div class="col-md-4">
+                        <label class="form-label-modern">Cajas</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="ocultar_cajas_sin_mov" name="ocultar_cajas_sin_mov" value="1" {% if ocultar_cajas_sin_mov %}checked{% endif %}>
+                            <label class="form-check-label" for="ocultar_cajas_sin_mov">
+                                Ocultar cajas sin movimientos
+                            </label>
+                        </div>
+                        <small class="text-muted">Quita cajas “0/0” sin retiros/gastos para que la lista quede limpia</small>
+                    </div>
                     <div class="col-md-4 d-flex align-items-end gap-2">
                         <button type="submit" class="btn btn-primary-pos w-100">
                             <i class="bi bi-search"></i> Filtrar
@@ -44,27 +54,27 @@
             </form>
             <div class="mt-3 d-flex flex-wrap gap-2">
                 <a class="btn btn-sm btn-outline-primary"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&export=ventas">
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=ventas">
                     <i class="bi bi-download"></i> CSV Ventas
                 </a>
                 <a class="btn btn-sm btn-outline-success"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&export=ventas&format=xlsx">
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=ventas&format=xlsx">
                     <i class="bi bi-file-earmark-excel"></i> Excel Ventas
                 </a>
                 <a class="btn btn-sm btn-outline-primary"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&export=movimientos">
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=movimientos">
                     <i class="bi bi-download"></i> CSV Movimientos
                 </a>
                 <a class="btn btn-sm btn-outline-success"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&export=movimientos&format=xlsx">
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=movimientos&format=xlsx">
                     <i class="bi bi-file-earmark-excel"></i> Excel Movimientos
                 </a>
                 <a class="btn btn-sm btn-outline-primary"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&export=cajas">
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=cajas">
                     <i class="bi bi-download"></i> CSV Cajas
                 </a>
                 <a class="btn btn-sm btn-outline-success"
-                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&export=cajas&format=xlsx">
+                   href="?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}&usar_corte_dia={% if usar_corte_dia %}1{% else %}0{% endif %}&corte_dia={{ corte_dia|default:'05:00' }}&ocultar_cajas_sin_mov={% if ocultar_cajas_sin_mov %}1{% else %}0{% endif %}&export=cajas&format=xlsx">
                     <i class="bi bi-file-earmark-excel"></i> Excel Cajas
                 </a>
                 <span class="text-muted" style="align-self:center;">
@@ -193,6 +203,7 @@
                             <thead>
                                 <tr>
                                     <th>Día</th>
+                                    <th>Saldo inicial</th>
                                     <th>Ventas OK</th>
                                     <th>Anuladas</th>
                                     <th>Efectivo</th>
@@ -208,6 +219,7 @@
                                 {% for d in resumen_diario %}
                                 <tr>
                                     <td><strong>{{ d.dia|date:"d/m/Y" }}</strong></td>
+                                    <td>${{ d.saldo_inicial|intcomma }}</td>
                                     <td>${{ d.ventas_total|intcomma }} ({{ d.ventas_cantidad|intcomma }})</td>
                                     <td>${{ d.anuladas_total|intcomma }} ({{ d.anuladas_cantidad|intcomma }})</td>
                                     <td>${{ d.ventas_efectivo|intcomma }}</td>
@@ -220,7 +232,7 @@
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="10" class="text-center text-muted">No hay datos diarios en este rango.</td>
+                                    <td colspan="11" class="text-center text-muted">No hay datos diarios en este rango.</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
