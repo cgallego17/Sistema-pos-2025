@@ -999,19 +999,19 @@
             const nuevoBancos = bancosInicial - retiroBancos;
 
             if (retiroEfectivo > 0 || retiroBancos > 0) {
-                saldoDespuesRetiro.style.display = 'block';
+                    saldoDespuesRetiro.style.display = 'block';
                 saldoCalculado.textContent =
                     'Efectivo: $' + nuevoEfectivo.toLocaleString('es-ES') +
                     ' | Bancos: $' + nuevoBancos.toLocaleString('es-ES');
-                if (montoFinalInput) {
+                    if (montoFinalInput) {
                     montoFinalInput.value = Math.max(0, nuevoEfectivo);
-                }
-            } else {
-                saldoDespuesRetiro.style.display = 'none';
-                if (montoFinalInput) {
+                    }
+                } else {
+                    saldoDespuesRetiro.style.display = 'none';
+                    if (montoFinalInput) {
                     montoFinalInput.value = Math.max(0, saldoInicial);
+                    }
                 }
-            }
         }
 
         if (dineroRetirarEfectivoInput && saldoDespuesRetiro && saldoCalculado) {
@@ -1068,3 +1068,4 @@
         }
     });
 </script>
+

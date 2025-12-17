@@ -190,7 +190,8 @@
                                     <th>Gastos (sin retiro)</th>
                                     <th>Ingresos</th>
                                     <th>Retiros</th>
-                                    <th>Neto efectivo</th>
+                                    <th>Neto operativo</th>
+                                    <th>Neto después de retiros</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -205,11 +206,12 @@
                                     <td>${{ d.gastos_sin_retiro_total|intcomma }} ({{ d.gastos_sin_retiro_cantidad|intcomma }})</td>
                                     <td>${{ d.ingresos_total|intcomma }} ({{ d.ingresos_cantidad|intcomma }})</td>
                                     <td>${{ d.retiros_total|intcomma }} ({{ d.retiros_cantidad|intcomma }})</td>
-                                    <td><strong>${{ d.neto_efectivo|intcomma }}</strong></td>
+                                    <td><strong>${{ d.neto_operativo|intcomma }}</strong></td>
+                                    <td><strong>${{ d.neto_despues_retiros|intcomma }}</strong></td>
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="10" class="text-center text-muted">No hay datos diarios en este rango.</td>
+                                    <td colspan="11" class="text-center text-muted">No hay datos diarios en este rango.</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

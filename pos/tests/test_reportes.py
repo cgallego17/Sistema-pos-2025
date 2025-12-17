@@ -203,7 +203,8 @@ class ReportesTestCase(TestCase):
         self.assertEqual(d0['gastos_sin_retiro_total'], 3000)
         self.assertEqual(d0['ingresos_total'], 1000)
         self.assertEqual(d0['retiros_total'], 7000)
-        self.assertEqual(d0['neto_efectivo'], 10000 + 1000 - 3000 - 7000)
+        self.assertEqual(d0['neto_operativo'], 10000 + 1000 - 3000)
+        self.assertEqual(d0['neto_despues_retiros'], 10000 + 1000 - 3000 - 7000)
 
         # Resúmenes
         resumen_usuarios = list(ctx['resumen_por_usuario'])

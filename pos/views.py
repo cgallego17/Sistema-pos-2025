@@ -2544,8 +2544,12 @@ def reportes_view(request):
         ingresos = _n(mi.get('total_ingresos'))
         retiros = _n(mr.get('total_retiros'))
 
-        # Neto de efectivo estimado del día (sin monto inicial): efectivo + ingresos - gastos - retiros
-        neto_efectivo = ventas_ef + ingresos - gastos_sr - retiros
+        # Neto operativo (sin retiros): efectivo + ingresos - gastos.
+        # Los retiros son movimientos de administración de caja (salida de fondos),
+        # no una "pérdida" operativa; por eso se reportan aparte.
+        neto_operativo = ventas_ef + ingresos - gastos_sr
+        # Neto después de retiros: útil para conciliación del efectivo del día.
+        neto_despues_retiros = neto_operativo - retiros
 
         resumen_diario.append({
             'dia': dia,
@@ -2562,7 +2566,8 @@ def reportes_view(request):
             'ingresos_cantidad': _n(mi.get('cantidad_ingresos')),
             'retiros_total': retiros,
             'retiros_cantidad': _n(mr.get('cantidad_retiros')),
-            'neto_efectivo': int(neto_efectivo),
+            'neto_operativo': int(neto_operativo),
+            'neto_despues_retiros': int(neto_despues_retiros),
         })
 
     # Paginación (ventas y movimientos)
