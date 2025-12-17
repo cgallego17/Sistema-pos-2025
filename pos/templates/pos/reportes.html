@@ -109,12 +109,7 @@
                         <tr>
                             <td><strong>{{ item.codigo }}</strong></td>
                             <td>{{ item.nombre }}</td>
-                            <td>
-                                {{ item.atributos }}
-                                {% if item.cantidad_variantes > 1 %}
-                                <small class="text-muted">({{ item.cantidad_variantes }} variantes)</small>
-                                {% endif %}
-                            </td>
+                            <td>{{ item.atributo }}</td>
                             <td class="text-end">
                                 <span class="badge badge-modern badge-success-modern">{{ item.total_entradas|intcomma }}</span>
                             </td>

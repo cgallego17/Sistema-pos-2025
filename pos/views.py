@@ -2209,63 +2209,72 @@ def reportes_view(request):
             except ValueError:
                 pass
         
-        # Agrupar por código de producto (unificar productos con mismo código pero diferentes atributos)
-        # Usar un diccionario para asegurar que cada código aparezca solo una vez
+        # Agrupar por código + atributo (cada variante aparece por separado)
+        # Usar un diccionario con clave (codigo, atributo) para evitar duplicados
         resumen_dict = {}
         
-        # Obtener todos los códigos únicos que tienen movimientos usando annotate para agrupar
-        from django.db.models import Sum as SumAgg
+        # Obtener todos los productos únicos (codigo + atributo) que tienen movimientos
+        productos_con_movimientos = movimientos_qs.values('producto_id').distinct()
         
-        # Agrupar directamente por código usando annotate
-        codigos_agrupados = movimientos_qs.values('producto__codigo').annotate(
-            total_entradas=SumAgg('cantidad', filter=Q(tipo='ingreso')),
-            total_salidas=SumAgg('cantidad', filter=Q(tipo='salida')),
-            total_ajustes=SumAgg('cantidad', filter=Q(tipo='ajuste'))
-        ).distinct()
-        
-        for item in codigos_agrupados:
-            codigo = item['producto__codigo']
+        for item in productos_con_movimientos:
+            producto = Producto.objects.get(id=item['producto_id'])
             
-            # Si ya procesamos este código, saltarlo (por si acaso)
-            if codigo in resumen_dict:
+            # Clave única: código + atributo (None se convierte a '' para comparación)
+            atributo_key = producto.atributo if producto.atributo else ''
+            clave = (producto.codigo, atributo_key)
+            
+            # Si ya procesamos esta combinación código+atributo, saltarla
+            if clave in resumen_dict:
                 continue
             
-            # Obtener todos los productos con este código (pueden tener diferentes atributos)
-            productos_mismo_codigo = Producto.objects.filter(codigo=codigo, activo=True)
+            # Obtener todos los productos con este código Y atributo (pueden ser múltiples si hay duplicados)
+            productos_mismo_codigo_atributo = Producto.objects.filter(
+                codigo=producto.codigo,
+                atributo=producto.atributo if producto.atributo else None,
+                activo=True
+            )
             
-            # Obtener el primer producto para mostrar nombre y atributos
-            producto_principal = productos_mismo_codigo.first()
-            if producto_principal:
-                # Si hay múltiples productos con el mismo código, mostrar todos los atributos
-                atributos = list(productos_mismo_codigo.exclude(
-                    Q(atributo__isnull=True) | Q(atributo='')
-                ).values_list('atributo', flat=True).distinct())
-                atributos_str = ', '.join(atributos) if atributos else '-'
-                
-                # Calcular neto
-                total_entradas = int(item['total_entradas'] or 0)
-                total_salidas = int(item['total_salidas'] or 0)
-                ajustes = int(item['total_ajustes'] or 0)
-                neto = total_entradas - total_salidas + ajustes
-                
-                # Stock actual: sumar el stock de todos los productos con este código
-                stock_actual = sum(p.stock for p in productos_mismo_codigo)
-                
-                resumen_dict[codigo] = {
-                    'codigo': codigo,
-                    'nombre': producto_principal.nombre,
-                    'atributos': atributos_str,
-                    'cantidad_variantes': productos_mismo_codigo.count(),
-                    'total_entradas': total_entradas,
-                    'total_salidas': total_salidas,
-                    'ajustes': ajustes,
-                    'neto': neto,
-                    'stock_actual': stock_actual,
-                }
+            # Obtener todos los movimientos de productos con este código Y atributo
+            movimientos_producto = movimientos_qs.filter(
+                producto__codigo=producto.codigo,
+                producto__atributo=producto.atributo if producto.atributo else None
+            )
+            
+            # Calcular entradas (ingreso) - sumar todos los productos con este código+atributo
+            total_entradas = movimientos_producto.filter(tipo='ingreso').aggregate(
+                total=Sum('cantidad')
+            )['total'] or 0
+            
+            # Calcular salidas (salida) - sumar todos los productos con este código+atributo
+            total_salidas = movimientos_producto.filter(tipo='salida').aggregate(
+                total=Sum('cantidad')
+            )['total'] or 0
+            
+            # Calcular ajustes (pueden ser positivos o negativos) - sumar todos
+            ajustes = movimientos_producto.filter(tipo='ajuste').aggregate(
+                total=Sum('cantidad')
+            )['total'] or 0
+            
+            # Neto = entradas - salidas + ajustes
+            neto = total_entradas - total_salidas + ajustes
+            
+            # Stock actual: sumar el stock de todos los productos con este código+atributo
+            stock_actual = sum(p.stock for p in productos_mismo_codigo_atributo)
+            
+            resumen_dict[clave] = {
+                'codigo': producto.codigo,
+                'nombre': producto.nombre,
+                'atributo': producto.atributo if producto.atributo else '-',
+                'total_entradas': int(total_entradas),
+                'total_salidas': int(total_salidas),
+                'ajustes': int(ajustes),
+                'neto': int(neto),
+                'stock_actual': stock_actual,
+            }
         
-        # Convertir el diccionario a lista y ordenar por código
+        # Convertir el diccionario a lista y ordenar por código y luego por atributo
         resumen_productos = list(resumen_dict.values())
-        resumen_productos.sort(key=lambda x: x['codigo'])
+        resumen_productos.sort(key=lambda x: (x['codigo'], x['atributo']))
         
         # Paginación: 50 productos por página
         paginator = Paginator(resumen_productos, 50)
