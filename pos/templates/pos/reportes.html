@@ -113,11 +113,12 @@
                             <th class="text-end">Ajustes</th>
                             <th class="text-end"><strong>Neto</strong></th>
                             <th class="text-end"><strong>Stock Actual</strong></th>
+                            <th>Análisis</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for item in resumen_productos %}
-                        <tr>
+                        <tr class="{% if item.tiene_problemas %}table-warning{% endif %}">
                             <td><strong>{{ item.codigo }}</strong></td>
                             <td>{{ item.nombre }}</td>
                             <td>{{ item.atributo }}</td>
@@ -144,7 +145,81 @@
                                     {{ item.stock_actual|intcomma }}
                                 </strong>
                             </td>
+                            <td>
+                                {% if item.tiene_problemas %}
+                                <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="collapse" data-bs-target="#analisis-{{ forloop.counter }}" aria-expanded="false">
+                                    <i class="bi bi-exclamation-triangle"></i> Ver causas
+                                </button>
+                                {% else %}
+                                <span class="text-muted small">✓ OK</span>
+                                {% endif %}
+                            </td>
                         </tr>
+                        {% if item.tiene_problemas %}
+                        <tr>
+                            <td colspan="9" class="p-0">
+                                <div class="collapse" id="analisis-{{ forloop.counter }}">
+                                    <div class="card card-body bg-light border-warning m-2">
+                                        <h6 class="text-warning mb-2"><i class="bi bi-exclamation-triangle"></i> Análisis de Inconsistencias</h6>
+                                        
+                                        {% if item.alertas %}
+                                        <div class="mb-2">
+                                            <strong>Alertas:</strong>
+                                            <ul class="mb-0">
+                                                {% for alerta in item.alertas %}
+                                                <li>{{ alerta }}</li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if item.causas_negativos %}
+                                        <div>
+                                            <strong>Causas de valores negativos:</strong>
+                                            <ul class="mb-0">
+                                                {% for causa in item.causas_negativos %}
+                                                <li>{{ causa }}</li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if item.neto < 0 %}
+                                        <div class="mt-2">
+                                            <strong>Explicación del Neto Negativo:</strong>
+                                            <p class="mb-0 small">
+                                                Neto = Entradas ({{ item.total_entradas }}) - Salidas ({{ item.total_salidas }}) + Ajustes ({{ item.ajustes }}) = {{ item.neto }}
+                                                <br>
+                                                {% if item.total_salidas > item.total_entradas %}
+                                                Las salidas superan las entradas en {{ item.diferencia_salidas_entradas }} unidades.
+                                                {% endif %}
+                                                {% if item.ajustes < 0 %}
+                                                Los ajustes negativos reducen el stock en {{ item.ajustes|abs }} unidades.
+                                                {% endif %}
+                                            </p>
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if item.stock_actual < 0 %}
+                                        <div class="mt-2">
+                                            <strong>Explicación del Stock Negativo:</strong>
+                                            <p class="mb-0 small">
+                                                El stock actual es negativo ({{ item.stock_actual }}), lo que indica una inconsistencia en el inventario.
+                                                Esto puede deberse a:
+                                                <ul class="mb-0">
+                                                    <li>Ventas realizadas sin stock suficiente</li>
+                                                    <li>Ajustes manuales incorrectos</li>
+                                                    <li>Movimientos históricos no registrados correctamente</li>
+                                                    <li>Eliminación de ingresos que ya tenían movimientos asociados</li>
+                                                </ul>
+                                            </p>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
                         {% empty %}
                         <tr>
                             <td colspan="8" class="text-center text-muted">No hay productos con movimientos en este rango.</td>

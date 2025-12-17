@@ -2257,7 +2257,7 @@ def reportes_view(request):
                 stock_map[clave] = {'stock': 0, 'nombre': p['nombre']}
             stock_map[clave]['stock'] += p['stock']
         
-        # Construir la lista de resultados
+        # Construir la lista de resultados con análisis de negativos
         resumen_productos = []
         for item in resumen_agrupado:
             codigo = item['producto__codigo']
@@ -2274,6 +2274,41 @@ def reportes_view(request):
             stock_actual = stock_info['stock']
             nombre = stock_info['nombre'] or item.get('producto__nombre', '')
             
+            # Analizar causas de negativos
+            causas_negativos = []
+            alertas = []
+            diferencia_salidas_entradas = 0
+            
+            # Análisis de Neto negativo
+            if neto < 0:
+                if total_salidas > (total_entradas + ajustes):
+                    diferencia = total_salidas - (total_entradas + ajustes)
+                    causas_negativos.append(f"Salidas ({total_salidas}) superan entradas+ajustes ({total_entradas + ajustes}) por {diferencia} unidades")
+                if ajustes < 0:
+                    causas_negativos.append(f"Ajustes negativos ({ajustes}) reducen el stock en {abs(ajustes)} unidades")
+            
+            # Calcular diferencia entre salidas y entradas para el template
+            if total_salidas > total_entradas:
+                diferencia_salidas_entradas = total_salidas - total_entradas
+            
+            # Análisis de Stock Actual negativo
+            if stock_actual < 0:
+                alertas.append(f"⚠️ Stock actual negativo: {stock_actual}. Posible inconsistencia en el inventario.")
+                # Calcular stock esperado basado en movimientos
+                stock_esperado = total_entradas - total_salidas + ajustes
+                if stock_esperado != stock_actual:
+                    diferencia_stock = stock_actual - stock_esperado
+                    causas_negativos.append(f"Inconsistencia: Stock actual ({stock_actual}) difiere del esperado ({stock_esperado}) por {diferencia_stock} unidades")
+            
+            # Análisis de Stock Actual cero con movimientos
+            if stock_actual == 0 and (total_entradas > 0 or total_salidas > 0):
+                if total_salidas > total_entradas:
+                    alertas.append("⚠️ Stock agotado: Se vendió más de lo que ingresó")
+            
+            # Análisis de ajustes significativos
+            if abs(ajustes) > (total_entradas + total_salidas) * 0.5 and (total_entradas + total_salidas) > 0:
+                alertas.append(f"⚠️ Ajustes significativos ({ajustes}) comparado con movimientos normales")
+            
             resumen_productos.append({
                 'codigo': codigo,
                 'nombre': nombre,
@@ -2283,6 +2318,10 @@ def reportes_view(request):
                 'ajustes': ajustes,
                 'neto': neto,
                 'stock_actual': stock_actual,
+                'causas_negativos': causas_negativos,
+                'alertas': alertas,
+                'tiene_problemas': len(causas_negativos) > 0 or len(alertas) > 0 or neto < 0 or stock_actual < 0,
+                'diferencia_salidas_entradas': diferencia_salidas_entradas,
             })
         
         # Ordenar por código y atributo
