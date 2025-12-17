@@ -4343,6 +4343,26 @@ def editar_usuario_view(request, usuario_id):
                 grupo = Group.objects.get(id=grupo_id)
                 usuario.groups.add(grupo)
             
+            # Actualizar o crear perfil de usuario y PIN
+            pin = request.POST.get('pin', '').strip()
+            perfil, created = PerfilUsuario.objects.get_or_create(usuario=usuario)
+            if pin:
+                # Validar que el PIN tenga 4 dígitos
+                if len(pin) == 4 and pin.isdigit():
+                    perfil.pin = pin
+                    perfil.pin_establecido = True
+                    from django.utils import timezone
+                    perfil.fecha_creacion_pin = timezone.now()
+                    perfil.save()
+                else:
+                    messages.warning(request, 'El PIN debe tener exactamente 4 dígitos numéricos')
+            else:
+                # Si no se proporciona PIN, eliminar el PIN existente
+                perfil.pin = ''
+                perfil.pin_establecido = False
+                perfil.fecha_creacion_pin = None
+                perfil.save()
+            
             messages.success(request, f'Usuario {usuario.username} actualizado exitosamente')
             return redirect('pos:usuarios')
         except Exception as e:

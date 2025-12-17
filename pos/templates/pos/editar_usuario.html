@@ -54,6 +54,14 @@
                         </div>
                         
                         <div class="form-group-modern">
+                            <label class="form-label-modern">PIN (4 dígitos)</label>
+                            <input type="text" class="form-control form-control-modern" name="pin" 
+                                   value="{% if usuario.perfil.pin_establecido %}{{ usuario.perfil.pin }}{% endif %}" 
+                                   maxlength="4" pattern="[0-9]{4}" placeholder="0000">
+                            <small style="color: #94a3b8;">PIN de 4 dígitos para acceso rápido. Dejar vacío para eliminar el PIN.</small>
+                        </div>
+                        
+                        <div class="form-group-modern">
                             <label class="form-label-modern">Grupo</label>
                             <select class="form-select form-control-modern" name="grupo">
                                 <option value="">Sin grupo</option>
