@@ -49,14 +49,19 @@
                 <input type="hidden" name="tipo" value="inventario">
                 <div class="col-md-3">
                     <label class="form-label-modern">Producto:</label>
-                    <select class="form-select form-control-modern" name="producto" id="filtroProducto">
-                        <option value="">Todos los productos</option>
-                        {% for producto in productos %}
-                        <option value="{{ producto.id }}" {% if producto_id == producto.id|stringformat:"s" %}selected{% endif %}>
-                            {{ producto.codigo }} - {{ producto.nombre }}
-                        </option>
-                        {% endfor %}
-                    </select>
+                    <div class="autocomplete-wrapper" style="position: relative;">
+                        <input type="text" 
+                               class="form-control form-control-modern" 
+                               id="filtroProducto" 
+                               name="producto_nombre"
+                               placeholder="Buscar producto (código o nombre)..."
+                               autocomplete="off"
+                               value="{% if producto_id %}{% for p in productos %}{% if p.id|stringformat:"s" == producto_id %}{{ p.codigo }} - {{ p.nombre }}{% endif %}{% endfor %}{% endif %}">
+                        <input type="hidden" name="producto" id="producto_id_hidden" value="{{ producto_id }}">
+                        <div class="autocomplete-dropdown" 
+                             style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        </div>
+                    </div>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label-modern">Tipo:</label>
@@ -260,6 +265,16 @@
         
         if (form) {
             form.addEventListener('submit', function(e) {
+                // Si el input de producto tiene texto pero no hay ID seleccionado, limpiar el campo
+                const filtroProducto = document.getElementById('filtroProducto');
+                const productoIdHidden = document.getElementById('producto_id_hidden');
+                if (filtroProducto && productoIdHidden) {
+                    if (filtroProducto.value.trim() && !productoIdHidden.value) {
+                        // El usuario escribió algo pero no seleccionó de la lista, limpiar
+                        productoIdHidden.value = '';
+                    }
+                }
+                
                 // Mostrar barra de carga
                 if (loadingBar) {
                     loadingBar.style.display = 'block';
@@ -272,6 +287,90 @@
                 // Scroll a la barra de carga
                 if (loadingBar) {
                     loadingBar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            });
+        }
+        
+        // Autocomplete para filtro de producto
+        const filtroProducto = document.getElementById('filtroProducto');
+        const productoIdHidden = document.getElementById('producto_id_hidden');
+        const autocompleteWrapper = filtroProducto?.closest('.autocomplete-wrapper');
+        const dropdown = autocompleteWrapper?.querySelector('.autocomplete-dropdown');
+        
+        if (filtroProducto && dropdown && productoIdHidden) {
+            let searchTimeout;
+            
+            filtroProducto.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                const query = this.value.trim();
+                
+                if (query.length < 2) {
+                    dropdown.style.display = 'none';
+                    productoIdHidden.value = '';
+                    return;
+                }
+                
+                searchTimeout = setTimeout(() => {
+                    fetch(`{% url 'pos:buscar_productos' %}?q=${encodeURIComponent(query)}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.productos && data.productos.length > 0) {
+                                dropdown.innerHTML = data.productos.map(p => {
+                                    const codigoBarras = p.codigo_barras ? ` | Cód. Barras: ${p.codigo_barras}` : '';
+                                    return `
+                                    <div class="autocomplete-item" style="padding: 0.5rem; cursor: pointer; border-bottom: 1px solid #f1f5f9;" 
+                                         data-id="${p.id}" data-codigo="${p.codigo}" data-nombre="${p.nombre}">
+                                        <strong>${p.nombre}</strong><br>
+                                        <small style="color: #64748b;">Código: ${p.codigo}${codigoBarras} | Stock: ${parseInt(p.stock).toLocaleString('es-CO', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</small>
+                                    </div>
+                                `;
+                                }).join('');
+                                dropdown.style.display = 'block';
+                                
+                                // Agregar eventos a los items
+                                dropdown.querySelectorAll('.autocomplete-item').forEach(item => {
+                                    item.addEventListener('click', function() {
+                                        const productoId = this.dataset.id;
+                                        const productoCodigo = this.dataset.codigo;
+                                        const productoNombre = this.dataset.nombre;
+                                        
+                                        filtroProducto.value = `${productoCodigo} - ${productoNombre}`;
+                                        productoIdHidden.value = productoId;
+                                        dropdown.style.display = 'none';
+                                    });
+                                    
+                                    item.addEventListener('mouseenter', function() {
+                                        this.style.background = '#f8fafc';
+                                    });
+                                    item.addEventListener('mouseleave', function() {
+                                        this.style.background = 'white';
+                                    });
+                                });
+                            } else {
+                                dropdown.innerHTML = '<div style="padding: 0.5rem; color: #64748b;">No se encontraron productos</div>';
+                                dropdown.style.display = 'block';
+                            }
+                        })
+                        .catch(() => {
+                            dropdown.style.display = 'none';
+                        });
+                }, 300);
+            });
+            
+            // Cerrar dropdown al hacer clic fuera
+            document.addEventListener('click', function(e) {
+                if (!filtroProducto.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                }
+            });
+            
+            // Permitir limpiar el filtro
+            filtroProducto.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    dropdown.style.display = 'none';
+                }
+                if (e.key === 'Backspace' && this.value === '') {
+                    productoIdHidden.value = '';
                 }
             });
         }
