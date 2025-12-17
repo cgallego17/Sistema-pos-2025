@@ -2209,49 +2209,63 @@ def reportes_view(request):
             except ValueError:
                 pass
         
-        # Agrupar por producto y calcular totales
+        # Agrupar por código de producto (unificar productos con mismo código pero diferentes atributos)
         resumen_productos = []
-        productos_con_movimientos = movimientos_qs.values('producto_id').distinct()
+        codigos_con_movimientos = movimientos_qs.values('producto__codigo').distinct()
         
-        for item in productos_con_movimientos:
-            producto = Producto.objects.get(id=item['producto_id'])
-            movimientos_producto = movimientos_qs.filter(producto_id=producto.id)
+        for item in codigos_con_movimientos:
+            codigo = item['producto__codigo']
             
-            # Calcular entradas (ingreso)
-            total_entradas = movimientos_producto.filter(tipo='ingreso').aggregate(
+            # Obtener todos los productos con este código (pueden tener diferentes atributos)
+            productos_mismo_codigo = Producto.objects.filter(codigo=codigo, activo=True)
+            
+            # Obtener todos los movimientos de productos con este código
+            movimientos_codigo = movimientos_qs.filter(producto__codigo=codigo)
+            
+            # Calcular entradas (ingreso) - sumar todos los productos con este código
+            total_entradas = movimientos_codigo.filter(tipo='ingreso').aggregate(
                 total=Sum('cantidad')
             )['total'] or 0
             
-            # Calcular salidas (salida)
-            total_salidas = movimientos_producto.filter(tipo='salida').aggregate(
+            # Calcular salidas (salida) - sumar todos los productos con este código
+            total_salidas = movimientos_codigo.filter(tipo='salida').aggregate(
                 total=Sum('cantidad')
             )['total'] or 0
             
-            # Calcular ajustes (pueden ser positivos o negativos)
-            ajustes = movimientos_producto.filter(tipo='ajuste').aggregate(
+            # Calcular ajustes (pueden ser positivos o negativos) - sumar todos
+            ajustes = movimientos_codigo.filter(tipo='ajuste').aggregate(
                 total=Sum('cantidad')
             )['total'] or 0
             
             # Neto = entradas - salidas + ajustes
             neto = total_entradas - total_salidas + ajustes
             
-            # Stock actual del producto
-            stock_actual = producto.stock
+            # Stock actual: sumar el stock de todos los productos con este código
+            stock_actual = sum(p.stock for p in productos_mismo_codigo)
             
-            resumen_productos.append({
-                'producto': producto,
-                'codigo': producto.codigo,
-                'nombre': producto.nombre,
-                'atributo': producto.atributo,
-                'total_entradas': int(total_entradas),
-                'total_salidas': int(total_salidas),
-                'ajustes': int(ajustes),
-                'neto': int(neto),
-                'stock_actual': stock_actual,
-            })
+            # Obtener el primer producto para mostrar nombre y atributos
+            producto_principal = productos_mismo_codigo.first()
+            if producto_principal:
+                # Si hay múltiples productos con el mismo código, mostrar todos los atributos
+                atributos = list(productos_mismo_codigo.exclude(
+                    Q(atributo__isnull=True) | Q(atributo='')
+                ).values_list('atributo', flat=True).distinct())
+                atributos_str = ', '.join(atributos) if atributos else '-'
+                
+                resumen_productos.append({
+                    'codigo': codigo,
+                    'nombre': producto_principal.nombre,
+                    'atributos': atributos_str,
+                    'cantidad_variantes': productos_mismo_codigo.count(),
+                    'total_entradas': int(total_entradas),
+                    'total_salidas': int(total_salidas),
+                    'ajustes': int(ajustes),
+                    'neto': int(neto),
+                    'stock_actual': stock_actual,
+                })
         
-        # Ordenar por nombre
-        resumen_productos.sort(key=lambda x: x['nombre'])
+        # Ordenar por código
+        resumen_productos.sort(key=lambda x: x['codigo'])
         
         # Paginación: 50 productos por página
         paginator = Paginator(resumen_productos, 50)
