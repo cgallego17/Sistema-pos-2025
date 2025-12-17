@@ -2316,6 +2316,7 @@ def reportes_view(request):
                 'total_entradas': total_entradas,
                 'total_salidas': total_salidas,
                 'ajustes': ajustes,
+                'ajustes_abs': abs(ajustes),  # Valor absoluto para el template
                 'neto': neto,
                 'stock_actual': stock_actual,
                 'causas_negativos': causas_negativos,
