@@ -2358,7 +2358,7 @@ def reportes_view(request):
         
         # ===== COMPARATIVA: Ingresos vs Salidas (Ventas) vs Salidas de Mercancía =====
         from .models import ItemVenta, Venta
-        from django.db.models import Sum, Count
+        # Sum ya está importado al inicio del archivo, no es necesario importarlo de nuevo
         
         # Filtros de fecha para la comparativa
         fecha_desde_comparativa = None
