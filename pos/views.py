@@ -2235,9 +2235,10 @@ def reportes_view(request):
                     items_detalle = ' | '.join([
                         f"{it.producto.nombre} x{it.cantidad} (${it.subtotal})" for it in items
                     ])
+                    fecha_local = timezone.localtime(v.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
                     ws.append([
                         v.id,
-                        v.fecha.isoformat(sep=' ', timespec='seconds'),
+                        fecha_local,
                         v.total,
                         v.metodo_pago,
                         int(v.anulada),
@@ -2250,7 +2251,7 @@ def reportes_view(request):
                     for it in items:
                         ws_items.append([
                             v.id,
-                            v.fecha.isoformat(sep=' ', timespec='seconds'),
+                            fecha_local,
                             it.producto.nombre,
                             it.cantidad,
                             it.precio_unitario,
@@ -2269,8 +2270,9 @@ def reportes_view(request):
                     fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
                 ).select_related('usuario').order_by('fecha'):
                     tipo = 'venta_anulada' if v.anulada else 'venta'
+                    fecha_local = timezone.localtime(v.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
                     ws.append([
-                        v.fecha.isoformat(sep=' ', timespec='seconds'),
+                        fecha_local,
                         tipo,
                         f'Venta #{v.id}',
                         v.total,
@@ -2284,8 +2286,9 @@ def reportes_view(request):
                 for g in GastoCaja.objects.filter(
                     fecha__gte=inicio_dt, fecha__lte=fin_dt
                 ).select_related('usuario', 'caja_usuario').order_by('fecha'):
+                    fecha_local = timezone.localtime(g.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
                     ws.append([
-                        g.fecha.isoformat(sep=' ', timespec='seconds'),
+                        fecha_local,
                         g.tipo,
                         g.descripcion,
                         g.monto,
@@ -2305,11 +2308,13 @@ def reportes_view(request):
                 ).filter(
                     Q(fecha_cierre__gte=inicio_dt) | Q(fecha_cierre__isnull=True)
                 ).select_related('usuario', 'caja').order_by('fecha_apertura'):
+                    apertura_local = timezone.localtime(cu.fecha_apertura, tz).strftime('%Y-%m-%d %H:%M:%S')
+                    cierre_local = timezone.localtime(cu.fecha_cierre, tz).strftime('%Y-%m-%d %H:%M:%S') if cu.fecha_cierre else ''
                     ws.append([
                         cu.id,
                         (cu.caja.nombre if cu.caja else ''),
-                        cu.fecha_apertura.isoformat(sep=' ', timespec='seconds'),
-                        (cu.fecha_cierre.isoformat(sep=' ', timespec='seconds') if cu.fecha_cierre else ''),
+                        apertura_local,
+                        cierre_local,
                         cu.monto_inicial,
                         (cu.monto_final if cu.monto_final is not None else ''),
                         (cu.usuario.username if cu.usuario else ''),
@@ -2349,9 +2354,10 @@ def reportes_view(request):
                 items_detalle = ' | '.join([
                     f"{it.producto.nombre} x{it.cantidad} (${it.subtotal})" for it in items
                 ])
+                fecha_local = timezone.localtime(v.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
                 writer.writerow([
                     v.id,
-                    v.fecha.isoformat(sep=' ', timespec='seconds'),
+                    fecha_local,
                     v.total,
                     v.metodo_pago,
                     int(v.completada),
@@ -2374,8 +2380,9 @@ def reportes_view(request):
                 fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
             ).select_related('usuario'):
                 tipo = 'venta_anulada' if v.anulada else 'venta'
+                fecha_local = timezone.localtime(v.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
                 writer.writerow([
-                    v.fecha.isoformat(sep=' ', timespec='seconds'),
+                    fecha_local,
                     tipo,
                     f'Venta #{v.id}',
                     v.total,
@@ -2385,8 +2392,9 @@ def reportes_view(request):
                 ])
             # Gastos/Ingresos
             for g in GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario'):
+                fecha_local = timezone.localtime(g.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
                 writer.writerow([
-                    g.fecha.isoformat(sep=' ', timespec='seconds'),
+                    fecha_local,
                     g.tipo,
                     g.descripcion,
                     g.monto,
@@ -2405,10 +2413,12 @@ def reportes_view(request):
             ).filter(
                 Q(fecha_cierre__gte=inicio_dt) | Q(fecha_cierre__isnull=True)
             ).select_related('usuario', 'caja').order_by('-fecha_apertura'):
+                apertura_local = timezone.localtime(cu.fecha_apertura, tz).strftime('%Y-%m-%d %H:%M:%S')
+                cierre_local = timezone.localtime(cu.fecha_cierre, tz).strftime('%Y-%m-%d %H:%M:%S') if cu.fecha_cierre else ''
                 writer.writerow([
                     cu.id,
-                    cu.fecha_apertura.isoformat(sep=' ', timespec='seconds'),
-                    (cu.fecha_cierre.isoformat(sep=' ', timespec='seconds') if cu.fecha_cierre else ''),
+                    apertura_local,
+                    cierre_local,
                     cu.monto_inicial,
                     (cu.monto_final if cu.monto_final is not None else ''),
                     (cu.usuario.username if cu.usuario else ''),
@@ -2545,11 +2555,8 @@ def reportes_view(request):
         retiros = _n(mr.get('total_retiros'))
 
         # Neto operativo (sin retiros): efectivo + ingresos - gastos.
-        # Los retiros son movimientos de administración de caja (salida de fondos),
-        # no una "pérdida" operativa; por eso se reportan aparte.
+        # Los retiros se muestran separados y no afectan este neto.
         neto_operativo = ventas_ef + ingresos - gastos_sr
-        # Neto después de retiros: útil para conciliación del efectivo del día.
-        neto_despues_retiros = neto_operativo - retiros
 
         resumen_diario.append({
             'dia': dia,
@@ -2567,7 +2574,6 @@ def reportes_view(request):
             'retiros_total': retiros,
             'retiros_cantidad': _n(mr.get('cantidad_retiros')),
             'neto_operativo': int(neto_operativo),
-            'neto_despues_retiros': int(neto_despues_retiros),
         })
 
     # Paginación (ventas y movimientos)
