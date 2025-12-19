@@ -2521,7 +2521,7 @@ def reportes_view(request):
         if export_tipo == 'resumen_inventario':
             from django.http import HttpResponse
             from openpyxl import Workbook
-            from openpyxl.styles import Font, Alignment
+            from openpyxl.styles import Font, Alignment, PatternFill
             
             wb = Workbook()
             ws = wb.active
@@ -2530,6 +2530,9 @@ def reportes_view(request):
             # Estilo para headers
             header_font = Font(bold=True)
             header_alignment = Alignment(horizontal='center', vertical='center')
+            
+            # Estilo para filas donde stock_actual == cantidad_contada
+            fill_coincide = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')  # Verde claro
             
             # Headers
             headers = [
@@ -2556,6 +2559,8 @@ def reportes_view(request):
                 else:
                     cantidad_contada_excel = cantidad_contada  # Incluye 0
                 
+                stock_actual = item.get('stock_actual', 0)
+                
                 ws.append([
                     item['codigo'],
                     item['nombre'],
@@ -2565,12 +2570,20 @@ def reportes_view(request):
                     item.get('total_salidas', 0),
                     item.get('ajustes', 0),
                     item.get('neto', 0),
-                    item.get('stock_actual', 0),
+                    stock_actual,
                     cantidad_contada_excel,
                     'Sí' if item.get('tiene_problemas', False) else 'No',
                     alertas_texto,
                     causas_texto,
                 ])
+                
+                # Si stock_actual coincide con cantidad_contada, resaltar la fila
+                if cantidad_contada is not None and stock_actual == cantidad_contada:
+                    row_num = ws.max_row
+                    # Aplicar fondo verde a toda la fila
+                    for col in range(1, len(headers) + 1):
+                        cell = ws.cell(row=row_num, column=col)
+                        cell.fill = fill_coincide
             
             # Ajustar ancho de columnas
             column_widths = {
