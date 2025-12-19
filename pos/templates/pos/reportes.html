@@ -129,12 +129,13 @@
                             <th class="text-end"><strong>Neto</strong></th>
                             <th class="text-end"><strong>Stock Actual</strong></th>
                             <th class="text-center">Cantidad Física Contada</th>
+                            <th class="text-end">Diferencia</th>
                             <th>Análisis</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for item in resumen_productos %}
-                        <tr class="{% if item.tiene_problemas %}table-warning{% endif %}">
+                        <tr class="{% if item.tiene_problemas %}table-warning{% elif item.coincide %}table-success{% endif %}">
                             <td><strong>{{ item.codigo }}</strong></td>
                             <td>{{ item.nombre }}</td>
                             <td>{{ item.atributo }}</td>
@@ -184,6 +185,19 @@
                                     </button>
                                 </div>
                                 <small class="text-muted d-block mt-1" id="status-{{ item.codigo }}-{{ item.atributo|default:'sin' }}"></small>
+                            </td>
+                            <td class="text-end">
+                                {% if item.diferencia is not None %}
+                                    {% if item.diferencia == 0 %}
+                                        <span class="badge badge-modern badge-success-modern">0</span>
+                                    {% elif item.diferencia > 0 %}
+                                        <span class="badge badge-modern badge-info-modern">+{{ item.diferencia|intcomma }}</span>
+                                    {% else %}
+                                        <span class="badge badge-modern badge-danger-modern">{{ item.diferencia|intcomma }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
                             </td>
                             <td>
                                 {% if item.tiene_problemas %}
@@ -262,7 +276,7 @@
                         {% endif %}
                         {% empty %}
                         <tr>
-                            <td colspan="10" class="text-center text-muted">No hay productos con movimientos en este rango.</td>
+                            <td colspan="12" class="text-center text-muted">No hay productos con movimientos en este rango.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -270,6 +284,56 @@
             </div>
         </div>
     </div>
+
+    <!-- Tabla de Diferencias entre Conteo Físico y Stock del Sistema -->
+    {% if productos_con_diferencias %}
+    <div class="card-modern mt-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Diferencias entre Conteo Físico y Stock del Sistema</h5>
+            <small class="text-muted">Total: {{ productos_con_diferencias|length|intcomma }} productos con diferencias</small>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Producto</th>
+                            <th>Atributo</th>
+                            <th class="text-end">Stock Actual (Sistema)</th>
+                            <th class="text-end">Cantidad Física Contada</th>
+                            <th class="text-end">Diferencia</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in productos_con_diferencias %}
+                        <tr class="{% if item.diferencia > 0 %}table-info{% else %}table-danger{% endif %}">
+                            <td><strong>{{ item.codigo }}</strong></td>
+                            <td>{{ item.nombre }}</td>
+                            <td>{{ item.atributo }}</td>
+                            <td class="text-end">
+                                <strong class="text-primary">{{ item.stock_actual|intcomma }}</strong>
+                            </td>
+                            <td class="text-end">
+                                <strong class="text-success">{{ item.cantidad_contada|intcomma }}</strong>
+                            </td>
+                            <td class="text-end">
+                                {% if item.diferencia > 0 %}
+                                    <span class="badge badge-modern badge-info-modern">+{{ item.diferencia|intcomma }}</span>
+                                    <small class="text-muted d-block">Sobrante</small>
+                                {% else %}
+                                    <span class="badge badge-modern badge-danger-modern">{{ item.diferencia|intcomma }}</span>
+                                    <small class="text-muted d-block">Faltante</small>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Comparativa: Ingresos vs Ventas vs Salidas de Mercancía -->
     <div class="card-modern mt-4">

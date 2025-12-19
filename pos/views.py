@@ -2353,7 +2353,8 @@ def reportes_view(request):
             if conteo:
                 conteos_fisicos[(codigo, atributo)] = conteo.cantidad_contada
         
-        # Agregar conteos físicos a los items
+        # Agregar conteos físicos a los items y calcular diferencias
+        productos_con_diferencias = []
         for item in resumen_productos:
             codigo = item['codigo']
             # Normalizar atributo de la misma manera que arriba
@@ -2362,7 +2363,28 @@ def reportes_view(request):
                 atributo = None
             else:
                 atributo = atributo_raw.strip() if atributo_raw else None
-            item['cantidad_contada'] = conteos_fisicos.get((codigo, atributo), None)
+            cantidad_contada = conteos_fisicos.get((codigo, atributo), None)
+            item['cantidad_contada'] = cantidad_contada
+            
+            # Calcular diferencia entre stock_actual y cantidad_contada
+            stock_actual = item.get('stock_actual', 0)
+            if cantidad_contada is not None:
+                diferencia = cantidad_contada - stock_actual
+                item['diferencia'] = diferencia
+                item['coincide'] = (diferencia == 0)
+                # Si hay diferencia, agregar a la lista de productos con diferencias
+                if diferencia != 0:
+                    productos_con_diferencias.append({
+                        'codigo': codigo,
+                        'nombre': item.get('nombre', ''),
+                        'atributo': item.get('atributo', '-'),
+                        'stock_actual': stock_actual,
+                        'cantidad_contada': cantidad_contada,
+                        'diferencia': diferencia,
+                    })
+            else:
+                item['diferencia'] = None
+                item['coincide'] = False
         
         # Obtener lista de productos para el filtro
         productos = Producto.objects.filter(activo=True).order_by('nombre')
@@ -2538,7 +2560,7 @@ def reportes_view(request):
             headers = [
                 'Código', 'Producto', 'Atributo', 'Stock Inicial', 'Entradas',
                 'Salidas', 'Ajustes', 'Neto', 'Stock Actual', 'Cantidad Contada',
-                'Tiene Problemas', 'Alertas', 'Causas Negativos'
+                'Diferencia', 'Tiene Problemas', 'Alertas', 'Causas Negativos'
             ]
             ws.append(headers)
             
@@ -2554,12 +2576,14 @@ def reportes_view(request):
                 
                 # Obtener cantidad_contada - puede ser None, 0, o un número positivo
                 cantidad_contada = item.get('cantidad_contada')
+                stock_actual = item.get('stock_actual', 0)
+                
                 if cantidad_contada is None:
                     cantidad_contada_excel = ''
+                    diferencia_excel = ''
                 else:
                     cantidad_contada_excel = cantidad_contada  # Incluye 0
-                
-                stock_actual = item.get('stock_actual', 0)
+                    diferencia_excel = cantidad_contada - stock_actual
                 
                 ws.append([
                     item['codigo'],
@@ -2572,6 +2596,7 @@ def reportes_view(request):
                     item.get('neto', 0),
                     stock_actual,
                     cantidad_contada_excel,
+                    diferencia_excel,
                     'Sí' if item.get('tiene_problemas', False) else 'No',
                     alertas_texto,
                     causas_texto,
@@ -2597,9 +2622,10 @@ def reportes_view(request):
                 'H': 10,  # Neto
                 'I': 12,  # Stock Actual
                 'J': 15,  # Cantidad Contada
-                'K': 15,  # Tiene Problemas
-                'L': 40,  # Alertas
-                'M': 40,  # Causas Negativos
+                'K': 12,  # Diferencia
+                'L': 15,  # Tiene Problemas
+                'M': 40,  # Alertas
+                'N': 40,  # Causas Negativos
             }
             for col, width in column_widths.items():
                 ws.column_dimensions[col].width = width
@@ -2631,6 +2657,7 @@ def reportes_view(request):
         context = {
             'tipo_reporte': 'inventario',
             'resumen_productos': resumen_productos,
+            'productos_con_diferencias': productos_con_diferencias,
             'productos': productos,
             'producto_id': producto_id,
             'tipo_movimiento': tipo_movimiento,
