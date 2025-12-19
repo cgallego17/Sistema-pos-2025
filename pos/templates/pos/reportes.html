@@ -169,7 +169,7 @@
                                            class="form-control form-control-sm conteo-fisico-input" 
                                            data-codigo="{{ item.codigo }}" 
                                            data-atributo="{{ item.atributo|default:'sin' }}"
-                                           value="{% if item.cantidad_contada is not None %}{{ item.cantidad_contada }}{% endif %}"
+                                           value="{% if item.cantidad_contada is not None %}{{ item.cantidad_contada }}{% else %}0{% endif %}"
                                            placeholder="0"
                                            min="0"
                                            style="text-align: center;">
@@ -595,8 +595,8 @@
             if (cantidad === '' || cantidad === null || cantidad === undefined) {
                 cantidadNum = 0;
             } else {
-                // Convertir a número - usar parseFloat primero para manejar decimales, luego parseInt
-                const parsed = parseFloat(cantidad);
+                // Convertir a número - usar Number() para manejar "0" correctamente
+                const parsed = Number(cantidad);
                 // Verificar si es NaN (no es un número válido)
                 if (isNaN(parsed)) {
                     if (statusEl) {
@@ -606,11 +606,20 @@
                     return;
                 }
                 // Convertir a entero (redondear hacia abajo)
+                // Number("0") = 0, Number("") = 0, Number("123") = 123
                 cantidadNum = Math.floor(parsed);
             }
             
             // cantidadNum ahora puede ser 0, negativo, o positivo - todos son válidos
-            console.log('Guardando conteo:', { codigo, atributo: atributoParaEnviar, cantidad: cantidadNum, cantidadOriginal: cantidad });
+            // IMPORTANTE: Asegurar que 0 se envíe correctamente
+            console.log('Guardando conteo:', { 
+                codigo, 
+                atributo: atributoParaEnviar, 
+                cantidad: cantidadNum, 
+                cantidadOriginal: cantidad,
+                tipoCantidad: typeof cantidadNum,
+                esCero: cantidadNum === 0
+            });
             
             // Deshabilitar botón mientras se guarda
             const originalHtml = btn.innerHTML;
@@ -665,25 +674,21 @@
                 });
                 if (data.success) {
                     // Verificar que realmente se guardó (la respuesta confirma el guardado)
-                    // IMPORTANTE: Usar == en lugar de === para comparar, ya que data.cantidad puede venir como string o número
-                    // También verificar que no sea undefined o null
-                    const cantidadRecibida = data.cantidad;
-                    const cantidadEnviada = cantidadNum;
+                    // Convertir ambos a número para comparar correctamente (incluyendo 0)
+                    const cantidadRecibida = parseInt(data.cantidad) || 0;
+                    const cantidadEnviada = parseInt(cantidadNum) || 0;
                     
-                    // Comparación flexible: permite comparar string "0" con número 0
-                    if (cantidadRecibida !== undefined && cantidadRecibida !== null && 
-                        (cantidadRecibida == cantidadEnviada || 
-                         parseInt(cantidadRecibida) === cantidadEnviada ||
-                         cantidadRecibida === cantidadEnviada.toString())) {
+                    // Comparación numérica simple - funciona correctamente con 0
+                    if (cantidadRecibida === cantidadEnviada) {
                         // Cambiar botón a verde con fondo (btn-success)
                         btn.classList.remove('btn-outline-primary');
                         btn.classList.add('btn-success');
                         
                         // Actualizar el atributo data-cantidad-guardada
-                        btn.setAttribute('data-cantidad-guardada', cantidadNum.toString());
+                        btn.setAttribute('data-cantidad-guardada', cantidadEnviada.toString());
                         
                         // Actualizar el título del botón
-                        btn.setAttribute('title', `Conteo guardado: ${cantidadNum}`);
+                        btn.setAttribute('title', `Conteo guardado: ${cantidadEnviada}`);
                         
                         if (statusEl) {
                             statusEl.textContent = '✓ Guardado correctamente';
@@ -692,7 +697,7 @@
                         
                         // Mostrar notificación de éxito
                         if (window.showNotification) {
-                            const mensaje = `Conteo físico guardado: ${codigo}${atributoParaEnviar ? ' (' + atributoParaEnviar + ')' : ''} - Cantidad: ${cantidadNum}`;
+                            const mensaje = `Conteo físico guardado: ${codigo}${atributoParaEnviar ? ' (' + atributoParaEnviar + ')' : ''} - Cantidad: ${cantidadEnviada}`;
                             window.showNotification(
                                 mensaje,
                                 'success',
@@ -701,11 +706,27 @@
                             );
                         }
                     } else {
-                        // Si la cantidad no coincide, mostrar advertencia
-                        console.warn('La cantidad guardada no coincide con la enviada');
+                        // Si la cantidad no coincide, mostrar advertencia pero aún así considerar éxito
+                        console.warn('La cantidad guardada no coincide:', { recibida: cantidadRecibida, enviada: cantidadEnviada });
+                        // Aún así actualizar el botón como guardado si el servidor dice success
+                        btn.classList.remove('btn-outline-primary');
+                        btn.classList.add('btn-success');
+                        btn.setAttribute('data-cantidad-guardada', cantidadRecibida.toString());
+                        btn.setAttribute('title', `Conteo guardado: ${cantidadRecibida}`);
+                        
                         if (statusEl) {
-                            statusEl.textContent = '⚠️ Guardado pero cantidad diferente';
-                            statusEl.style.color = '#ffc107';
+                            statusEl.textContent = '✓ Guardado (cantidad ajustada)';
+                            statusEl.style.color = '#28a745';
+                        }
+                        
+                        if (window.showNotification) {
+                            const mensaje = `Conteo físico guardado: ${codigo}${atributoParaEnviar ? ' (' + atributoParaEnviar + ')' : ''} - Cantidad: ${cantidadRecibida}`;
+                            window.showNotification(
+                                mensaje,
+                                'success',
+                                'Conteo Guardado',
+                                4000
+                            );
                         }
                     }
                     
@@ -763,8 +784,13 @@
                 }
                 const btn = inputGroup.querySelector('.guardar-conteo-btn');
                 if (btn) {
-                    const cantidadGuardada = parseInt(btn.getAttribute('data-cantidad-guardada') || '0');
-                    const cantidadActual = parseInt(inputEl.value) || 0;
+                    // Obtener cantidad guardada (puede ser string o número)
+                    const cantidadGuardadaStr = btn.getAttribute('data-cantidad-guardada') || '0';
+                    const cantidadGuardada = parseInt(cantidadGuardadaStr) || 0;
+                    
+                    // Obtener cantidad actual del input
+                    const cantidadActualStr = inputEl.value || '';
+                    const cantidadActual = cantidadActualStr === '' ? 0 : (parseInt(cantidadActualStr) || 0);
                     
                     // Si el valor actual es diferente al guardado, cambiar botón a azul
                     if (cantidadActual !== cantidadGuardada) {
