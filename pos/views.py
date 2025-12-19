@@ -2261,7 +2261,8 @@ def reportes_view(request):
         resumen_productos = []
         for item in resumen_agrupado:
             codigo = item['producto__codigo']
-            atributo = item['producto__atributo'] if item['producto__atributo'] else ''
+            # Normalizar atributo: quitar espacios y convertir vacío a string vacío
+            atributo = (item['producto__atributo'] or '').strip() if item['producto__atributo'] else ''
             clave = (codigo, atributo)
             
             total_entradas = int(item['total_entradas'] or 0)
@@ -2338,7 +2339,12 @@ def reportes_view(request):
         conteos_fisicos = {}
         for item in resumen_productos:
             codigo = item['codigo']
-            atributo = item['atributo'] if item['atributo'] != '-' else None
+            # Normalizar atributo: convertir '-' a None y hacer strip para coincidir con cómo se guarda
+            atributo_raw = item['atributo']
+            if atributo_raw == '-' or not atributo_raw:
+                atributo = None
+            else:
+                atributo = atributo_raw.strip() if atributo_raw else None
             # Buscar último conteo para este código+atributo
             conteo = ConteoFisico.objects.filter(
                 codigo=codigo,
@@ -2350,7 +2356,12 @@ def reportes_view(request):
         # Agregar conteos físicos a los items
         for item in resumen_productos:
             codigo = item['codigo']
-            atributo = item['atributo'] if item['atributo'] != '-' else None
+            # Normalizar atributo de la misma manera que arriba
+            atributo_raw = item['atributo']
+            if atributo_raw == '-' or not atributo_raw:
+                atributo = None
+            else:
+                atributo = atributo_raw.strip() if atributo_raw else None
             item['cantidad_contada'] = conteos_fisicos.get((codigo, atributo), None)
         
         # Obtener lista de productos para el filtro
