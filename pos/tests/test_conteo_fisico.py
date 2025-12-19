@@ -131,20 +131,25 @@ class ConteoFisicoTestCase(TestCase):
         self.assertEqual(conteo.cantidad_contada, 50)
 
     def test_guardar_conteo_sin_cantidad(self):
-        """Test: Validar que se requiere cantidad"""
+        """Test: Cantidad vacía ahora se interpreta como 0 (cambió el comportamiento)"""
         self.client.force_login(self.user_admin)
         url = reverse('pos:guardar_conteo_fisico')
         
         response = self.client.post(url, {
             'codigo': 'PROD001',
             'atributo': '',
-            'cantidad': '',
+            'cantidad': '',  # Cantidad vacía ahora se acepta como 0
         })
         
-        self.assertEqual(response.status_code, 400)
+        # Ahora debe aceptar cantidad vacía como 0
+        self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertFalse(data['success'])
-        self.assertIn('Cantidad requerida', data['error'])
+        self.assertTrue(data['success'])
+        self.assertEqual(data['cantidad'], 0)
+        
+        # Verificar que se guardó con valor 0
+        conteo = ConteoFisico.objects.get(codigo='PROD001', atributo=None)
+        self.assertEqual(conteo.cantidad_contada, 0)
 
     def test_guardar_conteo_cantidad_invalida(self):
         """Test: Validar que la cantidad sea un número válido"""
@@ -329,4 +334,151 @@ class ConteoFisicoTestCase(TestCase):
         conteos = ConteoFisico.objects.filter(codigo='PROD001', atributo=None)
         self.assertEqual(conteos.count(), 1)
         self.assertEqual(conteos.first().cantidad_contada, 55)  # El último valor
+
+    def test_guardar_conteo_cantidad_cero_explicita(self):
+        """Test: Guardar conteo con cantidad cero explícita (string '0')"""
+        self.client.force_login(self.user_admin)
+        url = reverse('pos:guardar_conteo_fisico')
+        
+        response = self.client.post(url, {
+            'codigo': 'PROD001',
+            'atributo': '',
+            'cantidad': '0',
+        })
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertTrue(data['success'])
+        self.assertEqual(data['cantidad'], 0)  # Verificar que la respuesta incluye 0
+        self.assertTrue(data['created'])
+        
+        # Verificar que se guardó en la base de datos con valor 0
+        conteo = ConteoFisico.objects.get(codigo='PROD001', atributo=None)
+        self.assertEqual(conteo.cantidad_contada, 0)
+        self.assertEqual(conteo.usuario, self.user_admin)
+
+    def test_guardar_conteo_cantidad_vacia_como_cero(self):
+        """Test: Guardar conteo con cantidad vacía (debe interpretarse como 0)"""
+        self.client.force_login(self.user_admin)
+        url = reverse('pos:guardar_conteo_fisico')
+        
+        response = self.client.post(url, {
+            'codigo': 'PROD001',
+            'atributo': '',
+            'cantidad': '',  # Cantidad vacía
+        })
+        
+        # Debe aceptar cantidad vacía como 0
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertTrue(data['success'])
+        self.assertEqual(data['cantidad'], 0)
+        
+        # Verificar que se guardó con valor 0
+        conteo = ConteoFisico.objects.get(codigo='PROD001', atributo=None)
+        self.assertEqual(conteo.cantidad_contada, 0)
+
+    def test_actualizar_conteo_a_cero(self):
+        """Test: Actualizar un conteo existente a cero"""
+        self.client.force_login(self.user_admin)
+        
+        # Crear conteo inicial con valor diferente de 0
+        conteo = ConteoFisico.objects.create(
+            codigo='PROD001',
+            atributo=None,
+            cantidad_contada=50,
+            usuario=self.user_admin,
+        )
+        
+        url = reverse('pos:guardar_conteo_fisico')
+        response = self.client.post(url, {
+            'codigo': 'PROD001',
+            'atributo': '',
+            'cantidad': '0',  # Actualizar a 0
+        })
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertTrue(data['success'])
+        self.assertEqual(data['cantidad'], 0)
+        self.assertFalse(data['created'])  # Es actualización, no creación
+        
+        # Verificar que se actualizó a 0
+        conteo.refresh_from_db()
+        self.assertEqual(conteo.cantidad_contada, 0)
+
+    def test_actualizar_conteo_desde_cero(self):
+        """Test: Actualizar un conteo que está en cero a otro valor"""
+        self.client.force_login(self.user_admin)
+        
+        # Crear conteo inicial con valor 0
+        conteo = ConteoFisico.objects.create(
+            codigo='PROD001',
+            atributo=None,
+            cantidad_contada=0,
+            usuario=self.user_admin,
+        )
+        
+        url = reverse('pos:guardar_conteo_fisico')
+        response = self.client.post(url, {
+            'codigo': 'PROD001',
+            'atributo': '',
+            'cantidad': '25',  # Actualizar desde 0 a 25
+        })
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertTrue(data['success'])
+        self.assertEqual(data['cantidad'], 25)
+        self.assertFalse(data['created'])  # Es actualización
+        
+        # Verificar que se actualizó correctamente
+        conteo.refresh_from_db()
+        self.assertEqual(conteo.cantidad_contada, 25)
+
+    def test_guardar_conteo_cero_con_atributo(self):
+        """Test: Guardar conteo con cantidad cero para producto con atributo"""
+        self.client.force_login(self.user_admin)
+        url = reverse('pos:guardar_conteo_fisico')
+        
+        response = self.client.post(url, {
+            'codigo': 'PROD002',
+            'atributo': 'Rojo',
+            'cantidad': '0',
+        })
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertTrue(data['success'])
+        self.assertEqual(data['cantidad'], 0)
+        
+        # Verificar que se guardó correctamente
+        conteo = ConteoFisico.objects.get(codigo='PROD002', atributo='Rojo')
+        self.assertEqual(conteo.cantidad_contada, 0)
+
+    def test_respuesta_json_incluye_cero(self):
+        """Test: Verificar que la respuesta JSON incluye correctamente el valor 0"""
+        self.client.force_login(self.user_admin)
+        url = reverse('pos:guardar_conteo_fisico')
+        
+        response = self.client.post(url, {
+            'codigo': 'PROD001',
+            'atributo': '',
+            'cantidad': '0',
+        })
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        
+        # Verificar que la respuesta incluye todos los campos esperados
+        self.assertTrue(data['success'])
+        self.assertIn('cantidad', data)
+        self.assertEqual(data['cantidad'], 0)
+        self.assertIn('created', data)
+        self.assertIn('codigo', data)
+        self.assertIn('atributo', data)
+        
+        # Verificar que cantidad es exactamente 0 (no None, no False)
+        self.assertIsInstance(data['cantidad'], int)
+        self.assertEqual(data['cantidad'], 0)
 

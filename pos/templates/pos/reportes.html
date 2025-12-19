@@ -572,7 +572,15 @@
                 console.error('No se encontró el input para el botón', btn);
                 return;
             }
-            const cantidad = input.value.trim();
+            // Obtener el valor del input - puede ser string vacío, "0", o cualquier número
+            let cantidad = input.value;
+            // Si es null o undefined, usar cadena vacía
+            if (cantidad === null || cantidad === undefined) {
+                cantidad = '';
+            }
+            // Trim para eliminar espacios y convertir a string
+            cantidad = cantidad.toString().trim();
+            console.log('Valor del input:', { raw: input.value, trimmed: cantidad, type: typeof cantidad });
             
             // Obtener elemento de estado (el template usa 'sin' cuando atributo está vacío)
             const statusId = `status-${codigo}-${atributo}`;
@@ -583,23 +591,26 @@
             
             // Validar cantidad - permitir 0 y valores vacíos (se tratarán como 0)
             let cantidadNum;
+            // Si está vacío o es null/undefined, interpretar como 0
             if (cantidad === '' || cantidad === null || cantidad === undefined) {
-                // Si está vacío, interpretar como 0
                 cantidadNum = 0;
             } else {
-                // Validar que sea un número válido
-                cantidadNum = parseInt(cantidad);
-                if (isNaN(cantidadNum)) {
+                // Convertir a número - usar parseFloat primero para manejar decimales, luego parseInt
+                const parsed = parseFloat(cantidad);
+                // Verificar si es NaN (no es un número válido)
+                if (isNaN(parsed)) {
                     if (statusEl) {
                         statusEl.textContent = '⚠️ La cantidad debe ser un número';
                         statusEl.style.color = '#dc3545';
                     }
                     return;
                 }
+                // Convertir a entero (redondear hacia abajo)
+                cantidadNum = Math.floor(parsed);
             }
             
-            // Permitir valores negativos también (según los tests)
-            // No hay restricción de cantidad mínima
+            // cantidadNum ahora puede ser 0, negativo, o positivo - todos son válidos
+            console.log('Guardando conteo:', { codigo, atributo: atributoParaEnviar, cantidad: cantidadNum, cantidadOriginal: cantidad });
             
             // Deshabilitar botón mientras se guarda
             const originalHtml = btn.innerHTML;
@@ -615,8 +626,11 @@
             const formData = new FormData();
             formData.append('codigo', codigo);
             formData.append('atributo', atributoParaEnviar);
-            formData.append('cantidad', cantidadNum);
+            // Asegurar que se envíe como string para que el backend lo reciba correctamente
+            formData.append('cantidad', cantidadNum.toString());
             formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+            
+            console.log('Enviando datos:', { codigo, atributo: atributoParaEnviar, cantidad: cantidadNum.toString() });
             
             // Enviar petición AJAX
             fetch('{% url "pos:guardar_conteo_fisico" %}', {
@@ -640,9 +654,27 @@
                 return response.json();
             })
             .then(data => {
+                console.log('Respuesta del servidor:', data);
+                console.log('Comparación:', { 
+                    dataCantidad: data.cantidad, 
+                    cantidadNum: cantidadNum, 
+                    tipoDataCantidad: typeof data.cantidad,
+                    tipoCantidadNum: typeof cantidadNum,
+                    iguales: data.cantidad == cantidadNum,
+                    estrictamenteIguales: data.cantidad === cantidadNum
+                });
                 if (data.success) {
                     // Verificar que realmente se guardó (la respuesta confirma el guardado)
-                    if (data.cantidad !== undefined && data.cantidad === cantidadNum) {
+                    // IMPORTANTE: Usar == en lugar de === para comparar, ya que data.cantidad puede venir como string o número
+                    // También verificar que no sea undefined o null
+                    const cantidadRecibida = data.cantidad;
+                    const cantidadEnviada = cantidadNum;
+                    
+                    // Comparación flexible: permite comparar string "0" con número 0
+                    if (cantidadRecibida !== undefined && cantidadRecibida !== null && 
+                        (cantidadRecibida == cantidadEnviada || 
+                         parseInt(cantidadRecibida) === cantidadEnviada ||
+                         cantidadRecibida === cantidadEnviada.toString())) {
                         // Cambiar botón a verde con fondo (btn-success)
                         btn.classList.remove('btn-outline-primary');
                         btn.classList.add('btn-success');

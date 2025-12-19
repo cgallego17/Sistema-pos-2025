@@ -2771,51 +2771,51 @@ def reportes_view(request):
                         cell.font = cell.font.copy(bold=True)
 
                 if export_tipo == 'ventas':
-                ws = wb.active
-                ws.title = 'Ventas'
-                _set_headers(ws, [
-                    'ID', 'Fecha', 'Total', 'Metodo Pago', 'Anulada',
-                    'Usuario', 'Vendedor', 'Registradora',
-                    'Items Cantidad', 'Items Detalle'
-                ])
-
-                qs = Venta.objects.filter(
-                    fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
-                ).select_related('usuario', 'vendedor').prefetch_related('items__producto').order_by('fecha')
-
-                ws_items = wb.create_sheet('Items')
-                _set_headers(ws_items, [
-                    'VentaID', 'Fecha', 'Producto', 'Cantidad', 'Precio Unitario', 'Subtotal'
-                ])
-
-                for v in qs:
-                    items = list(v.items.all())
-                    items_cant = sum((it.cantidad or 0) for it in items)
-                    items_detalle = ' | '.join([
-                        f"{it.producto.nombre} x{it.cantidad} (${it.subtotal})" for it in items
+                    ws = wb.active
+                    ws.title = 'Ventas'
+                    _set_headers(ws, [
+                        'ID', 'Fecha', 'Total', 'Metodo Pago', 'Anulada',
+                        'Usuario', 'Vendedor', 'Registradora',
+                        'Items Cantidad', 'Items Detalle'
                     ])
-                    fecha_local = timezone.localtime(v.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
-                    ws.append([
-                        v.id,
-                        fecha_local,
-                        v.total,
-                        v.metodo_pago,
-                        int(v.anulada),
-                        (v.usuario.username if v.usuario else ''),
-                        (v.vendedor.username if v.vendedor else ''),
-                        (v.registradora_id or ''),
-                        items_cant,
-                        items_detalle,
+
+                    qs = Venta.objects.filter(
+                        fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
+                    ).select_related('usuario', 'vendedor').prefetch_related('items__producto').order_by('fecha')
+
+                    ws_items = wb.create_sheet('Items')
+                    _set_headers(ws_items, [
+                        'VentaID', 'Fecha', 'Producto', 'Cantidad', 'Precio Unitario', 'Subtotal'
                     ])
-                    for it in items:
-                        ws_items.append([
+
+                    for v in qs:
+                        items = list(v.items.all())
+                        items_cant = sum((it.cantidad or 0) for it in items)
+                        items_detalle = ' | '.join([
+                            f"{it.producto.nombre} x{it.cantidad} (${it.subtotal})" for it in items
+                        ])
+                        fecha_local = timezone.localtime(v.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
+                        ws.append([
                             v.id,
                             fecha_local,
-                            it.producto.nombre,
-                            it.cantidad,
-                            it.precio_unitario,
-                            it.subtotal,
+                            v.total,
+                            v.metodo_pago,
+                            int(v.anulada),
+                            (v.usuario.username if v.usuario else ''),
+                            (v.vendedor.username if v.vendedor else ''),
+                            (v.registradora_id or ''),
+                            items_cant,
+                            items_detalle,
                         ])
+                        for it in items:
+                            ws_items.append([
+                                v.id,
+                                fecha_local,
+                                it.producto.nombre,
+                                it.cantidad,
+                                it.precio_unitario,
+                                it.subtotal,
+                            ])
 
             elif export_tipo == 'movimientos':
                 ws = wb.active
@@ -2916,105 +2916,105 @@ def reportes_view(request):
             writer = csv.writer(response)
 
             if export_tipo == 'ventas':
-            writer.writerow([
-                'ID', 'Fecha', 'Total', 'Metodo Pago', 'Completada', 'Anulada',
-                'Usuario', 'Vendedor', 'Registradora',
-                'Items Cantidad', 'Items Detalle'
-            ])
-            for v in Venta.objects.filter(
-                fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
-            ).select_related('usuario', 'vendedor').prefetch_related('items__producto'):
-                items = list(v.items.all())
-                items_cant = sum((it.cantidad or 0) for it in items)
-                items_detalle = ' | '.join([
-                    f"{it.producto.nombre} x{it.cantidad} (${it.subtotal})" for it in items
-                ])
-                fecha_local = timezone.localtime(v.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
                 writer.writerow([
-                    v.id,
-                    fecha_local,
-                    v.total,
-                    v.metodo_pago,
-                    int(v.completada),
-                    int(v.anulada),
-                    (v.usuario.username if v.usuario else ''),
-                    (v.vendedor.username if v.vendedor else ''),
-                    (v.registradora_id or ''),
-                    items_cant,
-                    items_detalle,
+                    'ID', 'Fecha', 'Total', 'Metodo Pago', 'Completada', 'Anulada',
+                    'Usuario', 'Vendedor', 'Registradora',
+                    'Items Cantidad', 'Items Detalle'
                 ])
-            return response
+                for v in Venta.objects.filter(
+                    fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
+                ).select_related('usuario', 'vendedor').prefetch_related('items__producto'):
+                    items = list(v.items.all())
+                    items_cant = sum((it.cantidad or 0) for it in items)
+                    items_detalle = ' | '.join([
+                        f"{it.producto.nombre} x{it.cantidad} (${it.subtotal})" for it in items
+                    ])
+                    fecha_local = timezone.localtime(v.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
+                    writer.writerow([
+                        v.id,
+                        fecha_local,
+                        v.total,
+                        v.metodo_pago,
+                        int(v.completada),
+                        int(v.anulada),
+                        (v.usuario.username if v.usuario else ''),
+                        (v.vendedor.username if v.vendedor else ''),
+                        (v.registradora_id or ''),
+                        items_cant,
+                        items_detalle,
+                    ])
+                return response
 
-            if export_tipo == 'movimientos':
-            writer.writerow([
-                'Fecha', 'Tipo', 'Descripcion', 'Monto', 'Metodo', 'Usuario', 'CajaUsuarioID'
-            ])
-            # Ventas
-            for v in Venta.objects.filter(
-                fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
-            ).select_related('usuario'):
-                tipo = 'venta_anulada' if v.anulada else 'venta'
-                fecha_local = timezone.localtime(v.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
+            elif export_tipo == 'movimientos':
                 writer.writerow([
-                    fecha_local,
-                    tipo,
-                    f'Venta #{v.id}',
-                    v.total,
-                    v.metodo_pago,
-                    (v.usuario.username if v.usuario else ''),
-                    '',
+                    'Fecha', 'Tipo', 'Descripcion', 'Monto', 'Metodo', 'Usuario', 'CajaUsuarioID'
                 ])
-            # Gastos/Ingresos
-            for g in GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario'):
-                fecha_local = timezone.localtime(g.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
-                writer.writerow([
-                    fecha_local,
-                    g.tipo,
-                    g.descripcion,
-                    g.monto,
-                    '',
-                    (g.usuario.username if g.usuario else ''),
-                    (g.caja_usuario_id or ''),
-                ])
-            return response
+                # Ventas
+                for v in Venta.objects.filter(
+                    fecha__gte=inicio_dt, fecha__lte=fin_dt, completada=True
+                ).select_related('usuario'):
+                    tipo = 'venta_anulada' if v.anulada else 'venta'
+                    fecha_local = timezone.localtime(v.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
+                    writer.writerow([
+                        fecha_local,
+                        tipo,
+                        f'Venta #{v.id}',
+                        v.total,
+                        v.metodo_pago,
+                        (v.usuario.username if v.usuario else ''),
+                        '',
+                    ])
+                # Gastos/Ingresos
+                for g in GastoCaja.objects.filter(fecha__gte=inicio_dt, fecha__lte=fin_dt).select_related('usuario', 'caja_usuario'):
+                    fecha_local = timezone.localtime(g.fecha, tz).strftime('%Y-%m-%d %H:%M:%S')
+                    writer.writerow([
+                        fecha_local,
+                        g.tipo,
+                        g.descripcion,
+                        g.monto,
+                        '',
+                        (g.usuario.username if g.usuario else ''),
+                        (g.caja_usuario_id or ''),
+                    ])
+                return response
 
-            if export_tipo == 'cajas':
-            writer.writerow([
-                'CajaUsuarioID', 'Apertura', 'Cierre', 'Monto Inicial', 'Monto Final', 'Usuario'
-            ])
-            for cu in CajaUsuario.objects.filter(
-                fecha_apertura__lte=fin_dt
-            ).filter(
-                Q(fecha_cierre__gte=inicio_dt) | Q(fecha_cierre__isnull=True)
-            ).select_related('usuario', 'caja').order_by('-fecha_apertura'):
-                apertura_local = timezone.localtime(cu.fecha_apertura, tz).strftime('%Y-%m-%d %H:%M:%S')
-                cierre_local = timezone.localtime(cu.fecha_cierre, tz).strftime('%Y-%m-%d %H:%M:%S') if cu.fecha_cierre else ''
+            elif export_tipo == 'cajas':
                 writer.writerow([
-                    cu.id,
-                    apertura_local,
-                    cierre_local,
-                    cu.monto_inicial,
-                    (cu.monto_final if cu.monto_final is not None else ''),
-                    (cu.usuario.username if cu.usuario else ''),
+                    'CajaUsuarioID', 'Apertura', 'Cierre', 'Monto Inicial', 'Monto Final', 'Usuario'
                 ])
-            return response
+                for cu in CajaUsuario.objects.filter(
+                    fecha_apertura__lte=fin_dt
+                ).filter(
+                    Q(fecha_cierre__gte=inicio_dt) | Q(fecha_cierre__isnull=True)
+                ).select_related('usuario', 'caja').order_by('-fecha_apertura'):
+                    apertura_local = timezone.localtime(cu.fecha_apertura, tz).strftime('%Y-%m-%d %H:%M:%S')
+                    cierre_local = timezone.localtime(cu.fecha_cierre, tz).strftime('%Y-%m-%d %H:%M:%S') if cu.fecha_cierre else ''
+                    writer.writerow([
+                        cu.id,
+                        apertura_local,
+                        cierre_local,
+                        cu.monto_inicial,
+                        (cu.monto_final if cu.monto_final is not None else ''),
+                        (cu.usuario.username if cu.usuario else ''),
+                    ])
+                return response
 
-            if export_tipo == 'movimientos_caja':
-            writer.writerow([
-                'Fecha/Hora', 'Tipo', 'Descripcion', 'Monto', 'Saldo Antes', 'Saldo Despues', 'Metodo de Pago', 'Usuario'
-            ])
-            for m in _build_movimientos_caja():
+            elif export_tipo == 'movimientos_caja':
                 writer.writerow([
-                    m['fecha_local'].strftime('%Y-%m-%d %H:%M:%S'),
-                    m['tipo'],
-                    m['descripcion'],
-                    m['delta'],
-                    m['saldo_antes'],
-                    m['saldo_despues'],
-                    m['metodo_pago'] or '-',
-                    m['usuario'] or '',
+                    'Fecha/Hora', 'Tipo', 'Descripcion', 'Monto', 'Saldo Antes', 'Saldo Despues', 'Metodo de Pago', 'Usuario'
                 ])
-            return response
+                for m in _build_movimientos_caja():
+                    writer.writerow([
+                        m['fecha_local'].strftime('%Y-%m-%d %H:%M:%S'),
+                        m['tipo'],
+                        m['descripcion'],
+                        m['delta'],
+                        m['saldo_antes'],
+                        m['saldo_despues'],
+                        m['metodo_pago'] or '-',
+                        m['usuario'] or '',
+                    ])
+                return response
 
         # Ventas (incluye anuladas; se desglosa)
         ventas_qs = Venta.objects.filter(
@@ -4492,6 +4492,9 @@ def guardar_conteo_fisico_view(request):
         atributo = request.POST.get('atributo', '').strip()
         cantidad_str = request.POST.get('cantidad', '').strip()
         
+        # Log para debugging
+        logger.info(f'Guardar conteo físico - codigo: {codigo}, atributo: {atributo}, cantidad_str: "{cantidad_str}"')
+        
         # Validar código
         if not codigo:
             return JsonResponse({
@@ -4504,17 +4507,23 @@ def guardar_conteo_fisico_view(request):
             atributo = None
         
         # Validar cantidad - permitir 0 y valores vacíos (se tratarán como 0)
-        if not cantidad_str or cantidad_str.strip() == '':
-            # Si está vacío, interpretar como 0
+        # IMPORTANTE: cantidad_str puede ser "0" (string) cuando el usuario ingresa 0
+        if cantidad_str == '' or cantidad_str is None:
+            # Si está completamente vacío, interpretar como 0
             cantidad = 0
         else:
             try:
                 cantidad = int(cantidad_str)
-            except ValueError:
+                # Verificar que la conversión fue exitosa (int("0") = 0, que es válido)
+            except (ValueError, TypeError) as e:
+                logger.error(f'Error al convertir cantidad "{cantidad_str}": {str(e)}')
                 return JsonResponse({
                     'success': False,
-                    'error': 'La cantidad debe ser un número válido'
+                    'error': f'La cantidad debe ser un número válido. Valor recibido: "{cantidad_str}"'
                 }, status=400)
+        
+        # Log la cantidad final
+        logger.info(f'Cantidad procesada: {cantidad} (tipo: {type(cantidad).__name__})')
         
         # Buscar si ya existe un conteo para este código+atributo
         # Usamos el último conteo por fecha
