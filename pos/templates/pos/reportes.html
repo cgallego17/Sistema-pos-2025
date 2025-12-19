@@ -530,11 +530,20 @@
         }
         
         // Manejar guardado de conteos físicos
-        const guardarConteoBtns = document.querySelectorAll('.guardar-conteo-btn');
-        guardarConteoBtns.forEach(btn => {
-            btn.addEventListener('click', function() {
-                const codigo = this.dataset.codigo;
-                let atributo = this.dataset.atributo || '';
+        // Usar delegación de eventos para asegurar que funcione incluso si el DOM cambia
+        document.addEventListener('click', function(e) {
+            // Verificar si el clic fue en un botón de guardar conteo
+            const btn = e.target.closest('.guardar-conteo-btn');
+            if (!btn) return;
+            
+            // Prevenir múltiples clics
+            if (btn.disabled) return;
+            
+            // Prevenir propagación para evitar doble ejecución
+            e.stopPropagation();
+            
+            const codigo = btn.dataset.codigo;
+            let atributo = btn.dataset.atributo || '';
                 // Normalizar atributo vacío o '-' a 'sin' para coincidir con el template
                 if (!atributo || atributo === '-' || atributo === 'None' || atributo === 'null') {
                     atributo = 'sin';
@@ -679,7 +688,6 @@
                     btn.disabled = false;
                     btn.innerHTML = originalHtml;
                 });
-            });
         });
         
         // Permitir guardar con Enter en el input y verificar cambios
