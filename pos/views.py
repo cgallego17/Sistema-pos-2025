@@ -2390,10 +2390,12 @@ def reportes_view(request):
         productos = Producto.objects.filter(activo=True).order_by('nombre')
         
         # ===== ANÁLISIS DE DATOS DEL RESUMEN =====
+        # Nota: total_salidas en resumen_productos son salidas de inventario (MovimientoStock tipo='salida')
+        # Las ventas se calculan por separado en la comparativa
         analisis_datos = {
             'total_productos': len(resumen_productos),
             'total_entradas': sum(item.get('total_entradas', 0) for item in resumen_productos),
-            'total_salidas': sum(item.get('total_salidas', 0) for item in resumen_productos),
+            'total_salidas_inventario': sum(item.get('total_salidas', 0) for item in resumen_productos),
             'total_ajustes': sum(item.get('ajustes', 0) for item in resumen_productos),
             'total_neto': sum(item.get('neto', 0) for item in resumen_productos),
             'total_stock_inicial': sum(item.get('stock_inicial', 0) for item in resumen_productos),
