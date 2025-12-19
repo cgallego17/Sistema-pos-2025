@@ -165,11 +165,12 @@
                                            placeholder="0"
                                            min="0"
                                            style="text-align: center;">
-                                    <button class="btn btn-sm btn-outline-primary guardar-conteo-btn" 
+                                    <button class="btn btn-sm {% if item.cantidad_contada %}btn-outline-success{% else %}btn-outline-primary{% endif %} guardar-conteo-btn" 
                                             type="button"
                                             data-codigo="{{ item.codigo }}" 
                                             data-atributo="{{ item.atributo|default:'sin' }}"
-                                            title="Guardar conteo">
+                                            data-cantidad-guardada="{% if item.cantidad_contada %}{{ item.cantidad_contada }}{% else %}0{% endif %}"
+                                            title="{% if item.cantidad_contada %}Conteo guardado: {{ item.cantidad_contada }}{% else %}Guardar conteo{% endif %}">
                                         <i class="bi bi-check-lg"></i>
                                     </button>
                                 </div>
@@ -607,20 +608,40 @@
                 })
                 .then(data => {
                     if (data.success) {
-                        if (statusEl) {
-                            statusEl.textContent = '✓ Guardado correctamente';
-                            statusEl.style.color = '#28a745';
-                        }
-                        
-                        // Mostrar notificación de éxito
-                        if (window.showNotification) {
-                            const mensaje = `Conteo físico guardado: ${codigo}${atributoParaEnviar ? ' (' + atributoParaEnviar + ')' : ''} - Cantidad: ${cantidadNum}`;
-                            window.showNotification(
-                                mensaje,
-                                'success',
-                                'Conteo Guardado',
-                                4000
-                            );
+                        // Verificar que la cantidad guardada coincide con la enviada
+                        if (data.cantidad === cantidadNum) {
+                            // Cambiar botón a verde (éxito)
+                            btn.classList.remove('btn-outline-primary');
+                            btn.classList.add('btn-outline-success');
+                            
+                            // Actualizar el atributo data-cantidad-guardada
+                            btn.setAttribute('data-cantidad-guardada', cantidadNum.toString());
+                            
+                            // Actualizar el título del botón
+                            btn.setAttribute('title', `Conteo guardado: ${cantidadNum}`);
+                            
+                            if (statusEl) {
+                                statusEl.textContent = '✓ Guardado correctamente';
+                                statusEl.style.color = '#28a745';
+                            }
+                            
+                            // Mostrar notificación de éxito
+                            if (window.showNotification) {
+                                const mensaje = `Conteo físico guardado: ${codigo}${atributoParaEnviar ? ' (' + atributoParaEnviar + ')' : ''} - Cantidad: ${cantidadNum}`;
+                                window.showNotification(
+                                    mensaje,
+                                    'success',
+                                    'Conteo Guardado',
+                                    4000
+                                );
+                            }
+                        } else {
+                            // Si la cantidad no coincide, mostrar advertencia
+                            console.warn('La cantidad guardada no coincide con la enviada');
+                            if (statusEl) {
+                                statusEl.textContent = '⚠️ Guardado pero cantidad diferente';
+                                statusEl.style.color = '#ffc107';
+                            }
                         }
                         
                         // Restaurar botón
@@ -661,9 +682,31 @@
             });
         });
         
-        // Permitir guardar con Enter en el input
+        // Permitir guardar con Enter en el input y verificar cambios
         const conteoInputs = document.querySelectorAll('.conteo-fisico-input');
         conteoInputs.forEach(input => {
+            // Verificar si el valor cambió respecto al guardado
+            input.addEventListener('input', function() {
+                const btn = this.closest('.input-group').querySelector('.guardar-conteo-btn');
+                if (btn) {
+                    const cantidadGuardada = parseInt(btn.getAttribute('data-cantidad-guardada') || '0');
+                    const cantidadActual = parseInt(this.value) || 0;
+                    
+                    // Si el valor actual es diferente al guardado, cambiar botón a azul
+                    if (cantidadActual !== cantidadGuardada) {
+                        btn.classList.remove('btn-outline-success');
+                        btn.classList.add('btn-outline-primary');
+                        btn.setAttribute('title', 'Guardar conteo');
+                    } else if (cantidadGuardada > 0) {
+                        // Si coincide con el guardado, mantener verde
+                        btn.classList.remove('btn-outline-primary');
+                        btn.classList.add('btn-outline-success');
+                        btn.setAttribute('title', `Conteo guardado: ${cantidadGuardada}`);
+                    }
+                }
+            });
+            
+            // Permitir guardar con Enter
             input.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
