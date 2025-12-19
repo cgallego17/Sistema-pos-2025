@@ -611,6 +611,18 @@
                             statusEl.textContent = '✓ Guardado correctamente';
                             statusEl.style.color = '#28a745';
                         }
+                        
+                        // Mostrar notificación de éxito
+                        if (window.showNotification) {
+                            const mensaje = `Conteo físico guardado: ${codigo}${atributoParaEnviar ? ' (' + atributoParaEnviar + ')' : ''} - Cantidad: ${cantidadNum}`;
+                            window.showNotification(
+                                mensaje,
+                                'success',
+                                'Conteo Guardado',
+                                4000
+                            );
+                        }
+                        
                         // Restaurar botón
                         btn.disabled = false;
                         btn.innerHTML = originalHtml;
@@ -631,6 +643,17 @@
                         statusEl.textContent = '✗ Error: ' + error.message;
                         statusEl.style.color = '#dc3545';
                     }
+                    
+                    // Mostrar notificación de error
+                    if (window.showNotification) {
+                        window.showNotification(
+                            `Error al guardar conteo: ${error.message}`,
+                            'error',
+                            'Error al Guardar',
+                            5000
+                        );
+                    }
+                    
                     // Restaurar botón
                     btn.disabled = false;
                     btn.innerHTML = originalHtml;
