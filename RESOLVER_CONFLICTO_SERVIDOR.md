@@ -1,74 +1,46 @@
 # Resolver Conflicto de Merge en el Servidor
 
-## Pasos para resolver el conflicto
+## Opción 1: Usar versión remota (RECOMENDADO)
+Esta opción usa la versión remota que incluye todas las correcciones recientes:
 
-### 1. Ver el conflicto
 ```bash
-cd /ruta/al/proyecto  # Ajusta la ruta según tu configuración
+cd /var/www/miapp
+git checkout --theirs pos/views.py
+git add pos/views.py
+git commit -m "Resolver conflicto: usar versión remota de pos/views.py"
+```
+
+## Opción 2: Ver el conflicto primero
+Si quieres revisar el conflicto antes de resolverlo:
+
+```bash
+cd /var/www/miapp
+git diff pos/views.py
+```
+
+Luego puedes elegir:
+- `git checkout --theirs pos/views.py` (versión remota)
+- `git checkout --ours pos/views.py` (versión local)
+- O editar manualmente el archivo
+
+## Después de resolver
+
+1. Verificar que el conflicto esté resuelto:
+```bash
 git status
 ```
 
-### 2. Ver el archivo con conflictos
+2. Si todo está bien, hacer commit:
 ```bash
-grep -n "<<<<<<< HEAD" pos/views.py
-grep -n "=======" pos/views.py
-grep -n ">>>>>>>" pos/views.py
+git commit -m "Resolver conflicto: usar versión remota de pos/views.py"
 ```
 
-### 3. Opción A: Usar la versión del servidor (si tienes cambios locales importantes)
+3. Sincronizar con el remoto:
 ```bash
-# Ver qué cambios hay en el servidor
-git diff HEAD pos/views.py
-
-# Si quieres mantener los cambios del servidor y descartar los remotos
-git checkout --ours pos/views.py
-git add pos/views.py
-git commit -m "Resolver conflicto: mantener versión del servidor"
+git pull --rebase
+# O si prefieres merge:
+git pull
 ```
 
-### 4. Opción B: Usar la versión remota (recomendado si los cambios remotos son los correctos)
-```bash
-# Usar la versión remota (la que acabamos de corregir)
-git checkout --theirs pos/views.py
-git add pos/views.py
-git commit -m "Resolver conflicto: usar versión remota con correcciones"
-```
-
-### 5. Opción C: Resolver manualmente (si necesitas combinar ambos)
-```bash
-# Abrir el archivo y buscar los marcadores de conflicto
-nano pos/views.py
-# o
-vim pos/views.py
-```
-
-Busca líneas que contengan:
-- `<<<<<<< HEAD` (inicio del conflicto, versión local)
-- `=======` (separador)
-- `>>>>>>> origin/main` (fin del conflicto, versión remota)
-
-### 6. Después de resolver, continuar con el merge
-```bash
-git add pos/views.py
-git commit -m "Resolver conflicto de merge en pos/views.py"
-```
-
-### 7. Continuar con la actualización
-```bash
-update  # o el comando que uses para actualizar
-```
-
-## Solución Rápida (Recomendada)
-
-Si quieres usar la versión remota (que tiene las correcciones para el guardado de conteos con valor 0):
-
-```bash
-cd /ruta/al/proyecto
-git checkout --theirs pos/views.py
-git add pos/views.py
-git commit -m "Resolver conflicto: usar versión remota con correcciones de conteo físico"
-update
-```
-
-
-
+## Nota importante
+La versión remota incluye todas las correcciones para guardar conteos físicos con valor 0, por lo que es la versión recomendada.
