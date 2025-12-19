@@ -2416,22 +2416,66 @@ def reportes_view(request):
             reverse=True
         )[:10]
         
-        # Top productos por salidas
-        top_salidas = sorted(
-            [item for item in resumen_productos if item.get('total_salidas', 0) > 0],
-            key=lambda x: x.get('total_salidas', 0),
+        # Top productos por ventas (calcular desde ItemVenta)
+        # Primero necesitamos obtener las ventas por producto antes de la comparativa
+        from .models import ItemVenta, Venta
+        fecha_desde_ventas = None
+        fecha_hasta_ventas = None
+        if fecha_desde:
+            try:
+                fecha_desde_ventas = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        if fecha_hasta:
+            try:
+                fecha_hasta_ventas = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        
+        ventas_qs_temp = Venta.objects.filter(completada=True, anulada=False)
+        if fecha_desde_ventas:
+            ventas_qs_temp = ventas_qs_temp.filter(fecha__date__gte=fecha_desde_ventas)
+        if fecha_hasta_ventas:
+            ventas_qs_temp = ventas_qs_temp.filter(fecha__date__lte=fecha_hasta_ventas)
+        
+        # Calcular ventas por código+atributo
+        ventas_por_producto = {}
+        items_venta_temp = ItemVenta.objects.filter(venta__in=ventas_qs_temp).select_related('producto')
+        for item_venta in items_venta_temp:
+            codigo = item_venta.producto.codigo
+            atributo = (item_venta.producto.atributo or '').strip() if item_venta.producto.atributo else ''
+            clave = (codigo, atributo)
+            if clave not in ventas_por_producto:
+                ventas_por_producto[clave] = {
+                    'codigo': codigo,
+                    'nombre': item_venta.producto.nombre,
+                    'atributo': atributo if atributo else '-',
+                    'total_ventas': 0
+                }
+            ventas_por_producto[clave]['total_ventas'] += item_venta.cantidad
+        
+        # Crear lista de productos con ventas para el top
+        productos_con_ventas = list(ventas_por_producto.values())
+        top_ventas = sorted(
+            productos_con_ventas,
+            key=lambda x: x.get('total_ventas', 0),
             reverse=True
         )[:10]
         
-        # Productos con mayor rotación (salidas / stock_inicial si stock_inicial > 0)
+        # Productos con mayor rotación (ventas / stock_inicial si stock_inicial > 0)
         productos_rotacion = []
         for item in resumen_productos:
             stock_inicial = item.get('stock_inicial', 0)
-            salidas = item.get('total_salidas', 0)
-            if stock_inicial > 0 and salidas > 0:
-                rotacion = (salidas / stock_inicial) * 100
+            codigo = item.get('codigo')
+            atributo_raw = item.get('atributo', '-')
+            atributo = (atributo_raw.strip() if atributo_raw and atributo_raw != '-' else '')
+            clave = (codigo, atributo)
+            ventas_producto = ventas_por_producto.get(clave, {}).get('total_ventas', 0)
+            if stock_inicial > 0 and ventas_producto > 0:
+                rotacion = (ventas_producto / stock_inicial) * 100
                 productos_rotacion.append({
                     **item,
+                    'total_ventas': ventas_producto,
                     'rotacion_porcentaje': round(rotacion, 2)
                 })
         top_rotacion = sorted(productos_rotacion, key=lambda x: x.get('rotacion_porcentaje', 0), reverse=True)[:10]
@@ -2747,7 +2791,7 @@ def reportes_view(request):
             # Análisis de datos
             'analisis_datos': analisis_datos,
             'top_entradas': top_entradas,
-            'top_salidas': top_salidas,
+            'top_ventas': top_ventas,
             'top_rotacion': top_rotacion,
             'productos_diferencias_abs': productos_diferencias_abs,
             'top_aumento_stock': top_aumento_stock,

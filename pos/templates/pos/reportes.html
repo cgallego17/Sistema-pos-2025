@@ -422,7 +422,7 @@
                     </div>
                 </div>
                 <div class="col-md-6">
-                    <h6 class="mb-3"><i class="bi bi-trophy"></i> Top 10 Productos por Salidas de Inventario</h6>
+                    <h6 class="mb-3"><i class="bi bi-trophy"></i> Top 10 Productos por Ventas</h6>
                     <div class="table-responsive">
                         <table class="table table-sm table-hover">
                             <thead>
@@ -430,20 +430,20 @@
                                     <th>#</th>
                                     <th>Código</th>
                                     <th>Producto</th>
-                                    <th class="text-end">Salidas Inventario</th>
+                                    <th class="text-end">Ventas</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for item in top_salidas %}
+                                {% for item in top_ventas %}
                                 <tr>
                                     <td>{{ forloop.counter }}</td>
                                     <td><strong>{{ item.codigo }}</strong></td>
                                     <td>{{ item.nombre }}</td>
-                                    <td class="text-end"><span class="badge badge-modern badge-warning-modern">{{ item.total_salidas|intcomma }}</span></td>
+                                    <td class="text-end"><span class="badge badge-modern badge-danger-modern">{{ item.total_ventas|intcomma }}</span></td>
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="4" class="text-center text-muted">No hay productos con salidas de inventario</td>
+                                    <td colspan="4" class="text-center text-muted">No hay productos con ventas</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -466,7 +466,7 @@
                                     <th>Código</th>
                                     <th>Producto</th>
                                     <th class="text-end">Rotación %</th>
-                                    <th class="text-end">Salidas Inventario</th>
+                                    <th class="text-end">Ventas</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -476,7 +476,7 @@
                                     <td><strong>{{ item.codigo }}</strong></td>
                                     <td>{{ item.nombre }}</td>
                                     <td class="text-end"><span class="badge badge-modern badge-info-modern">{{ item.rotacion_porcentaje }}%</span></td>
-                                    <td class="text-end">{{ item.total_salidas|intcomma }}</td>
+                                    <td class="text-end">{{ item.total_ventas|intcomma }}</td>
                                 </tr>
                                 {% empty %}
                                 <tr>
