@@ -2483,6 +2483,120 @@ def reportes_view(request):
         # Ordenar por código
         comparativa_por_producto.sort(key=lambda x: x['codigo'])
         
+        # Obtener conteos físicos existentes (último conteo por código+atributo)
+        from .models import ConteoFisico
+        conteos_fisicos = {}
+        for item in resumen_productos:
+            codigo = item['codigo']
+            atributo = item['atributo'] if item['atributo'] != '-' else None
+            # Buscar último conteo para este código+atributo
+            conteo = ConteoFisico.objects.filter(
+                codigo=codigo,
+                atributo=atributo
+            ).order_by('-fecha_conteo').first()
+            if conteo:
+                conteos_fisicos[(codigo, atributo)] = conteo.cantidad_contada
+        
+        # Agregar conteos físicos a los items
+        for item in resumen_productos:
+            codigo = item['codigo']
+            atributo = item['atributo'] if item['atributo'] != '-' else None
+            item['cantidad_contada'] = conteos_fisicos.get((codigo, atributo), None)
+        
+        # Verificar si se solicita exportación (después de obtener conteos físicos)
+        export_tipo = request.GET.get('export')
+        export_format = (request.GET.get('format') or 'csv').strip().lower()
+        
+        if export_tipo == 'resumen_inventario':
+            from django.http import HttpResponse
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, Alignment
+            
+            wb = Workbook()
+            ws = wb.active
+            ws.title = 'Resumen Inventario'
+            
+            # Estilo para headers
+            header_font = Font(bold=True)
+            header_alignment = Alignment(horizontal='center', vertical='center')
+            
+            # Headers
+            headers = [
+                'Código', 'Producto', 'Atributo', 'Stock Inicial', 'Entradas',
+                'Salidas', 'Ajustes', 'Neto', 'Stock Actual', 'Cantidad Contada',
+                'Tiene Problemas', 'Alertas', 'Causas Negativos'
+            ]
+            ws.append(headers)
+            
+            # Aplicar estilo a headers
+            for cell in ws[1]:
+                cell.font = header_font
+                cell.alignment = header_alignment
+            
+            # Agregar datos
+            for item in resumen_productos:
+                alertas_texto = ' | '.join(item.get('alertas', [])) if item.get('alertas') else ''
+                causas_texto = ' | '.join(item.get('causas_negativos', [])) if item.get('causas_negativos') else ''
+                
+                ws.append([
+                    item['codigo'],
+                    item['nombre'],
+                    item.get('atributo', '-'),
+                    item.get('stock_inicial', 0),
+                    item.get('total_entradas', 0),
+                    item.get('total_salidas', 0),
+                    item.get('ajustes', 0),
+                    item.get('neto', 0),
+                    item.get('stock_actual', 0),
+                    item.get('cantidad_contada', '') or '',
+                    'Sí' if item.get('tiene_problemas', False) else 'No',
+                    alertas_texto,
+                    causas_texto,
+                ])
+            
+            # Ajustar ancho de columnas
+            column_widths = {
+                'A': 15,  # Código
+                'B': 30,  # Producto
+                'C': 20,  # Atributo
+                'D': 12,  # Stock Inicial
+                'E': 10,  # Entradas
+                'F': 10,  # Salidas
+                'G': 10,  # Ajustes
+                'H': 10,  # Neto
+                'I': 12,  # Stock Actual
+                'J': 15,  # Cantidad Contada
+                'K': 15,  # Tiene Problemas
+                'L': 40,  # Alertas
+                'M': 40,  # Causas Negativos
+            }
+            for col, width in column_widths.items():
+                ws.column_dimensions[col].width = width
+            
+            # Preparar respuesta
+            from io import BytesIO
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+            
+            # Generar nombre de archivo
+            fecha_str = ''
+            if fecha_desde and fecha_hasta:
+                fecha_str = f"_{fecha_desde}_a_{fecha_hasta}"
+            elif fecha_desde:
+                fecha_str = f"_desde_{fecha_desde}"
+            elif fecha_hasta:
+                fecha_str = f"_hasta_{fecha_hasta}"
+            
+            filename = f"resumen_inventario{fecha_str}.xlsx"
+            
+            response = HttpResponse(
+                output.getvalue(),
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        
         context = {
             'tipo_reporte': 'inventario',
             'resumen_productos': resumen_productos,
