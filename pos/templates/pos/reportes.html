@@ -165,7 +165,7 @@
                                            placeholder="0"
                                            min="0"
                                            style="text-align: center;">
-                                    <button class="btn btn-sm {% if item.cantidad_contada %}btn-outline-success{% else %}btn-outline-primary{% endif %} guardar-conteo-btn" 
+                                    <button class="btn btn-sm {% if item.cantidad_contada %}btn-success{% else %}btn-outline-primary{% endif %} guardar-conteo-btn" 
                                             type="button"
                                             data-codigo="{{ item.codigo }}" 
                                             data-atributo="{{ item.atributo|default:'sin' }}"
@@ -608,11 +608,11 @@
                 })
                 .then(data => {
                     if (data.success) {
-                        // Verificar que la cantidad guardada coincide con la enviada
-                        if (data.cantidad === cantidadNum) {
-                            // Cambiar botón a verde (éxito)
+                        // Verificar que realmente se guardó (la respuesta confirma el guardado)
+                        if (data.cantidad !== undefined && data.cantidad === cantidadNum) {
+                            // Cambiar botón a verde con fondo (btn-success)
                             btn.classList.remove('btn-outline-primary');
-                            btn.classList.add('btn-outline-success');
+                            btn.classList.add('btn-success');
                             
                             // Actualizar el atributo data-cantidad-guardada
                             btn.setAttribute('data-cantidad-guardada', cantidadNum.toString());
@@ -694,13 +694,13 @@
                     
                     // Si el valor actual es diferente al guardado, cambiar botón a azul
                     if (cantidadActual !== cantidadGuardada) {
-                        btn.classList.remove('btn-outline-success');
+                        btn.classList.remove('btn-success');
                         btn.classList.add('btn-outline-primary');
                         btn.setAttribute('title', 'Guardar conteo');
                     } else if (cantidadGuardada > 0) {
                         // Si coincide con el guardado, mantener verde
                         btn.classList.remove('btn-outline-primary');
-                        btn.classList.add('btn-outline-success');
+                        btn.classList.add('btn-success');
                         btn.setAttribute('title', `Conteo guardado: ${cantidadGuardada}`);
                     }
                 }
