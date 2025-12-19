@@ -74,11 +74,11 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label-modern">Fecha Desde</label>
-                    <input type="date" class="form-control form-control-modern" name="fecha_desde" value="{{ fecha_desde }}">
+                    <input type="date" class="form-control form-control-modern" name="fecha_desde" value="{% if fecha_desde %}{{ fecha_desde }}{% endif %}">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label-modern">Fecha Hasta</label>
-                    <input type="date" class="form-control form-control-modern" name="fecha_hasta" value="{{ fecha_hasta }}">
+                    <input type="date" class="form-control form-control-modern" name="fecha_hasta" value="{% if fecha_hasta %}{{ fecha_hasta }}{% endif %}">
                 </div>
                 <div class="col-md-1 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary-pos w-100" id="btnGenerarReporte">
