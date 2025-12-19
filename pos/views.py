@@ -4503,20 +4503,18 @@ def guardar_conteo_fisico_view(request):
         if atributo in ('', '-', 'None', 'null'):
             atributo = None
         
-        # Validar cantidad
-        if not cantidad_str:
-            return JsonResponse({
-                'success': False,
-                'error': 'Cantidad requerida'
-            }, status=400)
-        
-        try:
-            cantidad = int(cantidad_str)
-        except ValueError:
-            return JsonResponse({
-                'success': False,
-                'error': 'La cantidad debe ser un número válido'
-            }, status=400)
+        # Validar cantidad - permitir 0 y valores vacíos (se tratarán como 0)
+        if not cantidad_str or cantidad_str.strip() == '':
+            # Si está vacío, interpretar como 0
+            cantidad = 0
+        else:
+            try:
+                cantidad = int(cantidad_str)
+            except ValueError:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'La cantidad debe ser un número válido'
+                }, status=400)
         
         # Buscar si ya existe un conteo para este código+atributo
         # Usamos el último conteo por fecha

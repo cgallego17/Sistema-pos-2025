@@ -169,16 +169,16 @@
                                            class="form-control form-control-sm conteo-fisico-input" 
                                            data-codigo="{{ item.codigo }}" 
                                            data-atributo="{{ item.atributo|default:'sin' }}"
-                                           value="{% if item.cantidad_contada %}{{ item.cantidad_contada }}{% endif %}"
+                                           value="{% if item.cantidad_contada is not None %}{{ item.cantidad_contada }}{% endif %}"
                                            placeholder="0"
                                            min="0"
                                            style="text-align: center;">
-                                    <button class="btn btn-sm {% if item.cantidad_contada %}btn-success{% else %}btn-outline-primary{% endif %} guardar-conteo-btn" 
+                                    <button class="btn btn-sm {% if item.cantidad_contada is not None %}btn-success{% else %}btn-outline-primary{% endif %} guardar-conteo-btn" 
                                             type="button"
                                             data-codigo="{{ item.codigo }}" 
                                             data-atributo="{{ item.atributo|default:'sin' }}"
-                                            data-cantidad-guardada="{% if item.cantidad_contada %}{{ item.cantidad_contada }}{% else %}0{% endif %}"
-                                            title="{% if item.cantidad_contada %}Conteo guardado: {{ item.cantidad_contada }}{% else %}Guardar conteo{% endif %}">
+                                            data-cantidad-guardada="{% if item.cantidad_contada is not None %}{{ item.cantidad_contada }}{% else %}0{% endif %}"
+                                            title="{% if item.cantidad_contada is not None %}Conteo guardado: {{ item.cantidad_contada }}{% else %}Guardar conteo{% endif %}">
                                         <i class="bi bi-check-lg"></i>
                                     </button>
                                 </div>
@@ -581,24 +581,25 @@
             // Para enviar al servidor, convertir 'sin' de vuelta a cadena vacía
             const atributoParaEnviar = atributo === 'sin' ? '' : atributo;
             
-            // Validar cantidad
-            if (cantidad === '' || cantidad === null) {
-                if (statusEl) {
-                    statusEl.textContent = '⚠️ Ingrese una cantidad';
-                    statusEl.style.color = '#dc3545';
+            // Validar cantidad - permitir 0 y valores vacíos (se tratarán como 0)
+            let cantidadNum;
+            if (cantidad === '' || cantidad === null || cantidad === undefined) {
+                // Si está vacío, interpretar como 0
+                cantidadNum = 0;
+            } else {
+                // Validar que sea un número válido
+                cantidadNum = parseInt(cantidad);
+                if (isNaN(cantidadNum)) {
+                    if (statusEl) {
+                        statusEl.textContent = '⚠️ La cantidad debe ser un número';
+                        statusEl.style.color = '#dc3545';
+                    }
+                    return;
                 }
-                return;
             }
             
-            // Validar que sea un número válido
-            const cantidadNum = parseInt(cantidad);
-            if (isNaN(cantidadNum)) {
-                if (statusEl) {
-                    statusEl.textContent = '⚠️ La cantidad debe ser un número';
-                    statusEl.style.color = '#dc3545';
-                }
-                return;
-            }
+            // Permitir valores negativos también (según los tests)
+            // No hay restricción de cantidad mínima
             
             // Deshabilitar botón mientras se guarda
             const originalHtml = btn.innerHTML;
@@ -738,8 +739,8 @@
                         btn.classList.remove('btn-success');
                         btn.classList.add('btn-outline-primary');
                         btn.setAttribute('title', 'Guardar conteo');
-                    } else if (cantidadGuardada > 0) {
-                        // Si coincide con el guardado, mantener verde
+                    } else {
+                        // Si coincide con el guardado (incluyendo 0), mantener verde
                         btn.classList.remove('btn-outline-primary');
                         btn.classList.add('btn-success');
                         btn.setAttribute('title', `Conteo guardado: ${cantidadGuardada}`);
