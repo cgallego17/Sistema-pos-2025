@@ -285,6 +285,277 @@
         </div>
     </div>
 
+    <!-- Análisis de Datos del Resumen -->
+    <div class="card-modern mt-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Análisis de Datos del Resumen</h5>
+            <small class="text-muted">Métricas y estadísticas basadas en entradas, salidas, ventas y stock</small>
+        </div>
+        <div class="card-body">
+            <!-- Métricas Generales -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="stat-card info">
+                        <div class="stat-card-label"><i class="bi bi-box"></i> Total Productos</div>
+                        <div class="stat-card-value">{{ analisis_datos.total_productos|intcomma }}</div>
+                        <small class="text-muted">{{ analisis_datos.productos_con_movimientos|intcomma }} con movimientos</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card success">
+                        <div class="stat-card-label"><i class="bi bi-arrow-down-circle"></i> Total Entradas</div>
+                        <div class="stat-card-value">{{ analisis_datos.total_entradas|intcomma }}</div>
+                        <small class="text-muted">Ingresos de inventario</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card danger">
+                        <div class="stat-card-label"><i class="bi bi-arrow-up-circle"></i> Total Salidas</div>
+                        <div class="stat-card-value">{{ analisis_datos.total_salidas|intcomma }}</div>
+                        <small class="text-muted">Ventas y salidas</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card {% if analisis_datos.total_neto >= 0 %}primary{% else %}warning{% endif %}">
+                        <div class="stat-card-label"><i class="bi bi-arrow-left-right"></i> Neto</div>
+                        <div class="stat-card-value">{% if analisis_datos.total_neto >= 0 %}+{% endif %}{{ analisis_datos.total_neto|intcomma }}</div>
+                        <small class="text-muted">Entradas - Salidas + Ajustes</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="stat-card info">
+                        <div class="stat-card-label"><i class="bi bi-arrow-left"></i> Stock Inicial</div>
+                        <div class="stat-card-value">{{ analisis_datos.total_stock_inicial|intcomma }}</div>
+                        <small class="text-muted">Al inicio del período</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card primary">
+                        <div class="stat-card-label"><i class="bi bi-arrow-right"></i> Stock Actual</div>
+                        <div class="stat-card-value">{{ analisis_datos.total_stock_actual|intcomma }}</div>
+                        <small class="text-muted">Al final del período</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card {% if analisis_datos.productos_stock_cero > 0 %}warning{% else %}success{% endif %}">
+                        <div class="stat-card-label"><i class="bi bi-exclamation-triangle"></i> Stock Cero</div>
+                        <div class="stat-card-value">{{ analisis_datos.productos_stock_cero|intcomma }}</div>
+                        <small class="text-muted">Productos agotados</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card {% if analisis_datos.productos_stock_negativo > 0 %}danger{% else %}success{% endif %}">
+                        <div class="stat-card-label"><i class="bi bi-exclamation-circle"></i> Stock Negativo</div>
+                        <div class="stat-card-value">{{ analisis_datos.productos_stock_negativo|intcomma }}</div>
+                        <small class="text-muted">Productos con problemas</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="stat-card success">
+                        <div class="stat-card-label"><i class="bi bi-check-circle"></i> Conteos Físicos</div>
+                        <div class="stat-card-value">{{ analisis_datos.productos_con_conteo|intcomma }}</div>
+                        <small class="text-muted">{{ analisis_datos.productos_coinciden|intcomma }} coinciden con sistema</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-card warning">
+                        <div class="stat-card-label"><i class="bi bi-exclamation-triangle"></i> Con Problemas</div>
+                        <div class="stat-card-value">{{ analisis_datos.productos_con_problemas|intcomma }}</div>
+                        <small class="text-muted">Productos con inconsistencias</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-card info">
+                        <div class="stat-card-label"><i class="bi bi-pause-circle"></i> Sin Movimientos</div>
+                        <div class="stat-card-value">{{ analisis_datos.productos_sin_movimientos|intcomma }}</div>
+                        <small class="text-muted">Productos inactivos</small>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="my-4">
+
+            <!-- Top Productos -->
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="mb-3"><i class="bi bi-trophy"></i> Top 10 Productos por Entradas</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Código</th>
+                                    <th>Producto</th>
+                                    <th class="text-end">Entradas</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in top_entradas %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td><strong>{{ item.codigo }}</strong></td>
+                                    <td>{{ item.nombre }}</td>
+                                    <td class="text-end"><span class="badge badge-modern badge-success-modern">{{ item.total_entradas|intcomma }}</span></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">No hay productos con entradas</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="mb-3"><i class="bi bi-trophy"></i> Top 10 Productos por Salidas</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Código</th>
+                                    <th>Producto</th>
+                                    <th class="text-end">Salidas</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in top_salidas %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td><strong>{{ item.codigo }}</strong></td>
+                                    <td>{{ item.nombre }}</td>
+                                    <td class="text-end"><span class="badge badge-modern badge-danger-modern">{{ item.total_salidas|intcomma }}</span></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">No hay productos con salidas</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="my-4">
+
+            <!-- Análisis de Rotación y Variaciones -->
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="mb-3"><i class="bi bi-arrow-repeat"></i> Top 10 Productos por Rotación</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Código</th>
+                                    <th>Producto</th>
+                                    <th class="text-end">Rotación %</th>
+                                    <th class="text-end">Salidas</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in top_rotacion %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td><strong>{{ item.codigo }}</strong></td>
+                                    <td>{{ item.nombre }}</td>
+                                    <td class="text-end"><span class="badge badge-modern badge-info-modern">{{ item.rotacion_porcentaje }}%</span></td>
+                                    <td class="text-end">{{ item.total_salidas|intcomma }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">No hay datos de rotación</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="mb-3"><i class="bi bi-arrow-up"></i> Top 10 Aumentos de Stock</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Código</th>
+                                    <th>Producto</th>
+                                    <th class="text-end">Variación %</th>
+                                    <th class="text-end">Stock Actual</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in top_aumento_stock %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td><strong>{{ item.codigo }}</strong></td>
+                                    <td>{{ item.nombre }}</td>
+                                    <td class="text-end"><span class="badge badge-modern badge-success-modern">+{{ item.variacion_porcentaje }}%</span></td>
+                                    <td class="text-end">{{ item.stock_actual|intcomma }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">No hay aumentos de stock</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            {% if productos_diferencias_abs %}
+            <hr class="my-4">
+            <div class="row">
+                <div class="col-md-12">
+                    <h6 class="mb-3"><i class="bi bi-exclamation-triangle"></i> Top 10 Diferencias entre Conteo Físico y Stock del Sistema</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Código</th>
+                                    <th>Producto</th>
+                                    <th>Atributo</th>
+                                    <th class="text-end">Stock Actual</th>
+                                    <th class="text-end">Cantidad Contada</th>
+                                    <th class="text-end">Diferencia</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in productos_diferencias_abs %}
+                                <tr class="{% if item.diferencia > 0 %}table-info{% else %}table-danger{% endif %}">
+                                    <td>{{ forloop.counter }}</td>
+                                    <td><strong>{{ item.codigo }}</strong></td>
+                                    <td>{{ item.nombre }}</td>
+                                    <td>{{ item.atributo }}</td>
+                                    <td class="text-end">{{ item.stock_actual|intcomma }}</td>
+                                    <td class="text-end">{{ item.cantidad_contada|intcomma }}</td>
+                                    <td class="text-end">
+                                        {% if item.diferencia > 0 %}
+                                            <span class="badge badge-modern badge-info-modern">+{{ item.diferencia|intcomma }}</span>
+                                        {% else %}
+                                            <span class="badge badge-modern badge-danger-modern">{{ item.diferencia|intcomma }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
     <!-- Tabla de Diferencias entre Conteo Físico y Stock del Sistema -->
     {% if productos_con_diferencias %}
     <div class="card-modern mt-4">

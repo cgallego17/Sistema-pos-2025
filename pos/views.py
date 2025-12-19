@@ -2389,6 +2389,85 @@ def reportes_view(request):
         # Obtener lista de productos para el filtro
         productos = Producto.objects.filter(activo=True).order_by('nombre')
         
+        # ===== ANÁLISIS DE DATOS DEL RESUMEN =====
+        analisis_datos = {
+            'total_productos': len(resumen_productos),
+            'total_entradas': sum(item.get('total_entradas', 0) for item in resumen_productos),
+            'total_salidas': sum(item.get('total_salidas', 0) for item in resumen_productos),
+            'total_ajustes': sum(item.get('ajustes', 0) for item in resumen_productos),
+            'total_neto': sum(item.get('neto', 0) for item in resumen_productos),
+            'total_stock_inicial': sum(item.get('stock_inicial', 0) for item in resumen_productos),
+            'total_stock_actual': sum(item.get('stock_actual', 0) for item in resumen_productos),
+            'productos_con_movimientos': len([item for item in resumen_productos if item.get('total_entradas', 0) > 0 or item.get('total_salidas', 0) > 0]),
+            'productos_sin_movimientos': len([item for item in resumen_productos if item.get('total_entradas', 0) == 0 and item.get('total_salidas', 0) == 0]),
+            'productos_stock_cero': len([item for item in resumen_productos if item.get('stock_actual', 0) == 0]),
+            'productos_stock_negativo': len([item for item in resumen_productos if item.get('stock_actual', 0) < 0]),
+            'productos_con_problemas': len([item for item in resumen_productos if item.get('tiene_problemas', False)]),
+            'productos_con_conteo': len([item for item in resumen_productos if item.get('cantidad_contada') is not None]),
+            'productos_coinciden': len([item for item in resumen_productos if item.get('coincide', False)]),
+        }
+        
+        # Top productos por entradas
+        top_entradas = sorted(
+            [item for item in resumen_productos if item.get('total_entradas', 0) > 0],
+            key=lambda x: x.get('total_entradas', 0),
+            reverse=True
+        )[:10]
+        
+        # Top productos por salidas
+        top_salidas = sorted(
+            [item for item in resumen_productos if item.get('total_salidas', 0) > 0],
+            key=lambda x: x.get('total_salidas', 0),
+            reverse=True
+        )[:10]
+        
+        # Productos con mayor rotación (salidas / stock_inicial si stock_inicial > 0)
+        productos_rotacion = []
+        for item in resumen_productos:
+            stock_inicial = item.get('stock_inicial', 0)
+            salidas = item.get('total_salidas', 0)
+            if stock_inicial > 0 and salidas > 0:
+                rotacion = (salidas / stock_inicial) * 100
+                productos_rotacion.append({
+                    **item,
+                    'rotacion_porcentaje': round(rotacion, 2)
+                })
+        top_rotacion = sorted(productos_rotacion, key=lambda x: x.get('rotacion_porcentaje', 0), reverse=True)[:10]
+        
+        # Productos con mayor diferencia absoluta entre conteo y stock
+        productos_diferencias_abs = sorted(
+            [item for item in resumen_productos if item.get('diferencia') is not None],
+            key=lambda x: abs(x.get('diferencia', 0)),
+            reverse=True
+        )[:10]
+        
+        # Análisis de variación de stock
+        variaciones_stock = []
+        for item in resumen_productos:
+            stock_inicial = item.get('stock_inicial', 0)
+            stock_actual = item.get('stock_actual', 0)
+            if stock_inicial != 0:
+                variacion = ((stock_actual - stock_inicial) / abs(stock_inicial)) * 100
+            else:
+                variacion = 100 if stock_actual > 0 else 0
+            variaciones_stock.append({
+                **item,
+                'variacion_porcentaje': round(variacion, 2)
+            })
+        
+        # Productos con mayor aumento de stock
+        top_aumento_stock = sorted(
+            [v for v in variaciones_stock if v.get('variacion_porcentaje', 0) > 0],
+            key=lambda x: x.get('variacion_porcentaje', 0),
+            reverse=True
+        )[:10]
+        
+        # Productos con mayor disminución de stock
+        top_disminucion_stock = sorted(
+            [v for v in variaciones_stock if v.get('variacion_porcentaje', 0) < 0],
+            key=lambda x: x.get('variacion_porcentaje', 0)
+        )[:10]
+        
         # ===== COMPARATIVA: Ingresos vs Salidas (Ventas) vs Salidas de Mercancía =====
         from .models import ItemVenta, Venta
         # Sum ya está importado al inicio del archivo, no es necesario importarlo de nuevo
@@ -2663,6 +2742,14 @@ def reportes_view(request):
             'tipo_movimiento': tipo_movimiento,
             'fecha_desde': fecha_desde,
             'fecha_hasta': fecha_hasta,
+            # Análisis de datos
+            'analisis_datos': analisis_datos,
+            'top_entradas': top_entradas,
+            'top_salidas': top_salidas,
+            'top_rotacion': top_rotacion,
+            'productos_diferencias_abs': productos_diferencias_abs,
+            'top_aumento_stock': top_aumento_stock,
+            'top_disminucion_stock': top_disminucion_stock,
             # Comparativa
             'total_ingresos_cantidad': total_ingresos_cantidad,
             'total_ingresos_registros': total_ingresos_registros,
