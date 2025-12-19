@@ -2342,7 +2342,7 @@ def reportes_view(request):
             # Buscar último conteo para este código+atributo
             conteo = ConteoFisico.objects.filter(
                 codigo=codigo,
-                atributo=atributo if atributo else None
+                atributo=atributo
             ).order_by('-fecha_conteo').first()
             if conteo:
                 conteos_fisicos[(codigo, atributo)] = conteo.cantidad_contada

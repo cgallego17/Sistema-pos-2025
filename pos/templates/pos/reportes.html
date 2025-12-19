@@ -160,7 +160,7 @@
                                     <input type="number" 
                                            class="form-control form-control-sm conteo-fisico-input" 
                                            data-codigo="{{ item.codigo }}" 
-                                           data-atributo="{{ item.atributo }}"
+                                           data-atributo="{{ item.atributo|default:'sin' }}"
                                            value="{% if item.cantidad_contada %}{{ item.cantidad_contada }}{% endif %}"
                                            placeholder="0"
                                            min="0"
@@ -168,7 +168,7 @@
                                     <button class="btn btn-sm btn-outline-primary guardar-conteo-btn" 
                                             type="button"
                                             data-codigo="{{ item.codigo }}" 
-                                            data-atributo="{{ item.atributo }}"
+                                            data-atributo="{{ item.atributo|default:'sin' }}"
                                             title="Guardar conteo">
                                         <i class="bi bi-check-lg"></i>
                                     </button>
@@ -592,7 +592,19 @@
                         'X-Requested-With': 'XMLHttpRequest'
                     }
                 })
-                .then(response => response.json())
+                .then(response => {
+                    // Verificar si la respuesta es exitosa
+                    if (!response.ok) {
+                        // Intentar obtener el mensaje de error del JSON
+                        return response.json().then(data => {
+                            throw new Error(data.error || `Error HTTP ${response.status}`);
+                        }).catch(() => {
+                            // Si no se puede parsear JSON, lanzar error genérico
+                            throw new Error(`Error HTTP ${response.status}: ${response.statusText}`);
+                        });
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
                         if (statusEl) {
