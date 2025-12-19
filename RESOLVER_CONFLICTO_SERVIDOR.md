@@ -70,3 +70,4 @@ git commit -m "Resolver conflicto: usar versión remota con correcciones de cont
 update
 ```
 
+

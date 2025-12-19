@@ -2538,6 +2538,13 @@ def reportes_view(request):
                 alertas_texto = ' | '.join(item.get('alertas', [])) if item.get('alertas') else ''
                 causas_texto = ' | '.join(item.get('causas_negativos', [])) if item.get('causas_negativos') else ''
                 
+                # Obtener cantidad_contada - puede ser None, 0, o un número positivo
+                cantidad_contada = item.get('cantidad_contada')
+                if cantidad_contada is None:
+                    cantidad_contada_excel = ''
+                else:
+                    cantidad_contada_excel = cantidad_contada  # Incluye 0
+                
                 ws.append([
                     item['codigo'],
                     item['nombre'],
@@ -2548,7 +2555,7 @@ def reportes_view(request):
                     item.get('ajustes', 0),
                     item.get('neto', 0),
                     item.get('stock_actual', 0),
-                    item.get('cantidad_contada', '') or '',
+                    cantidad_contada_excel,
                     'Sí' if item.get('tiene_problemas', False) else 'No',
                     alertas_texto,
                     causas_texto,
