@@ -107,8 +107,9 @@
                 <small class="text-muted">Total: {{ resumen_productos|length|intcomma }} productos</small>
             </div>
             <div>
-                <a class="btn btn-sm btn-outline-success"
-                   href="?tipo=inventario{% if producto_id %}&producto={{ producto_id }}{% endif %}{% if tipo_movimiento %}&tipo_mov={{ tipo_movimiento }}{% endif %}{% if fecha_desde %}&fecha_desde={{ fecha_desde }}{% endif %}{% if fecha_hasta %}&fecha_hasta={{ fecha_hasta }}{% endif %}&export=resumen_inventario&format=xlsx">
+                <a class="btn btn-sm btn-success"
+                   href="?tipo=inventario{% if producto_id %}&producto={{ producto_id }}{% endif %}{% if tipo_movimiento %}&tipo_mov={{ tipo_movimiento }}{% endif %}{% if fecha_desde %}&fecha_desde={{ fecha_desde }}{% endif %}{% if fecha_hasta %}&fecha_hasta={{ fecha_hasta }}{% endif %}&export=resumen_inventario&format=xlsx"
+                   style="background-color: #198754; border-color: #198754; color: white;">
                     <i class="bi bi-file-earmark-excel"></i> Descargar Excel
                 </a>
             </div>
