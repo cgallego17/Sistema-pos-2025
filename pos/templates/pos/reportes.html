@@ -532,8 +532,19 @@
         // Manejar guardado de conteos físicos
         // Usar delegación de eventos para asegurar que funcione incluso si el DOM cambia
         document.addEventListener('click', function(e) {
-            // Verificar si el clic fue en un botón de guardar conteo
-            const btn = e.target.closest('.guardar-conteo-btn');
+            // Verificar si el clic fue en un botón de guardar conteo o en su icono
+            let btn = null;
+            if (e.target && typeof e.target.closest === 'function') {
+                btn = e.target.closest('.guardar-conteo-btn');
+            }
+            // Si no se encontró, intentar con el target directamente
+            if (!btn && e.target && e.target.classList && e.target.classList.contains('guardar-conteo-btn')) {
+                btn = e.target;
+            }
+            // Si aún no se encontró, intentar con el parentElement
+            if (!btn && e.target && e.target.parentElement && e.target.parentElement.classList && e.target.parentElement.classList.contains('guardar-conteo-btn')) {
+                btn = e.target.parentElement;
+            }
             if (!btn) return;
             
             // Prevenir múltiples clics
@@ -699,10 +710,20 @@
         conteoInputs.forEach(input => {
             // Verificar si el valor cambió respecto al guardado
             input.addEventListener('input', function() {
-                const btn = this.closest('.input-group').querySelector('.guardar-conteo-btn');
+                const inputEl = this; // Guardar referencia al input
+                if (!inputEl || typeof inputEl.closest !== 'function') {
+                    console.error('Input no válido o no tiene método closest');
+                    return;
+                }
+                const inputGroup = inputEl.closest('.input-group');
+                if (!inputGroup) {
+                    console.error('No se encontró el input-group');
+                    return;
+                }
+                const btn = inputGroup.querySelector('.guardar-conteo-btn');
                 if (btn) {
                     const cantidadGuardada = parseInt(btn.getAttribute('data-cantidad-guardada') || '0');
-                    const cantidadActual = parseInt(this.value) || 0;
+                    const cantidadActual = parseInt(inputEl.value) || 0;
                     
                     // Si el valor actual es diferente al guardado, cambiar botón a azul
                     if (cantidadActual !== cantidadGuardada) {
@@ -722,7 +743,17 @@
             input.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    const btn = this.closest('.input-group').querySelector('.guardar-conteo-btn');
+                    const inputEl = this; // Guardar referencia al input
+                    if (!inputEl || typeof inputEl.closest !== 'function') {
+                        console.error('Input no válido o no tiene método closest');
+                        return;
+                    }
+                    const inputGroup = inputEl.closest('.input-group');
+                    if (!inputGroup) {
+                        console.error('No se encontró el input-group');
+                        return;
+                    }
+                    const btn = inputGroup.querySelector('.guardar-conteo-btn');
                     if (btn) {
                         btn.click();
                     }
