@@ -544,150 +544,154 @@
             
             const codigo = btn.dataset.codigo;
             let atributo = btn.dataset.atributo || '';
-                // Normalizar atributo vacío o '-' a 'sin' para coincidir con el template
-                if (!atributo || atributo === '-' || atributo === 'None' || atributo === 'null') {
-                    atributo = 'sin';
-                }
-                const input = this.closest('.input-group').querySelector('.conteo-fisico-input');
-                const cantidad = input.value.trim();
-                
-                // Obtener elemento de estado (el template usa 'sin' cuando atributo está vacío)
-                const statusId = `status-${codigo}-${atributo}`;
-                const statusEl = document.getElementById(statusId);
-                
-                // Para enviar al servidor, convertir 'sin' de vuelta a cadena vacía
-                const atributoParaEnviar = atributo === 'sin' ? '' : atributo;
-                
-                // Validar cantidad
-                if (cantidad === '' || cantidad === null) {
-                    if (statusEl) {
-                        statusEl.textContent = '⚠️ Ingrese una cantidad';
-                        statusEl.style.color = '#dc3545';
-                    }
-                    return;
-                }
-                
-                // Validar que sea un número válido
-                const cantidadNum = parseInt(cantidad);
-                if (isNaN(cantidadNum)) {
-                    if (statusEl) {
-                        statusEl.textContent = '⚠️ La cantidad debe ser un número';
-                        statusEl.style.color = '#dc3545';
-                    }
-                    return;
-                }
-                
-                // Deshabilitar botón mientras se guarda
-                const originalHtml = btn.innerHTML;
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-                
+            // Normalizar atributo vacío o '-' a 'sin' para coincidir con el template
+            if (!atributo || atributo === '-' || atributo === 'None' || atributo === 'null') {
+                atributo = 'sin';
+            }
+            const input = btn.closest('.input-group').querySelector('.conteo-fisico-input');
+            if (!input) {
+                console.error('No se encontró el input para el botón', btn);
+                return;
+            }
+            const cantidad = input.value.trim();
+            
+            // Obtener elemento de estado (el template usa 'sin' cuando atributo está vacío)
+            const statusId = `status-${codigo}-${atributo}`;
+            const statusEl = document.getElementById(statusId);
+            
+            // Para enviar al servidor, convertir 'sin' de vuelta a cadena vacía
+            const atributoParaEnviar = atributo === 'sin' ? '' : atributo;
+            
+            // Validar cantidad
+            if (cantidad === '' || cantidad === null) {
                 if (statusEl) {
-                    statusEl.textContent = 'Guardando...';
-                    statusEl.style.color = '#6c757d';
+                    statusEl.textContent = '⚠️ Ingrese una cantidad';
+                    statusEl.style.color = '#dc3545';
                 }
-                
-                // Preparar datos para enviar
-                const formData = new FormData();
-                formData.append('codigo', codigo);
-                formData.append('atributo', atributoParaEnviar);
-                formData.append('cantidad', cantidadNum);
-                formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-                
-                // Enviar petición AJAX
-                fetch('{% url "pos:guardar_conteo_fisico" %}', {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                })
-                .then(response => {
-                    // Verificar si la respuesta es exitosa
-                    if (!response.ok) {
-                        // Intentar obtener el mensaje de error del JSON
-                        return response.json().then(data => {
-                            throw new Error(data.error || `Error HTTP ${response.status}`);
-                        }).catch(() => {
-                            // Si no se puede parsear JSON, lanzar error genérico
-                            throw new Error(`Error HTTP ${response.status}: ${response.statusText}`);
-                        });
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.success) {
-                        // Verificar que realmente se guardó (la respuesta confirma el guardado)
-                        if (data.cantidad !== undefined && data.cantidad === cantidadNum) {
-                            // Cambiar botón a verde con fondo (btn-success)
-                            btn.classList.remove('btn-outline-primary');
-                            btn.classList.add('btn-success');
-                            
-                            // Actualizar el atributo data-cantidad-guardada
-                            btn.setAttribute('data-cantidad-guardada', cantidadNum.toString());
-                            
-                            // Actualizar el título del botón
-                            btn.setAttribute('title', `Conteo guardado: ${cantidadNum}`);
-                            
-                            if (statusEl) {
-                                statusEl.textContent = '✓ Guardado correctamente';
-                                statusEl.style.color = '#28a745';
-                            }
-                            
-                            // Mostrar notificación de éxito
-                            if (window.showNotification) {
-                                const mensaje = `Conteo físico guardado: ${codigo}${atributoParaEnviar ? ' (' + atributoParaEnviar + ')' : ''} - Cantidad: ${cantidadNum}`;
-                                window.showNotification(
-                                    mensaje,
-                                    'success',
-                                    'Conteo Guardado',
-                                    4000
-                                );
-                            }
-                        } else {
-                            // Si la cantidad no coincide, mostrar advertencia
-                            console.warn('La cantidad guardada no coincide con la enviada');
-                            if (statusEl) {
-                                statusEl.textContent = '⚠️ Guardado pero cantidad diferente';
-                                statusEl.style.color = '#ffc107';
-                            }
+                return;
+            }
+            
+            // Validar que sea un número válido
+            const cantidadNum = parseInt(cantidad);
+            if (isNaN(cantidadNum)) {
+                if (statusEl) {
+                    statusEl.textContent = '⚠️ La cantidad debe ser un número';
+                    statusEl.style.color = '#dc3545';
+                }
+                return;
+            }
+            
+            // Deshabilitar botón mientras se guarda
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            
+            if (statusEl) {
+                statusEl.textContent = 'Guardando...';
+                statusEl.style.color = '#6c757d';
+            }
+            
+            // Preparar datos para enviar
+            const formData = new FormData();
+            formData.append('codigo', codigo);
+            formData.append('atributo', atributoParaEnviar);
+            formData.append('cantidad', cantidadNum);
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+            
+            // Enviar petición AJAX
+            fetch('{% url "pos:guardar_conteo_fisico" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                // Verificar si la respuesta es exitosa
+                if (!response.ok) {
+                    // Intentar obtener el mensaje de error del JSON
+                    return response.json().then(data => {
+                        throw new Error(data.error || `Error HTTP ${response.status}`);
+                    }).catch(() => {
+                        // Si no se puede parsear JSON, lanzar error genérico
+                        throw new Error(`Error HTTP ${response.status}: ${response.statusText}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Verificar que realmente se guardó (la respuesta confirma el guardado)
+                    if (data.cantidad !== undefined && data.cantidad === cantidadNum) {
+                        // Cambiar botón a verde con fondo (btn-success)
+                        btn.classList.remove('btn-outline-primary');
+                        btn.classList.add('btn-success');
+                        
+                        // Actualizar el atributo data-cantidad-guardada
+                        btn.setAttribute('data-cantidad-guardada', cantidadNum.toString());
+                        
+                        // Actualizar el título del botón
+                        btn.setAttribute('title', `Conteo guardado: ${cantidadNum}`);
+                        
+                        if (statusEl) {
+                            statusEl.textContent = '✓ Guardado correctamente';
+                            statusEl.style.color = '#28a745';
                         }
                         
-                        // Restaurar botón
-                        btn.disabled = false;
-                        btn.innerHTML = originalHtml;
-                        
-                        // Limpiar mensaje después de 3 segundos
-                        setTimeout(() => {
-                            if (statusEl) {
-                                statusEl.textContent = '';
-                            }
-                        }, 3000);
+                        // Mostrar notificación de éxito
+                        if (window.showNotification) {
+                            const mensaje = `Conteo físico guardado: ${codigo}${atributoParaEnviar ? ' (' + atributoParaEnviar + ')' : ''} - Cantidad: ${cantidadNum}`;
+                            window.showNotification(
+                                mensaje,
+                                'success',
+                                'Conteo Guardado',
+                                4000
+                            );
+                        }
                     } else {
-                        throw new Error(data.error || 'Error desconocido');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error al guardar conteo:', error);
-                    if (statusEl) {
-                        statusEl.textContent = '✗ Error: ' + error.message;
-                        statusEl.style.color = '#dc3545';
-                    }
-                    
-                    // Mostrar notificación de error
-                    if (window.showNotification) {
-                        window.showNotification(
-                            `Error al guardar conteo: ${error.message}`,
-                            'error',
-                            'Error al Guardar',
-                            5000
-                        );
+                        // Si la cantidad no coincide, mostrar advertencia
+                        console.warn('La cantidad guardada no coincide con la enviada');
+                        if (statusEl) {
+                            statusEl.textContent = '⚠️ Guardado pero cantidad diferente';
+                            statusEl.style.color = '#ffc107';
+                        }
                     }
                     
                     // Restaurar botón
                     btn.disabled = false;
                     btn.innerHTML = originalHtml;
-                });
+                    
+                    // Limpiar mensaje después de 3 segundos
+                    setTimeout(() => {
+                        if (statusEl) {
+                            statusEl.textContent = '';
+                        }
+                    }, 3000);
+                } else {
+                    throw new Error(data.error || 'Error desconocido');
+                }
+            })
+            .catch(error => {
+                console.error('Error al guardar conteo:', error);
+                if (statusEl) {
+                    statusEl.textContent = '✗ Error: ' + error.message;
+                    statusEl.style.color = '#dc3545';
+                }
+                
+                // Mostrar notificación de error
+                if (window.showNotification) {
+                    window.showNotification(
+                        `Error al guardar conteo: ${error.message}`,
+                        'error',
+                        'Error al Guardar',
+                        5000
+                    );
+                }
+                
+                // Restaurar botón
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            });
         });
         
         // Permitir guardar con Enter en el input y verificar cambios
