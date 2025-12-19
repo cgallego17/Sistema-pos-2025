@@ -527,6 +527,118 @@
                 }
             });
         }
+        
+        // Manejar guardado de conteos físicos
+        const guardarConteoBtns = document.querySelectorAll('.guardar-conteo-btn');
+        guardarConteoBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const codigo = this.dataset.codigo;
+                let atributo = this.dataset.atributo || '';
+                // Normalizar atributo vacío o '-' a 'sin' para coincidir con el template
+                if (!atributo || atributo === '-' || atributo === 'None' || atributo === 'null') {
+                    atributo = 'sin';
+                }
+                const input = this.closest('.input-group').querySelector('.conteo-fisico-input');
+                const cantidad = input.value.trim();
+                
+                // Obtener elemento de estado (el template usa 'sin' cuando atributo está vacío)
+                const statusId = `status-${codigo}-${atributo}`;
+                const statusEl = document.getElementById(statusId);
+                
+                // Para enviar al servidor, convertir 'sin' de vuelta a cadena vacía
+                const atributoParaEnviar = atributo === 'sin' ? '' : atributo;
+                
+                // Validar cantidad
+                if (cantidad === '' || cantidad === null) {
+                    if (statusEl) {
+                        statusEl.textContent = '⚠️ Ingrese una cantidad';
+                        statusEl.style.color = '#dc3545';
+                    }
+                    return;
+                }
+                
+                // Validar que sea un número válido
+                const cantidadNum = parseInt(cantidad);
+                if (isNaN(cantidadNum)) {
+                    if (statusEl) {
+                        statusEl.textContent = '⚠️ La cantidad debe ser un número';
+                        statusEl.style.color = '#dc3545';
+                    }
+                    return;
+                }
+                
+                // Deshabilitar botón mientras se guarda
+                const originalHtml = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                
+                if (statusEl) {
+                    statusEl.textContent = 'Guardando...';
+                    statusEl.style.color = '#6c757d';
+                }
+                
+                // Preparar datos para enviar
+                const formData = new FormData();
+                formData.append('codigo', codigo);
+                formData.append('atributo', atributoParaEnviar);
+                formData.append('cantidad', cantidadNum);
+                formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+                
+                // Enviar petición AJAX
+                fetch('{% url "pos:guardar_conteo_fisico" %}', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (statusEl) {
+                            statusEl.textContent = '✓ Guardado correctamente';
+                            statusEl.style.color = '#28a745';
+                        }
+                        // Restaurar botón
+                        btn.disabled = false;
+                        btn.innerHTML = originalHtml;
+                        
+                        // Limpiar mensaje después de 3 segundos
+                        setTimeout(() => {
+                            if (statusEl) {
+                                statusEl.textContent = '';
+                            }
+                        }, 3000);
+                    } else {
+                        throw new Error(data.error || 'Error desconocido');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error al guardar conteo:', error);
+                    if (statusEl) {
+                        statusEl.textContent = '✗ Error: ' + error.message;
+                        statusEl.style.color = '#dc3545';
+                    }
+                    // Restaurar botón
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                });
+            });
+        });
+        
+        // Permitir guardar con Enter en el input
+        const conteoInputs = document.querySelectorAll('.conteo-fisico-input');
+        conteoInputs.forEach(input => {
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const btn = this.closest('.input-group').querySelector('.guardar-conteo-btn');
+                    if (btn) {
+                        btn.click();
+                    }
+                }
+            });
+        });
     });
     </script>
     {% else %}

@@ -4356,3 +4356,89 @@ def gestionar_cliente_view(request, cliente_id):
     context = {'cliente': cliente}
     return render(request, 'pos/gestionar_cliente.html', context)
 
+
+# ============================================
+# CONTEOS FÍSICOS DE INVENTARIO
+# ============================================
+
+@login_required
+@requiere_rol('Administradores', 'Inventario')
+def guardar_conteo_fisico_view(request):
+    """Vista para guardar conteos físicos de inventario"""
+    from .models import ConteoFisico
+    
+    if request.method != 'POST':
+        return JsonResponse({
+            'success': False,
+            'error': 'Método no permitido. Solo se acepta POST.'
+        }, status=405)
+    
+    try:
+        codigo = request.POST.get('codigo', '').strip()
+        atributo = request.POST.get('atributo', '').strip()
+        cantidad_str = request.POST.get('cantidad', '').strip()
+        
+        # Validar código
+        if not codigo:
+            return JsonResponse({
+                'success': False,
+                'error': 'Código requerido'
+            }, status=400)
+        
+        # Normalizar atributo: vacío o '-' se convierte en None
+        if atributo in ('', '-', 'None', 'null'):
+            atributo = None
+        
+        # Validar cantidad
+        if not cantidad_str:
+            return JsonResponse({
+                'success': False,
+                'error': 'Cantidad requerida'
+            }, status=400)
+        
+        try:
+            cantidad = int(cantidad_str)
+        except ValueError:
+            return JsonResponse({
+                'success': False,
+                'error': 'La cantidad debe ser un número válido'
+            }, status=400)
+        
+        # Buscar si ya existe un conteo para este código+atributo
+        # Usamos el último conteo por fecha
+        conteo_existente = ConteoFisico.objects.filter(
+            codigo=codigo,
+            atributo=atributo
+        ).order_by('-fecha_conteo').first()
+        
+        if conteo_existente:
+            # Actualizar conteo existente
+            conteo_existente.cantidad_contada = cantidad
+            conteo_existente.fecha_conteo = timezone.now()
+            conteo_existente.usuario = request.user
+            conteo_existente.save()
+            created = False
+        else:
+            # Crear nuevo conteo
+            conteo_existente = ConteoFisico.objects.create(
+                codigo=codigo,
+                atributo=atributo,
+                cantidad_contada=cantidad,
+                usuario=request.user
+            )
+            created = True
+        
+        return JsonResponse({
+            'success': True,
+            'cantidad': cantidad,
+            'created': created,
+            'codigo': codigo,
+            'atributo': atributo or ''
+        })
+        
+    except Exception as e:
+        logger.error(f'Error al guardar conteo físico: {str(e)}', exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': f'Error al guardar conteo: {str(e)}'
+        }, status=500)
