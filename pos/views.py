@@ -2404,12 +2404,50 @@ def reportes_view(request):
             ventas_por_producto[clave]['cantidad_total'] += item_venta.cantidad
             ventas_por_producto[clave]['valor_total'] += item_venta.precio_unitario * item_venta.cantidad
         
-        # Agregar ventas y precio promedio a cada item del resumen
+        # Calcular ingresos y salidas de mercancía por producto
+        from .models import ItemIngresoMercancia, ItemSalidaMercancia, IngresoMercancia, SalidaMercancia
+        
+        # Filtrar ingresos y salidas de mercancía por fecha si hay filtros
+        ingresos_mercancia_qs = IngresoMercancia.objects.filter(completado=True)
+        salidas_mercancia_qs = SalidaMercancia.objects.filter(completado=True)
+        
+        if fecha_desde_ventas:
+            ingresos_mercancia_qs = ingresos_mercancia_qs.filter(fecha__date__gte=fecha_desde_ventas)
+            salidas_mercancia_qs = salidas_mercancia_qs.filter(fecha__date__gte=fecha_desde_ventas)
+        if fecha_hasta_ventas:
+            ingresos_mercancia_qs = ingresos_mercancia_qs.filter(fecha__date__lte=fecha_hasta_ventas)
+            salidas_mercancia_qs = salidas_mercancia_qs.filter(fecha__date__lte=fecha_hasta_ventas)
+        
+        # Calcular ingresos de mercancía por código+atributo
+        ingresos_mercancia_por_producto = {}
+        items_ingreso = ItemIngresoMercancia.objects.filter(ingreso__in=ingresos_mercancia_qs).select_related('producto')
+        for item_ingreso in items_ingreso:
+            codigo = item_ingreso.producto.codigo
+            atributo = (item_ingreso.producto.atributo or '').strip() if item_ingreso.producto.atributo else ''
+            clave = (codigo, atributo)
+            if clave not in ingresos_mercancia_por_producto:
+                ingresos_mercancia_por_producto[clave] = 0
+            ingresos_mercancia_por_producto[clave] += item_ingreso.cantidad
+        
+        # Calcular salidas de mercancía por código+atributo
+        salidas_mercancia_por_producto = {}
+        items_salida = ItemSalidaMercancia.objects.filter(salida__in=salidas_mercancia_qs).select_related('producto')
+        for item_salida in items_salida:
+            codigo = item_salida.producto.codigo
+            atributo = (item_salida.producto.atributo or '').strip() if item_salida.producto.atributo else ''
+            clave = (codigo, atributo)
+            if clave not in salidas_mercancia_por_producto:
+                salidas_mercancia_por_producto[clave] = 0
+            salidas_mercancia_por_producto[clave] += item_salida.cantidad
+        
+        # Agregar ventas, precio promedio e ingresos netos de mercancía a cada item del resumen
         for item in resumen_productos:
             codigo = item['codigo']
             atributo_raw = item['atributo']
             atributo = (atributo_raw.strip() if atributo_raw and atributo_raw != '-' else '')
             clave = (codigo, atributo)
+            
+            # Ventas y precio promedio
             venta_info = ventas_por_producto.get(clave, {'cantidad_total': 0, 'valor_total': 0})
             item['total_ventas'] = venta_info['cantidad_total']
             # Calcular precio promedio: valor_total / cantidad_total (si hay ventas)
@@ -2417,6 +2455,11 @@ def reportes_view(request):
                 item['precio_promedio_venta'] = round(venta_info['valor_total'] / venta_info['cantidad_total'])
             else:
                 item['precio_promedio_venta'] = None
+            
+            # Ingresos netos de mercancía (Ingresos - Salidas)
+            ingresos_merc = ingresos_mercancia_por_producto.get(clave, 0)
+            salidas_merc = salidas_mercancia_por_producto.get(clave, 0)
+            item['total_ingresos_mercancia'] = ingresos_merc - salidas_merc
         
         # Obtener conteos físicos existentes (último conteo por código+atributo)
         from .models import ConteoFisico
@@ -2796,7 +2839,7 @@ def reportes_view(request):
                     item['codigo'],
                     item['nombre'],
                     item.get('atributo', '-'),
-                    item.get('total_entradas', 0),
+                    item.get('total_ingresos_mercancia', 0),
                     total_ventas,
                     stock_actual,
                     cantidad_contada_excel,
