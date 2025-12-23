@@ -3848,6 +3848,7 @@ def buscar_productos_view(request):
                 'nombre': producto.nombre,
                 'codigo': producto.codigo,
                 'codigo_barras': producto.codigo_barras or '',
+                'atributo': producto.atributo or '',
                 'precio': int(producto.precio),
                 'stock': producto.stock,
             })

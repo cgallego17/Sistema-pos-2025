@@ -125,11 +125,12 @@ function initAutocomplete(input) {
                     if (data.productos && data.productos.length > 0) {
                         dropdown.innerHTML = data.productos.map(p => {
                             const codigoBarras = p.codigo_barras ? ` | Cód. Barras: ${p.codigo_barras}` : '';
+                            const atributo = p.atributo ? ` | Atributo: ${p.atributo}` : '';
                             return `
                             <div class="autocomplete-item" style="padding: 0.5rem; cursor: pointer; border-bottom: 1px solid #f1f5f9;" 
                                  data-id="${p.id}" data-stock="${p.stock}" data-nombre="${p.nombre}">
                                 <strong>${p.nombre}</strong><br>
-                                <small style="color: #64748b;">Código: ${p.codigo}${codigoBarras} | Stock: ${parseInt(p.stock).toLocaleString('es-CO', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</small>
+                                <small style="color: #64748b;">Código: ${p.codigo}${codigoBarras}${atributo} | Stock: ${parseInt(p.stock).toLocaleString('es-CO', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</small>
                             </div>
                         `;
                         }).join('');
