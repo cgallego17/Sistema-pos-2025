@@ -2767,7 +2767,7 @@ def reportes_view(request):
             
             # Headers
             headers = [
-                'Código', 'Producto', 'Atributo', 'Ventas', 'Stock Actual',
+                'Código', 'Producto', 'Atributo', 'Total de Ingresos', 'Ventas', 'Stock Actual',
                 'Cantidad Física Contada', 'Diferencia', 'Precio Venta', 'Precio Promedio'
             ]
             ws.append(headers)
@@ -2796,6 +2796,7 @@ def reportes_view(request):
                     item['codigo'],
                     item['nombre'],
                     item.get('atributo', '-'),
+                    item.get('total_entradas', 0),
                     total_ventas,
                     stock_actual,
                     cantidad_contada_excel,
@@ -2817,12 +2818,13 @@ def reportes_view(request):
                 'A': 15,  # Código
                 'B': 35,  # Producto
                 'C': 20,  # Atributo
-                'D': 12,  # Ventas
-                'E': 15,  # Stock Actual
-                'F': 20,  # Cantidad Física Contada
-                'G': 12,  # Diferencia
-                'H': 15,  # Precio Venta
-                'I': 15,  # Precio Promedio
+                'D': 18,  # Total de Ingresos
+                'E': 12,  # Ventas
+                'F': 15,  # Stock Actual
+                'G': 20,  # Cantidad Física Contada
+                'H': 12,  # Diferencia
+                'I': 15,  # Precio Venta
+                'J': 15,  # Precio Promedio
             }
             for col, width in column_widths.items():
                 ws.column_dimensions[col].width = width
