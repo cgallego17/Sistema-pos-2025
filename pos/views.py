@@ -3955,11 +3955,13 @@ def buscar_productos_view(request):
         nombre_norm = normalizar_texto(producto.nombre)
         codigo_norm = normalizar_texto(producto.codigo)
         codigo_barras_norm = normalizar_texto(producto.codigo_barras or '')
+        atributo_norm = normalizar_texto(producto.atributo or '')
         
-        # Buscar en los campos normalizados
+        # Buscar en los campos normalizados (incluyendo atributo)
         if (query_normalizada in nombre_norm or 
             query_normalizada in codigo_norm or 
-            query_normalizada in codigo_barras_norm):
+            query_normalizada in codigo_barras_norm or
+            query_normalizada in atributo_norm):
             resultados.append({
                 'id': producto.id,
                 'nombre': producto.nombre,
