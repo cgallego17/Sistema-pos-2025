@@ -2244,7 +2244,7 @@ def reportes_view(request):
         # Obtener stock actual de productos agrupados por código+atributo
         # Pre-cargar todos los productos activos para evitar consultas N+1
         productos_activos = Producto.objects.filter(activo=True).values(
-            'codigo', 'atributo', 'stock', 'nombre'
+            'codigo', 'atributo', 'stock', 'nombre', 'precio'
         )
         
         # Crear un diccionario para lookup rápido de stock por (codigo, atributo)
@@ -2256,8 +2256,10 @@ def reportes_view(request):
             atributo = (p['atributo'] or '').strip() if p['atributo'] else ''
             clave = (codigo, atributo)
             if clave not in stock_map:
-                stock_map[clave] = {'stock': 0, 'nombre': p['nombre']}
+                stock_map[clave] = {'stock': 0, 'nombre': p['nombre'], 'precio': p['precio']}
             stock_map[clave]['stock'] += p['stock']
+            # Si hay múltiples productos con mismo código+atributo, usar el precio del primero encontrado
+            # (generalmente todos tienen el mismo precio)
         
         # Construir la lista de resultados con análisis de negativos
         resumen_productos = []
@@ -2273,9 +2275,10 @@ def reportes_view(request):
             neto = total_entradas - total_salidas + ajustes
             
             # Obtener stock actual del mapa
-            stock_info = stock_map.get(clave, {'stock': 0, 'nombre': item.get('producto__nombre', '')})
+            stock_info = stock_map.get(clave, {'stock': 0, 'nombre': item.get('producto__nombre', ''), 'precio': 0})
             stock_actual = stock_info['stock']
             nombre = stock_info['nombre'] or item.get('producto__nombre', '')
+            precio_venta = stock_info.get('precio', 0)
             
             # Calcular stock inicial usando TODOS los movimientos históricos (sin filtro de fecha)
             # Buscar el producto para obtener todos sus movimientos
@@ -2355,6 +2358,7 @@ def reportes_view(request):
                 'neto': neto,
                 'stock_inicial': stock_inicial_calculado,
                 'stock_actual': stock_actual,
+                'precio_venta': precio_venta,
                 'causas_negativos': causas_negativos,
                 'alertas': alertas,
                 'tiene_problemas': len(causas_negativos) > 0 or len(alertas) > 0 or neto < 0 or stock_actual < 0,
@@ -2763,8 +2767,8 @@ def reportes_view(request):
             
             # Headers
             headers = [
-                'Código', 'Producto', 'Atributo', 'Ventas', 'Precio Promedio', 'Stock Actual',
-                'Cantidad Física Contada', 'Diferencia'
+                'Código', 'Producto', 'Atributo', 'Ventas', 'Stock Actual',
+                'Cantidad Física Contada', 'Diferencia', 'Precio Venta', 'Precio Promedio'
             ]
             ws.append(headers)
             
@@ -2793,10 +2797,11 @@ def reportes_view(request):
                     item['nombre'],
                     item.get('atributo', '-'),
                     total_ventas,
-                    precio_promedio if precio_promedio else '',
                     stock_actual,
                     cantidad_contada_excel,
                     diferencia_excel,
+                    item.get('precio_venta', 0),
+                    precio_promedio if precio_promedio else '',
                 ])
                 
                 # Si stock_actual coincide con cantidad_contada, resaltar la fila
@@ -2813,10 +2818,11 @@ def reportes_view(request):
                 'B': 35,  # Producto
                 'C': 20,  # Atributo
                 'D': 12,  # Ventas
-                'E': 15,  # Precio Promedio
-                'F': 15,  # Stock Actual
-                'G': 20,  # Cantidad Física Contada
-                'H': 12,  # Diferencia
+                'E': 15,  # Stock Actual
+                'F': 20,  # Cantidad Física Contada
+                'G': 12,  # Diferencia
+                'H': 15,  # Precio Venta
+                'I': 15,  # Precio Promedio
             }
             for col, width in column_widths.items():
                 ws.column_dimensions[col].width = width
