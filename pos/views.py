@@ -2248,10 +2248,12 @@ def reportes_view(request):
         )
         
         # Crear un diccionario para lookup rápido de stock por (codigo, atributo)
+        # Nota: Normalizar atributo para que coincida con cómo se busca después
         stock_map = {}
         for p in productos_activos:
             codigo = p['codigo']
-            atributo = p['atributo'] if p['atributo'] else ''
+            # Normalizar atributo: quitar espacios al final para que coincida con la búsqueda
+            atributo = (p['atributo'] or '').strip() if p['atributo'] else ''
             clave = (codigo, atributo)
             if clave not in stock_map:
                 stock_map[clave] = {'stock': 0, 'nombre': p['nombre']}
