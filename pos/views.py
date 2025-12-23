@@ -2362,6 +2362,46 @@ def reportes_view(request):
         # Ordenar por código y atributo
         resumen_productos.sort(key=lambda x: (x['codigo'], x['atributo']))
         
+        # Calcular ventas por producto (usando ItemVenta) para agregar a cada item
+        from .models import ItemVenta, Venta
+        fecha_desde_ventas = None
+        fecha_hasta_ventas = None
+        if fecha_desde:
+            try:
+                fecha_desde_ventas = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        if fecha_hasta:
+            try:
+                fecha_hasta_ventas = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        
+        ventas_qs = Venta.objects.filter(completada=True, anulada=False)
+        if fecha_desde_ventas:
+            ventas_qs = ventas_qs.filter(fecha__date__gte=fecha_desde_ventas)
+        if fecha_hasta_ventas:
+            ventas_qs = ventas_qs.filter(fecha__date__lte=fecha_hasta_ventas)
+        
+        # Calcular ventas por código+atributo
+        ventas_por_producto = {}
+        items_venta = ItemVenta.objects.filter(venta__in=ventas_qs).select_related('producto')
+        for item_venta in items_venta:
+            codigo = item_venta.producto.codigo
+            atributo = (item_venta.producto.atributo or '').strip() if item_venta.producto.atributo else ''
+            clave = (codigo, atributo)
+            if clave not in ventas_por_producto:
+                ventas_por_producto[clave] = 0
+            ventas_por_producto[clave] += item_venta.cantidad
+        
+        # Agregar ventas a cada item del resumen
+        for item in resumen_productos:
+            codigo = item['codigo']
+            atributo_raw = item['atributo']
+            atributo = (atributo_raw.strip() if atributo_raw and atributo_raw != '-' else '')
+            clave = (codigo, atributo)
+            item['total_ventas'] = ventas_por_producto.get(clave, 0)
+        
         # Obtener conteos físicos existentes (último conteo por código+atributo)
         from .models import ConteoFisico
         conteos_fisicos = {}
@@ -2711,9 +2751,8 @@ def reportes_view(request):
             
             # Headers
             headers = [
-                'Código', 'Producto', 'Atributo', 'Stock Inicial', 'Entradas',
-                'Salidas', 'Ajustes', 'Neto', 'Stock Actual', 'Cantidad Contada',
-                'Diferencia', 'Tiene Problemas', 'Alertas', 'Causas Negativos'
+                'Código', 'Producto', 'Atributo', 'Ventas', 'Stock Actual',
+                'Cantidad Física Contada', 'Diferencia'
             ]
             ws.append(headers)
             
@@ -2724,12 +2763,10 @@ def reportes_view(request):
             
             # Agregar datos
             for item in resumen_productos:
-                alertas_texto = ' | '.join(item.get('alertas', [])) if item.get('alertas') else ''
-                causas_texto = ' | '.join(item.get('causas_negativos', [])) if item.get('causas_negativos') else ''
-                
                 # Obtener cantidad_contada - puede ser None, 0, o un número positivo
                 cantidad_contada = item.get('cantidad_contada')
                 stock_actual = item.get('stock_actual', 0)
+                total_ventas = item.get('total_ventas', 0)
                 
                 if cantidad_contada is None:
                     cantidad_contada_excel = ''
@@ -2742,17 +2779,10 @@ def reportes_view(request):
                     item['codigo'],
                     item['nombre'],
                     item.get('atributo', '-'),
-                    item.get('stock_inicial', 0),
-                    item.get('total_entradas', 0),
-                    item.get('total_salidas', 0),
-                    item.get('ajustes', 0),
-                    item.get('neto', 0),
+                    total_ventas,
                     stock_actual,
                     cantidad_contada_excel,
                     diferencia_excel,
-                    'Sí' if item.get('tiene_problemas', False) else 'No',
-                    alertas_texto,
-                    causas_texto,
                 ])
                 
                 # Si stock_actual coincide con cantidad_contada, resaltar la fila
@@ -2766,19 +2796,12 @@ def reportes_view(request):
             # Ajustar ancho de columnas
             column_widths = {
                 'A': 15,  # Código
-                'B': 30,  # Producto
+                'B': 35,  # Producto
                 'C': 20,  # Atributo
-                'D': 12,  # Stock Inicial
-                'E': 10,  # Entradas
-                'F': 10,  # Salidas
-                'G': 10,  # Ajustes
-                'H': 10,  # Neto
-                'I': 12,  # Stock Actual
-                'J': 15,  # Cantidad Contada
-                'K': 12,  # Diferencia
-                'L': 15,  # Tiene Problemas
-                'M': 40,  # Alertas
-                'N': 40,  # Causas Negativos
+                'D': 12,  # Ventas
+                'E': 15,  # Stock Actual
+                'F': 20,  # Cantidad Física Contada
+                'G': 12,  # Diferencia
             }
             for col, width in column_widths.items():
                 ws.column_dimensions[col].width = width
