@@ -2277,14 +2277,28 @@ def reportes_view(request):
             
             # Calcular stock inicial usando TODOS los movimientos históricos (sin filtro de fecha)
             # Buscar el producto para obtener todos sus movimientos
+            # Nota: El atributo en la BD puede tener espacios al final, así que normalizamos
             productos_con_codigo = Producto.objects.filter(codigo=codigo, activo=True)
-            if atributo:
-                productos_con_codigo = productos_con_codigo.filter(atributo=atributo)
-            else:
-                productos_con_codigo = productos_con_codigo.filter(atributo__isnull=True) | productos_con_codigo.filter(atributo='')
+            
+            # Filtrar productos por atributo normalizado (comparar sin espacios al final)
+            productos_filtrados = []
+            for prod in productos_con_codigo:
+                prod_atributo = (prod.atributo or '').strip() if prod.atributo else ''
+                if atributo:
+                    # Si buscamos un atributo específico, comparar normalizados
+                    if prod_atributo == atributo:
+                        productos_filtrados.append(prod)
+                else:
+                    # Si no hay atributo, buscar productos sin atributo
+                    if not prod_atributo:
+                        productos_filtrados.append(prod)
             
             # Obtener todos los movimientos históricos de estos productos
-            movimientos_historicos = MovimientoStock.objects.filter(producto__in=productos_con_codigo)
+            if productos_filtrados:
+                movimientos_historicos = MovimientoStock.objects.filter(producto__in=productos_filtrados)
+            else:
+                # Si no se encontraron productos, crear un queryset vacío
+                movimientos_historicos = MovimientoStock.objects.none()
             total_entradas_historico = movimientos_historicos.filter(tipo='ingreso').aggregate(Sum('cantidad'))['cantidad__sum'] or 0
             total_salidas_historico = movimientos_historicos.filter(tipo='salida').aggregate(Sum('cantidad'))['cantidad__sum'] or 0
             total_ajustes_historico = movimientos_historicos.filter(tipo='ajuste').aggregate(Sum('cantidad'))['cantidad__sum'] or 0
