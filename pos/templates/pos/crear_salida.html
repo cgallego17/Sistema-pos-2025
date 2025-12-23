@@ -128,7 +128,7 @@ function initAutocomplete(input) {
                             const atributo = p.atributo ? ` | Atributo: ${p.atributo}` : '';
                             return `
                             <div class="autocomplete-item" style="padding: 0.5rem; cursor: pointer; border-bottom: 1px solid #f1f5f9;" 
-                                 data-id="${p.id}" data-stock="${p.stock}" data-nombre="${p.nombre}">
+                                 data-id="${p.id}" data-stock="${p.stock}" data-nombre="${p.nombre}" data-atributo="${p.atributo || ''}">
                                 <strong>${p.nombre}</strong><br>
                                 <small style="color: #64748b;">Código: ${p.codigo}${codigoBarras}${atributo} | Stock: ${parseInt(p.stock).toLocaleString('es-CO', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</small>
                             </div>
@@ -142,8 +142,14 @@ function initAutocomplete(input) {
                                 const productoId = this.dataset.id;
                                 const productoNombre = this.dataset.nombre;
                                 const productoStock = this.dataset.stock;
+                                const productoAtributo = this.dataset.atributo || '';
                                 
-                                input.value = productoNombre;
+                                // Mostrar nombre y atributo en el input si hay atributo
+                                if (productoAtributo) {
+                                    input.value = `${productoNombre} - ${productoAtributo}`;
+                                } else {
+                                    input.value = productoNombre;
+                                }
                                 hiddenInput.value = productoId;
                                 if (cantidadInput) {
                                     cantidadInput.max = productoStock;
