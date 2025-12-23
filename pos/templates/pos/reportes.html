@@ -123,6 +123,7 @@
                             <th>Producto</th>
                             <th>Atributo</th>
                             <th class="text-end">Ventas</th>
+                            <th class="text-end">Precio Promedio</th>
                             <th class="text-end"><strong>Stock Actual</strong></th>
                             <th class="text-center">Cantidad Física Contada</th>
                             <th class="text-end">Diferencia</th>
@@ -136,6 +137,13 @@
                             <td>{{ item.atributo }}</td>
                             <td class="text-end">
                                 <span class="badge badge-modern badge-success-modern">{{ item.total_ventas|default:0|intcomma }}</span>
+                            </td>
+                            <td class="text-end">
+                                {% if item.precio_promedio_venta %}
+                                    <span class="badge badge-modern badge-info-modern">${{ item.precio_promedio_venta|intcomma }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
                             </td>
                             <td class="text-end">
                                 <strong class="{% if item.stock_actual > 0 %}text-primary{% elif item.stock_actual == 0 %}text-warning{% else %}text-danger{% endif %}">
@@ -179,7 +187,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted">No hay productos con movimientos en el período seleccionado</td>
+                            <td colspan="8" class="text-center text-muted">No hay productos con movimientos en el período seleccionado</td>
                         </tr>
                         {% endfor %}
                     </tbody>

@@ -2385,7 +2385,7 @@ def reportes_view(request):
         if fecha_hasta_ventas:
             ventas_qs = ventas_qs.filter(fecha__date__lte=fecha_hasta_ventas)
         
-        # Calcular ventas por código+atributo
+        # Calcular ventas por código+atributo y precio promedio
         ventas_por_producto = {}
         items_venta = ItemVenta.objects.filter(venta__in=ventas_qs).select_related('producto')
         for item_venta in items_venta:
@@ -2393,16 +2393,26 @@ def reportes_view(request):
             atributo = (item_venta.producto.atributo or '').strip() if item_venta.producto.atributo else ''
             clave = (codigo, atributo)
             if clave not in ventas_por_producto:
-                ventas_por_producto[clave] = 0
-            ventas_por_producto[clave] += item_venta.cantidad
+                ventas_por_producto[clave] = {
+                    'cantidad_total': 0,
+                    'valor_total': 0  # Suma de precio_unitario * cantidad
+                }
+            ventas_por_producto[clave]['cantidad_total'] += item_venta.cantidad
+            ventas_por_producto[clave]['valor_total'] += item_venta.precio_unitario * item_venta.cantidad
         
-        # Agregar ventas a cada item del resumen
+        # Agregar ventas y precio promedio a cada item del resumen
         for item in resumen_productos:
             codigo = item['codigo']
             atributo_raw = item['atributo']
             atributo = (atributo_raw.strip() if atributo_raw and atributo_raw != '-' else '')
             clave = (codigo, atributo)
-            item['total_ventas'] = ventas_por_producto.get(clave, 0)
+            venta_info = ventas_por_producto.get(clave, {'cantidad_total': 0, 'valor_total': 0})
+            item['total_ventas'] = venta_info['cantidad_total']
+            # Calcular precio promedio: valor_total / cantidad_total (si hay ventas)
+            if venta_info['cantidad_total'] > 0:
+                item['precio_promedio_venta'] = round(venta_info['valor_total'] / venta_info['cantidad_total'])
+            else:
+                item['precio_promedio_venta'] = None
         
         # Obtener conteos físicos existentes (último conteo por código+atributo)
         from .models import ConteoFisico
@@ -2753,7 +2763,7 @@ def reportes_view(request):
             
             # Headers
             headers = [
-                'Código', 'Producto', 'Atributo', 'Ventas', 'Stock Actual',
+                'Código', 'Producto', 'Atributo', 'Ventas', 'Precio Promedio', 'Stock Actual',
                 'Cantidad Física Contada', 'Diferencia'
             ]
             ws.append(headers)
@@ -2769,6 +2779,7 @@ def reportes_view(request):
                 cantidad_contada = item.get('cantidad_contada')
                 stock_actual = item.get('stock_actual', 0)
                 total_ventas = item.get('total_ventas', 0)
+                precio_promedio = item.get('precio_promedio_venta')
                 
                 if cantidad_contada is None:
                     cantidad_contada_excel = ''
@@ -2782,6 +2793,7 @@ def reportes_view(request):
                     item['nombre'],
                     item.get('atributo', '-'),
                     total_ventas,
+                    precio_promedio if precio_promedio else '',
                     stock_actual,
                     cantidad_contada_excel,
                     diferencia_excel,
@@ -2801,9 +2813,10 @@ def reportes_view(request):
                 'B': 35,  # Producto
                 'C': 20,  # Atributo
                 'D': 12,  # Ventas
-                'E': 15,  # Stock Actual
-                'F': 20,  # Cantidad Física Contada
-                'G': 12,  # Diferencia
+                'E': 15,  # Precio Promedio
+                'F': 15,  # Stock Actual
+                'G': 20,  # Cantidad Física Contada
+                'H': 12,  # Diferencia
             }
             for col, width in column_widths.items():
                 ws.column_dimensions[col].width = width
