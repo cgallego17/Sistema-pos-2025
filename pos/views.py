@@ -2275,9 +2275,23 @@ def reportes_view(request):
             stock_actual = stock_info['stock']
             nombre = stock_info['nombre'] or item.get('producto__nombre', '')
             
-            # Calcular stock inicial: stock_actual - neto
-            # Esto nos da el stock que había antes de los movimientos del período
-            stock_inicial_calculado = stock_actual - neto
+            # Calcular stock inicial usando TODOS los movimientos históricos (sin filtro de fecha)
+            # Buscar el producto para obtener todos sus movimientos
+            productos_con_codigo = Producto.objects.filter(codigo=codigo, activo=True)
+            if atributo:
+                productos_con_codigo = productos_con_codigo.filter(atributo=atributo)
+            else:
+                productos_con_codigo = productos_con_codigo.filter(atributo__isnull=True) | productos_con_codigo.filter(atributo='')
+            
+            # Obtener todos los movimientos históricos de estos productos
+            movimientos_historicos = MovimientoStock.objects.filter(producto__in=productos_con_codigo)
+            total_entradas_historico = movimientos_historicos.filter(tipo='ingreso').aggregate(Sum('cantidad'))['cantidad__sum'] or 0
+            total_salidas_historico = movimientos_historicos.filter(tipo='salida').aggregate(Sum('cantidad'))['cantidad__sum'] or 0
+            total_ajustes_historico = movimientos_historicos.filter(tipo='ajuste').aggregate(Sum('cantidad'))['cantidad__sum'] or 0
+            neto_historico = total_entradas_historico - total_salidas_historico + total_ajustes_historico
+            
+            # Stock inicial = Stock actual - Neto histórico total
+            stock_inicial_calculado = stock_actual - neto_historico
             
             # Analizar causas de negativos
             causas_negativos = []
